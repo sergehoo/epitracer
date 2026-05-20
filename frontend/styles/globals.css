@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 248 250 252;
+  --foreground: 15 23 42;
+  --card: 255 255 255;
+  --border: 226 232 240;
+  --primary: 0 158 96;          /* ci-green */
+  --primary-foreground: 255 255 255;
+  --accent: 255 127 0;          /* ci-orange */
+  --muted: 100 116 139;
+}
+
+.dark {
+  --background: 11 18 32;
+  --foreground: 226 232 240;
+  --card: 17 24 39;
+  --border: 31 41 55;
+  --primary: 16 185 129;
+  --primary-foreground: 11 18 32;
+  --accent: 251 146 60;
+  --muted: 148 163 184;
+}
+
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { background-color: rgb(var(--background)); color: rgb(var(--foreground)); }
+
+/* Containers */
+.card {
+  @apply rounded-2xl border border-slate-200 dark:border-slate-800
+         bg-white dark:bg-slate-900 shadow-card;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+         text-sm font-semibold transition-all focus:outline-none
+         focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500/60
+         disabled:opacity-60 disabled:cursor-not-allowed;
+}
+.btn-primary  { @apply btn bg-emerald-600 text-white hover:bg-emerald-700; }
+.btn-secondary{ @apply btn bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200; }
+.btn-ghost    { @apply btn text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800; }
+.btn-outline  { @apply btn border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800; }
+
+.field-label { @apply mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200; }
+.field-help  { @apply mt-1 text-xs text-slate-500 dark:text-slate-400; }
+.field-error { @apply mt-1 text-xs font-medium text-rose-600; }
+
+.input, .select, .textarea {
+  @apply w-full rounded-xl border border-slate-300 dark:border-slate-700
+         bg-white dark:bg-slate-950 px-3.5 py-2.5 text-sm
+         placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none
+         focus:ring-2 focus:ring-emerald-500/30 transition;
+}
+.textarea { @apply min-h-[100px] resize-y; }
+
+.badge {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5
+         text-xs font-medium ring-1 ring-inset;
+}
+.badge-low      { @apply badge bg-emerald-50 text-emerald-700 ring-emerald-200; }
+.badge-moderate { @apply badge bg-amber-50  text-amber-800  ring-amber-200;  }
+.badge-high     { @apply badge bg-rose-50   text-rose-700   ring-rose-200;   }
+.badge-critical { @apply badge bg-red-900   text-white      ring-red-700;    }
+
+/* Pour signature canvas */
+.signature-pad-wrapper { @apply rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-1; }

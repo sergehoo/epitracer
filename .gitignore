@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.Python
+.venv/
+venv/
+env/
+.eggs/
+build/
+dist/
+
+# Django
+*.sqlite3
+*.sqlite3-journal
+local_settings.py
+db.sqlite3
+backend/media/
+backend/staticfiles/
+backend/keys/*.pem
+backend/keys/*.key
+!backend/keys/.gitkeep
+
+# Migrations (we keep them but ignore *.pyc)
+**/migrations/__pycache__/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Node / Next
+node_modules/
+.next/
+out/
+
+# Flutter
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+
+# Docker
+*.pid
+
+# Markdown — toutes les notes/docs sont ignorées par défaut
+*.md

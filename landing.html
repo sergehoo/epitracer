@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="fr" x-data="{ mobile:false, faq:null }">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EpiTrace CI — Accompagnement Sanitaire Voyageur</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ciOrange: "#F77F00",
+            ciGreen: "#009B5A",
+            ciDark: "#064E3B",
+            ciGold: "#D4A017"
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    html { scroll-behavior: smooth; }
+    .glass {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(18px);
+    }
+    .pattern {
+      background-image: radial-gradient(circle at 1px 1px, rgba(6,78,59,.10) 1px, transparent 0);
+      background-size: 24px 24px;
+    }
+  </style>
+</head>
+
+<body class="bg-white text-slate-900 overflow-x-hidden">
+
+<header class="fixed inset-x-0 top-0 z-50 glass border-b border-white/70">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <a href="#" class="flex items-center gap-3">
+      <div class="w-12 h-12 rounded-2xl shadow-lg"><img src="https://www.inhp.ci/storage/images/website/logo%20sans%20ecriture%20inhp.png"></div>
+      <div>
+        <h1 class="text-xl font-black text-ciDark">INHP</h1>
+        <p class="text-xs text-slate-500">Institut Nationale d'hygiene Publique </p>
+      </div>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-8 text-sm font-bold text-slate-700">
+      <a href="#accompagnement" class="hover:text-ciOrange">Accompagnement</a>
+      <a href="#ebola" class="hover:text-ciOrange">Prévention Ebola</a>
+      <a href="#fonctionnement" class="hover:text-ciOrange">Comment ça marche</a>
+      <a href="#urgence" class="hover:text-ciOrange">Assistance</a>
+      <a href="#faq" class="hover:text-ciOrange">FAQ</a>
+    </nav>
+
+    <div class="hidden md:flex gap-3">
+      <a href="#" class="px-5 py-3 rounded-full bg-white border border-slate-200 font-bold text-ciDark">
+        Voir mon pass
+      </a>
+      <a href="#" class="px-5 py-3 rounded-full bg-ciDark text-white font-bold shadow-xl">
+        M'enregistrer
+      </a>
+    </div>
+
+    <button @click="mobile=!mobile" class="md:hidden text-3xl text-ciDark">☰</button>
+  </div>
+
+  <div x-show="mobile" x-transition class="md:hidden px-6 pb-5 space-y-3 bg-white">
+    <a href="#accompagnement" class="block font-semibold">Accompagnement</a>
+    <a href="#ebola" class="block font-semibold">Prévention Ebola</a>
+    <a href="#fonctionnement" class="block font-semibold">Comment ça marche</a>
+    <a href="#urgence" class="block font-semibold">Assistance</a>
+    <a href="#faq" class="block font-semibold">FAQ</a>
+    <a href="#" class="block px-5 py-3 rounded-xl bg-ciDark text-white font-bold text-center">
+      Préparer mon arrivée
+    </a>
+  </div>
+</header>
+
+<section class="relative min-h-screen pt-36 pb-24 overflow-hidden bg-gradient-to-br from-orange-50 via-white to-emerald-50">
+  <div class="absolute inset-0 pattern opacity-50"></div>
+  <div class="absolute -top-32 -left-32 w-96 h-96 bg-ciOrange/25 rounded-full blur-3xl"></div>
+  <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-ciGreen/25 rounded-full blur-3xl"></div>
+
+  <div class="relative max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
+    <div>
+      <span class="inline-flex px-5 py-2 rounded-full bg-white/90 border border-orange-100 text-ciOrange font-black shadow-sm">
+        Bienvenue en Côte d’Ivoire
+      </span>
+
+      <h2 class="mt-6 text-5xl md:text-7xl font-black leading-tight text-ciDark tracking-tight">
+        Votre arrivée, simplement accompagnée et protégée.
+      </h2>
+
+      <p class="mt-6 text-lg text-slate-600 max-w-xl leading-8">
+        Cette plateforme vous aide à préparer votre entrée sur le territoire, à recevoir les bonnes informations
+        sanitaires et à bénéficier d’un accompagnement clair, humain et rassurant pendant votre séjour.
+      </p>
+
+      <div class="mt-8 flex flex-col sm:flex-row gap-4">
+        <a href="#" class="px-8 py-4 rounded-2xl bg-ciOrange text-white font-black shadow-xl shadow-orange-500/25 text-center">
+          Préparer mon arrivée
+        </a>
+        <a href="#" class="px-8 py-4 rounded-2xl bg-white text-ciDark font-black border border-slate-200 shadow text-center">
+          Comprendre le dispositif
+        </a>
+      </div>
+
+      <div class="mt-10 grid grid-cols-3 gap-5 max-w-lg">
+        <div>
+          <p class="text-3xl font-black text-ciDark">21j</p>
+          <p class="text-sm text-slate-500">Accompagnement possible</p>
+        </div>
+        <div>
+          <p class="text-3xl font-black text-ciDark">QR</p>
+          <p class="text-sm text-slate-500">Pass pratique</p>
+        </div>
+        <div>
+          <p class="text-3xl font-black text-ciDark">24/7</p>
+          <p class="text-sm text-slate-500">Aide disponible</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="relative">
+      <div class="absolute -inset-6 bg-gradient-to-br from-ciOrange/20 to-ciGreen/20 rounded-[3rem] blur-2xl"></div>
+
+      <div class="relative bg-white/90 backdrop-blur-2xl rounded-[2rem] p-6 shadow-2xl border border-white">
+        <img
+          src="https://images.unsplash.com/photo-1584982751601-97dcc096659c?auto=format&fit=crop&w=900&q=80"
+          alt="Agent de santé accompagnant un voyageur"
+          class="w-full h-64 object-cover rounded-[1.5rem]"
+        />
+
+        <div class="mt-6">
+          <p class="text-sm text-slate-500">Fiche d’accompagnement sanitaire</p>
+          <h3 class="text-2xl font-black text-ciDark">Pass Voyageur CI</h3>
+          <p class="mt-3 text-slate-600 leading-7">
+            Un document simple à présenter aux équipes sanitaires pour faciliter votre orientation
+            et vous faire gagner du temps à l’arrivée.
+          </p>
+        </div>
+
+        <div class="mt-6 grid grid-cols-2 gap-4">
+          <div class="rounded-2xl bg-orange-50 p-4">
+            <p class="text-xs text-slate-500">Statut</p>
+            <p class="font-black text-ciOrange">Accompagné</p>
+          </div>
+          <div class="rounded-2xl bg-emerald-50 p-4">
+            <p class="text-xs text-slate-500">Objectif</p>
+            <p class="font-black text-ciGreen">Protéger</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="accompagnement" class="py-24 bg-white">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="text-center max-w-3xl mx-auto mb-14">
+      <h3 class="text-4xl font-black text-ciDark">Un dispositif pensé pour vous accompagner</h3>
+      <p class="mt-4 text-slate-600 leading-7">
+        L’objectif n’est pas de vous surveiller, mais de vous aider à voyager sereinement,
+        à recevoir les bonnes informations et à protéger votre santé ainsi que celle de vos proches.
+      </p>
+    </div>
+
+    <div class="grid md:grid-cols-4 gap-6">
+      <div class="p-6 rounded-3xl bg-orange-50 border border-orange-100 hover:-translate-y-1 transition">
+        <div class="text-4xl mb-4">🤝</div>
+        <h4 class="font-black text-lg text-ciDark">Accueil humain</h4>
+        <p class="mt-2 text-sm text-slate-600">Des agents formés vous orientent avec calme et respect.</p>
+      </div>
+
+      <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm hover:-translate-y-1 transition">
+        <div class="text-4xl mb-4">🧾</div>
+        <h4 class="font-black text-lg text-ciDark">Formalités simples</h4>
+        <p class="mt-2 text-sm text-slate-600">Une fiche numérique claire pour éviter les répétitions.</p>
+      </div>
+
+      <div class="p-6 rounded-3xl bg-emerald-50 border border-emerald-100 hover:-translate-y-1 transition">
+        <div class="text-4xl mb-4">💬</div>
+        <h4 class="font-black text-lg text-ciDark">Conseils utiles</h4>
+        <p class="mt-2 text-sm text-slate-600">Des recommandations adaptées à votre situation.</p>
+      </div>
+
+      <div class="p-6 rounded-3xl bg-slate-50 border border-slate-100 hover:-translate-y-1 transition">
+        <div class="text-4xl mb-4">🛡️</div>
+        <h4 class="font-black text-lg text-ciDark">Protection discrète</h4>
+        <p class="mt-2 text-sm text-slate-600">Un accompagnement sanitaire respectueux et confidentiel.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="ebola" class="py-24 bg-gradient-to-br from-white via-orange-50/40 to-emerald-50/60">
+  <div class="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-14 items-center">
+    <div>
+      <span class="inline-flex px-5 py-2 rounded-full bg-emerald-100 text-ciGreen font-black">
+        Prévention Ebola
+      </span>
+
+      <h3 class="mt-5 text-4xl md:text-5xl font-black text-ciDark leading-tight">
+        Quelques gestes simples pour voyager avec tranquillité.
+      </h3>
+
+      <p class="mt-5 text-slate-600 leading-8">
+        La maladie à virus Ebola peut être prévenue par des gestes simples, une information fiable
+        et une réaction rapide en cas de symptômes. Les équipes sanitaires sont là pour vous guider,
+        répondre à vos questions et vous accompagner sans jugement.
+      </p>
+
+      <div class="mt-8 space-y-4">
+        <div class="flex gap-4 p-4 rounded-2xl bg-white border border-slate-100 shadow-sm">
+          <div class="text-3xl">🧼</div>
+          <div>
+            <h4 class="font-black text-ciDark">Lavez-vous régulièrement les mains</h4>
+            <p class="text-sm text-slate-600 mt-1">Avec de l’eau et du savon ou une solution hydroalcoolique.</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4 p-4 rounded-2xl bg-white border border-slate-100 shadow-sm">
+          <div class="text-3xl">🤲</div>
+          <div>
+            <h4 class="font-black text-ciDark">Évitez les contacts à risque</h4>
+            <p class="text-sm text-slate-600 mt-1">En cas de doute, demandez conseil à un agent de santé.</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4 p-4 rounded-2xl bg-white border border-slate-100 shadow-sm">
+          <div class="text-3xl">🏥</div>
+          <div>
+            <h4 class="font-black text-ciDark">Consultez rapidement si vous ne vous sentez pas bien</h4>
+            <p class="text-sm text-slate-600 mt-1">Une prise en charge précoce protège mieux le voyageur et son entourage.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="relative">
+      <div class="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-ciOrange/20 to-ciGreen/20 blur-2xl"></div>
+      <img
+        src="https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&w=900&q=80"
+        alt="Sensibilisation sanitaire Ebola"
+        class="relative w-full h-[520px] object-cover rounded-[2rem] shadow-2xl"
+      />
+    </div>
+  </div>
+</section>
+
+<section class="py-24 bg-white">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="grid lg:grid-cols-3 gap-8">
+      <div class="lg:col-span-1">
+        <h3 class="text-4xl font-black text-ciDark">Votre parcours en douceur</h3>
+        <p class="mt-4 text-slate-600 leading-7">
+          Chaque étape est conçue pour être simple, rapide et rassurante.
+        </p>
+      </div>
+
+      <div class="lg:col-span-2 grid md:grid-cols-3 gap-6">
+        <div class="rounded-3xl overflow-hidden bg-white border border-slate-100 shadow-sm">
+          <img src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=700&q=80" class="h-44 w-full object-cover" alt="Pré-enregistrement voyageur">
+          <div class="p-6">
+            <h4 class="font-black text-ciDark">1. Préparer</h4>
+            <p class="mt-2 text-sm text-slate-600">Remplissez vos informations avant ou à votre arrivée.</p>
+          </div>
+        </div>
+
+        <div class="rounded-3xl overflow-hidden bg-white border border-slate-100 shadow-sm">
+          <img src="https://images.unsplash.com/photo-1618498082410-b4aa22193b38?auto=format&fit=crop&w=700&q=80" class="h-44 w-full object-cover" alt="QR code sanitaire">
+          <div class="p-6">
+            <h4 class="font-black text-ciDark">2. Présenter</h4>
+            <p class="mt-2 text-sm text-slate-600">Votre QR code facilite votre passage et votre orientation.</p>
+          </div>
+        </div>
+
+        <div class="rounded-3xl overflow-hidden bg-white border border-slate-100 shadow-sm">
+          <img src="https://images.unsplash.com/photo-1604881991720-f91add269bed?auto=format&fit=crop&w=700&q=80" class="h-44 w-full object-cover" alt="Conseils sanitaires">
+          <div class="p-6">
+            <h4 class="font-black text-ciDark">3. Être accompagné</h4>
+            <p class="mt-2 text-sm text-slate-600">Recevez des conseils utiles durant votre séjour.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="fonctionnement" class="py-24 bg-ciDark text-white relative overflow-hidden">
+  <div class="absolute inset-0 pattern opacity-10"></div>
+  <div class="max-w-7xl mx-auto px-6 relative">
+    <h3 class="text-4xl font-black text-center mb-14">Comment ça marche ?</h3>
+
+    <div class="grid md:grid-cols-4 gap-6">
+      <div class="p-6 rounded-3xl bg-white/10 border border-white/10 hover:bg-white/15 transition">
+        <span class="text-ciOrange font-black">01</span>
+        <h4 class="font-black text-xl mt-4">Je renseigne</h4>
+        <p class="mt-3 text-slate-300">Quelques informations utiles pour mieux vous orienter.</p>
+      </div>
+
+      <div class="p-6 rounded-3xl bg-white/10 border border-white/10 hover:bg-white/15 transition">
+        <span class="text-ciOrange font-black">02</span>
+        <h4 class="font-black text-xl mt-4">Je reçois</h4>
+        <p class="mt-3 text-slate-300">Une fiche avec QR code simple à présenter.</p>
+      </div>
+
+      <div class="p-6 rounded-3xl bg-white/10 border border-white/10 hover:bg-white/15 transition">
+        <span class="text-ciOrange font-black">03</span>
+        <h4 class="font-black text-xl mt-4">Je suis orienté</h4>
+        <p class="mt-3 text-slate-300">Les agents sanitaires facilitent votre parcours.</p>
+      </div>
+
+      <div class="p-6 rounded-3xl bg-white/10 border border-white/10 hover:bg-white/15 transition">
+        <span class="text-ciOrange font-black">04</span>
+        <h4 class="font-black text-xl mt-4">Je reste informé</h4>
+        <p class="mt-3 text-slate-300">Des conseils simples vous accompagnent si nécessaire.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="urgence" class="py-24 bg-gradient-to-br from-ciOrange to-red-600 text-white">
+  <div class="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
+    <div>
+      <span class="inline-block px-4 py-2 bg-white/20 rounded-full font-black mb-5">
+        Assistance sanitaire
+      </span>
+      <h3 class="text-4xl font-black">Un doute, un symptôme, une question ?</h3>
+      <p class="mt-5 text-white/90 text-lg leading-8">
+        Vous n’êtes pas seul. Les services de santé sont disponibles pour vous écouter,
+        vous rassurer et vous orienter rapidement vers la meilleure prise en charge.
+      </p>
+    </div>
+
+    <div class="bg-white text-slate-900 rounded-[2rem] p-8 shadow-2xl">
+      <h4 class="font-black text-2xl mb-6 text-ciDark">Contacts utiles</h4>
+      <div class="space-y-4">
+        <div class="flex justify-between border-b pb-3">
+          <span>SAMU National</span>
+          <strong class="text-ciOrange">185</strong>
+        </div>
+        <div class="flex justify-between border-b pb-3">
+          <span>Allô Santé</span>
+          <strong class="text-ciOrange">143</strong>
+        </div>
+        <div class="flex justify-between">
+          <span>Police / Secours</span>
+          <strong class="text-ciOrange">101</strong>
+        </div>
+      </div>
+
+      <a href="#" class="mt-8 block text-center px-6 py-4 rounded-2xl bg-ciDark text-white font-black">
+        Demander une orientation
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="py-24 bg-slate-50">
+  <div class="max-w-4xl mx-auto px-6">
+    <h3 class="text-4xl font-black text-center text-ciDark mb-12">Questions fréquentes</h3>
+
+    <div class="space-y-4">
+      <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+        <button @click="faq===1 ? faq=null : faq=1" class="w-full flex justify-between font-black text-left text-ciDark">
+          Pourquoi me demande-t-on ces informations ?
+          <span class="text-ciOrange">+</span>
+        </button>
+        <p x-show="faq===1" x-transition class="mt-4 text-slate-600 leading-7">
+          Ces informations permettent aux équipes sanitaires de mieux vous orienter, de vous donner des conseils adaptés
+          et de faciliter votre passage aux points d’entrée.
+        </p>
+      </div>
+
+      <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+        <button @click="faq===2 ? faq=null : faq=2" class="w-full flex justify-between font-black text-left text-ciDark">
+          Mes données sont-elles confidentielles ?
+          <span class="text-ciOrange">+</span>
+        </button>
+        <p x-show="faq===2" x-transition class="mt-4 text-slate-600 leading-7">
+          Oui. Vos informations sont protégées et utilisées uniquement dans le cadre de l’accompagnement sanitaire
+          et de la protection de la santé publique.
+        </p>
+      </div>
+
+      <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+        <button @click="faq===3 ? faq=null : faq=3" class="w-full flex justify-between font-black text-left text-ciDark">
+          Que se passe-t-il si je ne me sens pas bien ?
+          <span class="text-ciOrange">+</span>
+        </button>
+        <p x-show="faq===3" x-transition class="mt-4 text-slate-600 leading-7">
+          Vous pouvez contacter les services sanitaires. Un agent vous orientera calmement vers la conduite à tenir
+          et, si nécessaire, vers le centre de santé approprié.
+        </p>
+      </div>
+
+      <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+        <button @click="faq===4 ? faq=null : faq=4" class="w-full flex justify-between font-black text-left text-ciDark">
+          Est-ce que cela va ralentir mon arrivée ?
+          <span class="text-ciOrange">+</span>
+        </button>
+        <p x-show="faq===4" x-transition class="mt-4 text-slate-600 leading-7">
+          Au contraire, le pré-enregistrement permet souvent de gagner du temps, car votre fiche est déjà prête
+          et le QR code facilite votre orientation.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="py-24 bg-white">
+  <div class="max-w-5xl mx-auto px-6 text-center">
+    <h3 class="text-4xl font-black text-ciDark">Préparez votre arrivée en toute sérénité</h3>
+    <p class="mt-4 text-slate-600 leading-7">
+      Quelques minutes suffisent pour recevoir votre fiche sanitaire et bénéficier d’un accompagnement simple,
+      rassurant et respectueux.
+    </p>
+
+    <div class="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+      <a href="#" class="px-8 py-4 rounded-2xl bg-ciOrange text-white font-black shadow-xl shadow-orange-500/20">
+        Préparer mon arrivée
+      </a>
+      <a href="#" class="px-8 py-4 rounded-2xl border border-slate-200 text-ciDark font-black">
+        Vérifier mon pass
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer class="bg-ciDark text-white py-12">
+  <div class="max-w-7xl mx-auto px-6 grid md:grid-cols-4 gap-8">
+    <div>
+      <h4 class="font-black text-xl">EpiTravel CI</h4>
+      <p class="mt-3 text-sm text-emerald-100">
+        Plateforme nationale d’accompagnement sanitaire des voyageurs.
+      </p>
+    </div>
+
+    <div>
+      <h5 class="font-bold mb-3">Voyageur</h5>
+      <a href="#" class="block text-sm text-emerald-100 mb-2">Préparer mon arrivée</a>
+      <a href="#" class="block text-sm text-emerald-100 mb-2">Vérifier mon pass</a>
+      <a href="#" class="block text-sm text-emerald-100">Conseils sanitaires</a>
+    </div>
+
+    <div>
+      <h5 class="font-bold mb-3">Institutionnel</h5>
+      <a href="#" class="block text-sm text-emerald-100 mb-2">Ministère de la Santé</a>
+      <a href="#" class="block text-sm text-emerald-100 mb-2">INHP</a>
+      <a href="#" class="block text-sm text-emerald-100">Points d’entrée</a>
+    </div>
+
+    <div>
+      <h5 class="font-bold mb-3">Confidentialité</h5>
+      <a href="#" class="block text-sm text-emerald-100 mb-2">Protection des données</a>
+      <a href="#" class="block text-sm text-emerald-100 mb-2">Conditions d’utilisation</a>
+      <a href="#" class="block text-sm text-emerald-100">Assistance</a>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-6 mt-10 pt-6 border-t border-white/10 text-sm text-emerald-100">
+    © 2026 EpiTravel CI. Tous droits réservés.
+  </div>
+</footer>
+
+</body>
+</html>

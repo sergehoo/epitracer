@@ -1,0 +1,62 @@
+# --- Core ---
+Django==4.2.16
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1
+django-cors-headers==4.6.0
+django-filter==24.3
+django-extensions==3.2.3
+django-environ==0.11.2
+django-storages==1.14.4
+django-redis==5.4.0
+django-anymail==11.1
+django-otp==1.5.4
+qrcode[pil]==7.4.2
+reportlab==4.2.5
+Pillow==10.4.0
+phonenumbers==8.13.50
+python-dateutil==2.9.0.post0
+PyJWT==2.9.0
+cryptography==43.0.3
+argon2-cffi==23.1.0
+psycopg-binary
+psycopg2
+whitenoise==6.7.0
+drf-spectacular==0.27.2
+drf-spectacular-sidecar==2024.7.1
+django-guardian==2.4.0
+django-simple-history==3.7.0
+debug_toolbar
+# --- Async / Realtime ---
+channels==4.1.0
+channels-redis==4.2.0
+daphne==4.1.2
+celery==5.4.0
+django-celery-beat==2.7.0
+django-celery-results==2.5.1
+redis==5.2.0
+
+# --- Geo ---
+# Note: GeoDjango uses GDAL/GEOS installed at OS level (handled in Dockerfile)
+
+# --- Observability ---
+sentry-sdk[django]==2.18.0
+opentelemetry-distro==0.49b2
+opentelemetry-exporter-otlp==1.28.2
+opentelemetry-instrumentation-django==0.49b2
+opentelemetry-instrumentation-psycopg==0.49b2
+opentelemetry-instrumentation-celery==0.49b2
+opentelemetry-instrumentation-redis==0.49b2
+django-prometheus==2.3.1
+structlog==24.4.0
+
+# --- Server / Workers ---
+gunicorn==23.0.0
+uvicorn[standard]==0.32.0
+
+# --- HTTP client (notifications providers) ---
+httpx==0.27.2
+
+# --- Utilities ---
+python-slugify==8.0.4
+shortuuid==1.0.13
+ulid-py==1.1.0

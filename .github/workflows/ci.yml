@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: epidemitracker
+          POSTGRES_USER: epidemi
+          POSTGRES_PASSWORD: epidemi
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U epidemi -d epidemitracker"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      DATABASE_URL: postgis://epidemi:epidemi@localhost:5432/epidemitracker
+      REDIS_URL: redis://localhost:6379/0
+      CACHE_URL: redis://localhost:6379/4
+      CHANNEL_REDIS_URL: redis://localhost:6379/1
+      CELERY_BROKER_URL: redis://localhost:6379/2
+      CELERY_RESULT_BACKEND: redis://localhost:6379/3
+      DJANGO_SECRET_KEY: ci-secret
+      DJANGO_DEBUG: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GIS libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev libgeos-dev libproj-dev
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install Python deps
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ruff
+        working-directory: backend
+        run: ruff check apps config
+
+      - name: Black --check
+        working-directory: backend
+        run: black --check apps config
+
+      - name: Django check
+        working-directory: backend
+        run: python manage.py check
+
+      - name: Migrate
+        working-directory: backend
+        run: python manage.py migrate --noinput
+
+      - name: Pytest
+        working-directory: backend
+        run: pytest -q
+
+  build-image:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t epidemitracker/backend:ci backend

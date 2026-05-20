@@ -1,0 +1,3 @@
+# Les clés Ed25519 du Health Pass sont générées via :
+#   python manage.py generate_pass_keys
+# Elles ne doivent JAMAIS être commitées.

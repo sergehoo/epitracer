@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr" x-data="{ sidebar:true, dark:false, tab:'dashboard' }" :class="{ 'dark': dark }">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Surveillance Épidémiologique Nationale</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' }
+  </script>
+</head>
+
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100">
+
+<div class="min-h-screen flex">
+
+  <!-- SIDEBAR -->
+  <aside x-show="sidebar" class="w-72 bg-slate-950 text-white p-5 hidden md:block">
+    <div class="mb-8">
+      <h1 class="text-2xl font-bold">EpiTravel</h1>
+      <p class="text-sm text-slate-400">Surveillance sanitaire nationale</p>
+    </div>
+
+    <nav class="space-y-2">
+      <button @click="tab='dashboard'" class="w-full text-left px-4 py-3 rounded-xl hover:bg-emerald-600">Dashboard</button>
+      <button @click="tab='register'" class="w-full text-left px-4 py-3 rounded-xl hover:bg-emerald-600">Enregistrer voyageur</button>
+      <button @click="tab='pass'" class="w-full text-left px-4 py-3 rounded-xl hover:bg-emerald-600">Pass sanitaire</button>
+      <button @click="tab='alerts'" class="w-full text-left px-4 py-3 rounded-xl hover:bg-emerald-600">Alertes sanitaires</button>
+      <button @click="tab='map'" class="w-full text-left px-4 py-3 rounded-xl hover:bg-emerald-600">Cartographie</button>
+      <button @click="tab='settings'" class="w-full text-left px-4 py-3 rounded-xl hover:bg-emerald-600">Configuration maladies</button>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="flex-1">
+
+    <!-- TOPBAR -->
+    <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between">
+      <div>
+        <h2 class="text-xl font-bold">Centre National de Surveillance</h2>
+        <p class="text-sm text-slate-500">Suivi Ebola, Mpox, Choléra, Covid-19</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button @click="dark=!dark" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800">
+          Mode
+        </button>
+        <button class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold">
+          + Nouveau voyageur
+        </button>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <section class="p-6">
+
+      <!-- DASHBOARD -->
+      <div x-show="tab==='dashboard'" class="space-y-6">
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
+          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow">
+            <p class="text-sm text-slate-500">Voyageurs enregistrés</p>
+            <h3 class="text-3xl font-bold mt-2">1 284 920</h3>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow">
+            <p class="text-sm text-slate-500">Cas à risque</p>
+            <h3 class="text-3xl font-bold mt-2 text-orange-500">438</h3>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow">
+            <p class="text-sm text-slate-500">Alertes critiques</p>
+            <h3 class="text-3xl font-bold mt-2 text-red-500">12</h3>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow">
+            <p class="text-sm text-slate-500">Suivis 21 jours</p>
+            <h3 class="text-3xl font-bold mt-2 text-emerald-500">9 842</h3>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl shadow p-6">
+            <h3 class="font-bold text-lg mb-4">Flux des voyageurs</h3>
+            <div class="h-80 rounded-xl bg-gradient-to-br from-emerald-100 to-sky-100 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center">
+              Carte / Graphique temps réel
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl shadow p-6">
+            <h3 class="font-bold text-lg mb-4">Alertes récentes</h3>
+            <div class="space-y-4">
+              <div class="p-4 rounded-xl bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800">
+                <p class="font-semibold text-red-600">Risque critique</p>
+                <p class="text-sm text-slate-500">Voyageur provenant d’une zone rouge</p>
+              </div>
+              <div class="p-4 rounded-xl bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800">
+                <p class="font-semibold text-orange-600">Suivi manqué</p>
+                <p class="text-sm text-slate-500">Absence de réponse depuis 48h</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FORMULAIRE EBOLA -->
+      <div x-show="tab==='register'" class="bg-white dark:bg-slate-900 rounded-2xl shadow p-6 max-w-6xl">
+        <h3 class="text-2xl font-bold mb-1">Formulaire d’enquête Ebola</h3>
+        <p class="text-sm text-slate-500 mb-6">Tous les champs sont obligatoires selon le protocole sanitaire.</p>
+
+        <form class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+          <input class="input" placeholder="Date d’arrivée" type="date">
+          <input class="input" placeholder="N° Vol / Moyen de transport">
+          <input class="input" placeholder="N° Siège">
+          <input class="input" placeholder="Point d’entrée">
+
+          <input class="input" placeholder="Nom de famille">
+          <input class="input" placeholder="Prénoms">
+          <input class="input" placeholder="Âge">
+          <select class="input">
+            <option>Sexe</option>
+            <option>Masculin</option>
+            <option>Féminin</option>
+          </select>
+
+          <input class="input" placeholder="Profession">
+          <input class="input" placeholder="N° Passeport">
+          <input class="input" placeholder="Téléphone portable">
+          <input class="input" placeholder="Adresse email">
+
+          <textarea class="input md:col-span-2" placeholder="Adresse postale"></textarea>
+
+          <h4 class="md:col-span-2 text-lg font-bold mt-4">Historique des déplacements</h4>
+
+          <input class="input" placeholder="Pays de provenance">
+          <input class="input" placeholder="Ville de provenance">
+          <input class="input" placeholder="Adresse de résidence là-bas">
+          <input class="input" placeholder="Hôtel / N° Chambre">
+          <input class="input md:col-span-2" placeholder="Durée du séjour">
+
+          <h4 class="md:col-span-2 text-lg font-bold mt-4">Évaluation épidémiologique</h4>
+
+          <label class="check">Avez-vous séjourné dans une zone touchée par Ebola ? <input type="checkbox"></label>
+          <label class="check">Contact avec une personne malade ou suspectée ? <input type="checkbox"></label>
+          <label class="check">Participation à des funérailles ? <input type="checkbox"></label>
+          <label class="check">Fréquentation d’un centre traitant Ebola ? <input type="checkbox"></label>
+
+          <h4 class="md:col-span-2 text-lg font-bold mt-4">Symptômes 48 dernières heures</h4>
+
+          <label class="check">Fièvre ≥ 38°C <input type="checkbox"></label>
+          <label class="check">Fatigue intense <input type="checkbox"></label>
+          <label class="check">Douleurs musculaires <input type="checkbox"></label>
+          <label class="check">Maux de tête intenses <input type="checkbox"></label>
+          <label class="check">Maux de gorge / douleurs abdominales <input type="checkbox"></label>
+          <label class="check">Diarrhée / vomissements <input type="checkbox"></label>
+          <label class="check">Saignements inexpliqués <input type="checkbox"></label>
+
+          <div class="md:col-span-2 flex justify-end gap-3 mt-6">
+            <button type="button" class="px-5 py-3 rounded-xl bg-slate-200 dark:bg-slate-800">Brouillon</button>
+            <button type="button" class="px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold">
+              Valider & générer le pass
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- PASS SANITAIRE -->
+      <div x-show="tab==='pass'" class="max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-xl p-8">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-sm text-slate-500">Pass Sanitaire Voyageur</p>
+            <h3 class="text-2xl font-bold">EB-CI-2026-000123</h3>
+          </div>
+          <span class="px-4 py-2 rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold">RISQUE FAIBLE</span>
+        </div>
+
+        <div class="mt-8 grid grid-cols-2 gap-4 text-sm">
+          <p><b>Nom :</b> DOE</p>
+          <p><b>Prénoms :</b> John</p>
+          <p><b>Passeport :</b> AA123456</p>
+          <p><b>Maladie :</b> Ebola</p>
+          <p><b>Arrivée :</b> 20/05/2026</p>
+          <p><b>Suivi jusqu’au :</b> 10/06/2026</p>
+        </div>
+
+        <div class="mt-8 flex justify-center">
+          <div class="w-44 h-44 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center">
+            QR CODE
+          </div>
+        </div>
+
+        <button class="w-full mt-8 py-3 rounded-xl bg-slate-950 text-white dark:bg-emerald-600 font-bold">
+          Télécharger la fiche PDF
+        </button>
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<style>
+  .input {
+    @apply w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500;
+  }
+  .check {
+    @apply flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800;
+  }
+</style>
+
+</body>
+</html>
