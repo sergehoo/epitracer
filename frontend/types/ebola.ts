@@ -17,6 +17,12 @@ export interface SectionVoyage {
   entry_point_code: string;       // ex: ABJ-AIRPORT
 }
 
+/** Document de voyage (upload local côté front avant envoi) */
+export interface PassportFile {
+  file: File;
+  preview?: string; // base64 ou URL temporaire
+}
+
 /** Section 2 — Identité & contacts */
 export interface SectionIdentite {
   last_name: string;

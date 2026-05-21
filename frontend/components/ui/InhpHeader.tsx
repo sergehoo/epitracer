@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, Palmtree, Sun, X } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { adminUrl, publicUrl } from '@/lib/hosts';
 
@@ -24,54 +24,74 @@ export function InhpHeader({ variant = 'public' }: { variant?: 'public' | 'dashb
   const [open, setOpen] = useState(false);
   const nav = variant === 'public' ? PUBLIC_NAV : ADMIN_NAV;
 
+  if (variant === 'public') return <PublicHeader open={open} setOpen={setOpen} nav={nav} />;
+  return <AdminHeader open={open} setOpen={setOpen} nav={nav} />;
+}
+
+/* =====================================================================
+   HEADER PUBLIC — marque touristique "Destination Côte d'Ivoire"
+   - Sans logos institutionnels (relayés dans le bandeau OfficialBanner)
+   - Style touristique : soleil + palmier + dégradé orange/vert
+   ===================================================================== */
+function PublicHeader({
+  open, setOpen, nav,
+}: { open: boolean; setOpen: (b: boolean) => void; nav: { href: string; label: string }[] }) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 glass border-b border-white/70 dark:border-emerald-950/60">
-      <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl shadow-lg bg-white grid place-items-center overflow-hidden ring-1 ring-emerald-100">
-            <img
-              src="https://www.inhp.ci/storage/images/website/logo%20sans%20ecriture%20inhp.png"
-              alt="INHP"
-              className="w-10 h-10 object-contain"
-            />
+      <div className="bg-gradient-to-r from-ciOrange via-ciGold to-ciGreen text-white text-[10px] uppercase tracking-widest">
+        <div className="max-w-7xl mx-auto px-6 py-1 flex items-center justify-between font-bold">
+          <span>République de Côte d'Ivoire</span>
+          <span className="hidden sm:inline italic opacity-90">Union · Discipline · Travail</span>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+        {/* Logo touristique stylisé — pas de logos institutionnels ici */}
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="relative h-12 w-12 grid place-items-center rounded-2xl bg-gradient-to-br from-ciOrange via-ciGold to-ciGreen shadow-lg shadow-ciOrange/30 group-hover:scale-105 transition-transform">
+            <Sun className="absolute -top-1.5 -right-1.5 h-5 w-5 text-ciGold drop-shadow-lg fill-ciGold" />
+            <Palmtree className="h-6 w-6 text-white drop-shadow" />
           </div>
           <div className="leading-tight">
-            <div className="font-display text-xl font-black text-ciDark dark:text-emerald-200">EpiTravel CI</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">
-              Institut National d'Hygiène Publique
+            <div className="font-display text-lg sm:text-2xl font-black tracking-tight bg-gradient-to-r from-ciOrange via-ciDark to-ciGreen bg-clip-text text-transparent">
+              Destination
+              Côte d'Ivoire
+            </div>
+            <div className="text-[10px] sm:text-xs italic text-slate-500 dark:text-slate-400">
+              Akwaba · Bienvenue · Welcome
             </div>
           </div>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-7 text-sm font-bold text-slate-700 dark:text-slate-200">
+        <nav className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-700 dark:text-slate-200">
           {nav.map((n) => (
-            n.href.startsWith('#') || variant === 'dashboard' ? (
-              <Link key={n.href} href={n.href} className="hover:text-ciOrange transition">{n.label}</Link>
-            ) : (
-              <a key={n.href} href={n.href} className="hover:text-ciOrange transition">{n.label}</a>
-            )
+            <a key={n.href} href={n.href} className="hover:text-ciOrange transition relative group">
+              {n.label}
+              <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-ciOrange to-ciGreen scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
+            </a>
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-2">
           <ThemeToggle />
-          {variant === 'public' ? (
-            <>
-              <Link href="/pass" className="px-5 py-3 rounded-full bg-white border border-slate-200 font-bold text-ciDark hover:border-ciOrange transition">
-                Voir mon pass
-              </Link>
-              <Link href="/voyageur" className="px-5 py-3 rounded-full bg-ciDark text-white font-bold shadow-xl hover:bg-emerald-950 transition">
-                M'enregistrer
-              </Link>
-              <a href={adminUrl('/auth/login')} className="text-xs text-slate-500 hover:text-ciOrange">
-                Espace agent
-              </a>
-            </>
-          ) : (
-            <a href={publicUrl('/')} className="px-5 py-3 rounded-full bg-white border border-slate-200 font-bold text-ciDark hover:border-ciOrange transition">
-              Portail public
-            </a>
-          )}
+          <Link
+            href="/pass"
+            className="px-4 py-2.5 rounded-full bg-white border border-slate-200 font-bold text-ciDark hover:border-ciOrange transition text-sm"
+          >
+            Voir mon pass
+          </Link>
+          <Link
+            href="/voyageur"
+            className="px-4 py-2.5 rounded-full bg-gradient-to-r from-ciOrange to-orange-600 text-white font-bold shadow-xl shadow-orange-500/25 hover:shadow-orange-500/40 transition text-sm"
+          >
+            M'enregistrer
+          </Link>
+          <a
+            href={adminUrl('/auth/login')}
+            className="text-xs text-slate-500 hover:text-ciOrange"
+          >
+            Espace agent
+          </a>
         </div>
 
         <button
@@ -90,13 +110,92 @@ export function InhpHeader({ variant = 'public' }: { variant?: 'public' | 'dashb
               {n.label}
             </a>
           ))}
-          {variant === 'public' && (
-            <>
-              <Link href="/pass" className="block px-5 py-3 rounded-xl border border-slate-200 font-bold text-ciDark text-center">Voir mon pass</Link>
-              <Link href="/voyageur" className="block px-5 py-3 rounded-xl bg-ciDark text-white font-bold text-center">M'enregistrer</Link>
-              <a href={adminUrl('/auth/login')} className="block text-center text-xs text-slate-500 pt-2">Espace agent</a>
-            </>
-          )}
+          <Link href="/pass" className="block px-5 py-3 rounded-xl border border-slate-200 font-bold text-ciDark text-center">
+            Voir mon pass
+          </Link>
+          <Link href="/voyageur" className="block px-5 py-3 rounded-xl bg-gradient-to-r from-ciOrange to-orange-600 text-white font-bold text-center">
+            M'enregistrer
+          </Link>
+          <a href={adminUrl('/auth/login')} className="block text-center text-xs text-slate-500 pt-2">
+            Espace agent
+          </a>
+        </div>
+      )}
+    </header>
+  );
+}
+
+/* =====================================================================
+   HEADER ADMIN — conserve l'identité institutionnelle EpiTrace + logos
+   ===================================================================== */
+function AdminHeader({
+  open, setOpen, nav,
+}: { open: boolean; setOpen: (b: boolean) => void; nav: { href: string; label: string }[] }) {
+  return (
+    <header className="fixed inset-x-0 top-0 z-50 glass border-b border-white/70 dark:border-emerald-950/60">
+      <div className="bg-ciDark text-white text-[10px] uppercase tracking-widest">
+        <div className="max-w-7xl mx-auto px-6 py-1 flex items-center justify-between">
+          <span>République de Côte d'Ivoire — MSHPCMU · INHP</span>
+          <span className="hidden sm:inline italic opacity-80">Union · Discipline · Travail</span>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+        <Link href="/dashboard" className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2">
+            <img src="/logo-min-sante-2.png" alt="MSHPCMU" className="h-11 w-11 object-contain" />
+            <img src="/armoirie-ci-2.png" alt="Armoiries CI" className="h-11 w-11 object-contain" />
+            <img src="/logo-INHP.png" alt="INHP" className="h-9 w-auto object-contain" />
+          </div>
+          <img
+            src="/logo-min-sante-2.png"
+            alt="MSHPCMU"
+            className="sm:hidden h-10 w-10 object-contain"
+          />
+          <div className="leading-tight border-l border-slate-200 dark:border-slate-800 pl-3">
+            <div className="font-display text-base sm:text-lg font-black text-ciDark dark:text-emerald-200">
+              EpiTrace
+            </div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">
+              MSHPCMU · INHP · administration
+            </div>
+          </div>
+        </Link>
+
+        <nav className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-700 dark:text-slate-200">
+          {nav.map((n) => (
+            <Link key={n.href} href={n.href} className="hover:text-ciOrange transition">
+              {n.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="hidden md:flex items-center gap-2">
+          <ThemeToggle />
+          <a
+            href={publicUrl('/')}
+            className="px-4 py-2.5 rounded-full bg-white border border-slate-200 font-bold text-ciDark hover:border-ciOrange transition text-sm"
+          >
+            Portail public
+          </a>
+        </div>
+
+        <button
+          onClick={() => setOpen(!open)}
+          aria-label="Menu"
+          className="md:hidden h-10 w-10 grid place-items-center text-ciDark dark:text-emerald-200"
+        >
+          {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+        </button>
+      </div>
+
+      {open && (
+        <div className="md:hidden px-6 pb-5 space-y-3 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800">
+          {nav.map((n) => (
+            <Link key={n.href} href={n.href} onClick={() => setOpen(false)} className="block font-semibold py-2">
+              {n.label}
+            </Link>
+          ))}
         </div>
       )}
     </header>

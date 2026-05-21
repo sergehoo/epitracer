@@ -1,11 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
-import { Download, FileBadge2, MapPin, ShieldAlert, ShieldCheck, TimerReset } from 'lucide-react';
+import {
+  Download, FileBadge2, FileText, MapPin, ShieldAlert, ShieldCheck, Smartphone,
+} from 'lucide-react';
 import { Section } from '@/components/ui/Section';
 import { RiskBadge } from '@/components/ui/RiskBadge';
+import { Companion21Days } from '@/components/public/Companion21Days';
+import { PassportUploader } from '@/components/public/PassportUploader';
 import { api, API_URL, extractApiError } from '@/lib/api';
 import { formatDate, formatDateTime, STATUS_LABELS } from '@/lib/utils';
 import type { RiskLevel } from '@/types/ebola';
@@ -17,8 +21,15 @@ interface PassConsultPayload {
     current_health_status: string;
     arrival_date: string | null;
     entry_point: string | null;
+    has_passport: boolean;
   };
-  investigation: any | null;
+  investigation: {
+    case_number: string;
+    risk_level: RiskLevel;
+    risk_score: number;
+    surveillance_start: string | null;
+    surveillance_end: string | null;
+  } | null;
   pass: {
     pass_number: string;
     status: string;
@@ -30,6 +41,10 @@ interface PassConsultPayload {
     pdf_url: string | null;
     qr_token: string;
   } | null;
+  downloads: {
+    pass_pdf: string;
+    official_form_pdf: string;
+  };
 }
 
 export default function PassDetailPage() {
@@ -41,15 +56,18 @@ export default function PassDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     const id = params?.publicId;
     if (!id) return;
     setLoading(true);
-    api.get<PassConsultPayload>(`/ebola/public/pass/${id}/`)
+    api
+      .get<PassConsultPayload>(`/ebola/public/pass/${id}/`)
       .then((r) => setData(r.data))
       .catch((e) => setError(extractApiError(e)))
       .finally(() => setLoading(false));
   }, [params?.publicId]);
+
+  useEffect(() => { load(); }, [load]);
 
   if (loading) {
     return (
@@ -69,6 +87,9 @@ export default function PassDetailPage() {
 
   const hp = data.pass;
   const t = data.traveler;
+  const inv = data.investigation;
+  const absUrl = (path: string) =>
+    path.startsWith('http') ? path : `${API_URL}${path}`;
 
   return (
     <Section
@@ -77,91 +98,134 @@ export default function PassDetailPage() {
       description={`Votre identifiant voyageur : ${t.public_id}`}
     >
       {justIssued && (
-        <div className="mb-6 rounded-xl bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 p-4 text-sm flex items-start gap-2">
-          <ShieldCheck className="h-5 w-5 text-emerald-700 dark:text-emerald-300 mt-0.5" />
+        <div className="mb-6 rounded-2xl bg-gradient-to-r from-emerald-50 to-orange-50 border border-emerald-200 dark:border-emerald-900 p-5 flex items-start gap-3">
+          <ShieldCheck className="h-6 w-6 text-emerald-700 mt-0.5" />
           <div>
-            Votre fiche a été enregistrée auprès de l'INHP. Votre pass sanitaire est délivré ci-dessous.
-            Conservez cette page et présentez le QR au contrôle.
+            <div className="font-display font-black text-ciDark">Fiche enregistrée par l'INHP</div>
+            <div className="text-sm text-slate-700 mt-1">
+              Votre pass sanitaire est délivré. Conservez cette page ou téléchargez les documents
+              ci-dessous pour les présenter au contrôle.
+            </div>
           </div>
         </div>
       )}
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Carte pass */}
-        <article className="card p-6 lg:col-span-2 space-y-6">
-          <header className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-semibold">
-                Pass sanitaire — République de Côte d'Ivoire
+        {/* ============ Carte principale du pass ============ */}
+        <article className="lg:col-span-2 rounded-[2rem] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800">
+          {/* Bandeau drapeau ivoirien */}
+          <div className="grid grid-cols-3 h-3">
+            <div className="bg-ciOrange" />
+            <div className="bg-white" />
+            <div className="bg-ciGreen" />
+          </div>
+
+          {/* En-tête sombre avec 3 logos officiels */}
+          <div className="bg-ciDark text-white px-6 py-5 flex items-center gap-3">
+            <img
+              src="/logo-min-sante-2.png"
+              alt="MSHPCMU"
+              className="h-12 w-12 rounded-xl bg-white p-1 object-contain shadow"
+            />
+            <img
+              src="/armoirie-ci-2.png"
+              alt="Armoiries Côte d'Ivoire"
+              className="h-12 w-12 rounded-xl bg-white p-1 object-contain shadow"
+            />
+            <img
+              src="/logo-INHP.png"
+              alt="INHP"
+              className="h-10 w-auto rounded-xl bg-white p-1 object-contain shadow"
+            />
+            <div className="leading-tight ml-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/80">
+                RÉPUBLIQUE DE CÔTE D'IVOIRE
               </div>
-              <h3 className="font-display text-2xl font-bold mt-1">{hp?.pass_number || '—'}</h3>
+              <div className="font-display font-black text-base">Pass Sanitaire National</div>
+              <div className="text-[11px] text-emerald-200 mt-0.5">
+                MSHPCMU · Institut National d'Hygiène Publique
+              </div>
             </div>
-            {hp ? <RiskBadge level={hp.risk_level} score={hp.risk_score} /> : null}
-          </header>
+            <div className="ml-auto text-right">
+              <div className="text-[10px] uppercase text-white/70">N° de pass</div>
+              <div className="font-display font-black text-lg text-ciGold">
+                {hp?.pass_number || '—'}
+              </div>
+            </div>
+          </div>
 
           {hp ? (
-            <div className="grid sm:grid-cols-[auto,1fr] gap-6 items-center">
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
-                <QRCodeSVG value={hp.qr_token} size={220} includeMargin />
+            <div className="bg-white dark:bg-slate-900 p-6 grid sm:grid-cols-[auto,1fr] gap-6 items-start">
+              {/* QR avec cadre tricolore */}
+              <div className="relative">
+                <div className="absolute -inset-1.5 rounded-2xl bg-gradient-to-b from-ciOrange via-white to-ciGreen" />
+                <div className="relative bg-white p-4 rounded-2xl">
+                  <QRCodeSVG value={hp.qr_token} size={200} includeMargin />
+                </div>
+                <div className="mt-2 text-[10px] text-center text-slate-500 italic">
+                  Signature Ed25519 · vérifiable hors-ligne
+                </div>
               </div>
-              <dl className="space-y-3 text-sm">
-                <Row label="Statut">
-                  <span className="font-semibold">{STATUS_LABELS[hp.status] || hp.status}</span>
-                </Row>
-                <Row label="Maladie suivie">Maladie à Virus Ebola (MVE)</Row>
-                <Row label="Émis le">{formatDateTime(hp.issued_at)}</Row>
-                <Row label="Expire le">{formatDateTime(hp.expires_at)}</Row>
-                <Row label="Signature">Cryptographique Ed25519 · vérifiable hors-ligne</Row>
-              </dl>
+
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <RiskBadge level={hp.risk_level} score={hp.risk_score} />
+                  <span className={`badge-${hp.status === 'active' ? 'low' : 'high'}`}>
+                    {STATUS_LABELS[hp.status] || hp.status}
+                  </span>
+                </div>
+
+                <dl className="mt-4 space-y-2.5 text-sm">
+                  <Row label="Voyageur" value={t.full_name} accent />
+                  <Row label="ID voyageur" value={t.public_id} />
+                  <Row label="Maladie suivie" value="Maladie à Virus Ebola (MVE)" />
+                  <Row label="Point d'entrée" value={t.entry_point || '—'} />
+                  <Row label="Émis le" value={formatDateTime(hp.issued_at)} />
+                  <Row label="Expire le" value={formatDateTime(hp.expires_at)} />
+                </dl>
+              </div>
             </div>
           ) : (
-            <div className="text-rose-600">Aucun pass délivré pour ce voyageur.</div>
+            <div className="bg-white p-6 text-rose-600">Aucun pass délivré pour ce voyageur.</div>
           )}
 
-          <div className="flex flex-wrap gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-            {hp?.pdf_url && (
-              <a
-                href={hp.pdf_url.startsWith('http') ? hp.pdf_url : `${API_URL}${hp.pdf_url}`}
-                target="_blank" rel="noreferrer"
-                className="btn-secondary"
-              >
-                <Download className="h-4 w-4" /> Télécharger le PDF
-              </a>
-            )}
-            <a href="/verifier" className="btn-outline">
-              <FileBadge2 className="h-4 w-4" /> Vérifier un autre QR
+          {/* Pied tricolore + boutons */}
+          <div className="bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 p-5 flex flex-wrap gap-3 justify-end">
+            <a
+              href={absUrl(data.downloads.official_form_pdf)}
+              target="_blank" rel="noreferrer"
+              className="btn-paper"
+            >
+              <FileText className="h-4 w-4" /> Fiche officielle INHP (PDF)
             </a>
+            <a
+              href={absUrl(data.downloads.pass_pdf)}
+              target="_blank" rel="noreferrer"
+              className="btn-dark"
+            >
+              <Download className="h-4 w-4" /> Télécharger mon pass
+            </a>
+          </div>
+
+          <div className="grid grid-cols-3 h-3">
+            <div className="bg-ciOrange" />
+            <div className="bg-white" />
+            <div className="bg-ciGreen" />
           </div>
         </article>
 
-        {/* Sidebar : statut + instructions */}
+        {/* ============ Sidebar ============ */}
         <aside className="space-y-4">
-          <div className="card p-5">
-            <div className="text-xs uppercase tracking-widest text-slate-500 font-semibold">Votre situation</div>
-            <div className="mt-2 flex items-center justify-between">
-              <span>Statut sanitaire</span>
-              <span className="badge-low">{STATUS_LABELS[t.current_health_status] || t.current_health_status}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span>Arrivée</span>
-              <span>{formatDate(t.arrival_date)}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span>Point d'entrée</span>
-              <span className="text-right">{t.entry_point || '—'}</span>
-            </div>
-          </div>
+          <Companion21Days
+            surveillanceStart={inv?.surveillance_start}
+            surveillanceEnd={inv?.surveillance_end}
+          />
 
-          <div className="card p-5">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <TimerReset className="h-4 w-4 text-emerald-600" />
-              Suivi sanitaire 21 jours
-            </div>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Conformément au protocole INHP, mesurez votre température chaque jour et signalez tout
-              symptôme aux services sanitaires.
-            </p>
-          </div>
+          <PassportUploader
+            publicId={t.public_id}
+            hasPassport={t.has_passport}
+            onUploaded={load}
+          />
 
           <div className="card p-5 bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900">
             <div className="flex items-center gap-2 text-sm font-semibold text-rose-700 dark:text-rose-300">
@@ -169,17 +233,30 @@ export default function PassDetailPage() {
               En cas de symptômes
             </div>
             <div className="mt-2 text-sm">
-              SAMU <a href="tel:185" className="font-bold">185</a> · Allô Santé <a href="tel:143" className="font-bold">143</a> · Secours <a href="tel:101" className="font-bold">101</a>
+              SAMU <a href="tel:185" className="font-black text-ciOrange">185</a> ·
+              Allô Santé <a href="tel:143" className="font-black text-ciOrange">143</a> ·
+              Secours <a href="tel:101" className="font-black text-ciOrange">101</a>
             </div>
           </div>
 
           <div className="card p-5">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <MapPin className="h-4 w-4 text-emerald-600" />
+              <Smartphone className="h-4 w-4 text-ciOrange" />
+              Installer l'application
+            </div>
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-5">
+              Ajoutez ce portail à votre écran d'accueil pour consulter votre pass <strong>hors-ligne</strong>.
+              Sur iPhone : Partager → « Sur l'écran d'accueil ». Sur Android : menu ⋮ → « Installer l'app ».
+            </p>
+          </div>
+
+          <div className="card p-5">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <MapPin className="h-4 w-4 text-ciGreen" />
               Conservez cette page
             </div>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Mettez cette URL en favori. En cas de perte, vous pouvez la retrouver via la page
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-5">
+              Mettez-la en favori. En cas de perte, utilisez la page
               <a className="underline ml-1" href="/pass">Mon Pass</a> avec votre identifiant.
             </p>
           </div>
@@ -189,11 +266,11 @@ export default function PassDetailPage() {
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-2 last:border-0">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right">{children}</dd>
+    <div className="grid grid-cols-[110px,1fr] items-baseline gap-3 border-b border-slate-100 dark:border-slate-800 pb-2 last:border-0">
+      <dt className="text-[10px] uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className={accent ? 'font-black text-ciOrange' : 'font-semibold'}>{value}</dd>
     </div>
   );
 }

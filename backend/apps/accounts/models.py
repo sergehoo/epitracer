@@ -4,7 +4,7 @@ Modèles d'identité et de contrôle d'accès.
 Hiérarchie de rôles (RBAC granulaire) :
 
     NATIONAL_ADMIN  - super admin national
-    MINISTRY        - cadres du Ministère de la Santé
+    MINISTRY        - cadres du MSHPCMU (Ministère de la Santé)
     INHP            - Institut National d'Hygiène Publique
     DISTRICT        - direction d'un district sanitaire
     ENTRY_POINT     - responsable d'un point d'entrée (aéroport, port, frontière)
@@ -34,7 +34,7 @@ from apps.core.models import BaseModel, TimestampedModel
 # ---------------------------------------------------------------------------
 class RoleCode(models.TextChoices):
     NATIONAL_ADMIN = "NATIONAL_ADMIN", _("Super Admin National")
-    MINISTRY = "MINISTRY", _("Ministère de la Santé")
+    MINISTRY = "MINISTRY", _("MSHPCMU (Ministère de la Santé)")
     INHP = "INHP", _("INHP")
     DISTRICT = "DISTRICT", _("District Sanitaire")
     ENTRY_POINT = "ENTRY_POINT", _("Responsable Point d'Entrée")

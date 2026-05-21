@@ -45,6 +45,7 @@ class TravelerSerializer(serializers.ModelSerializer):
             "id_document_type", "id_document_number", "id_document_country",
             "nationality", "nationality_code",
             "phone_mobile", "email", "postal_address",
+            "passport_document", "passport_uploaded_at",
             # Section 4 — confinement CI
             "confinement_city", "confinement_commune", "confinement_neighborhood",
             "confinement_street_number", "confinement_lot",

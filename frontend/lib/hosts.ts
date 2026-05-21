@@ -8,8 +8,8 @@
 
 export const PUBLIC_HOST = (process.env.NEXT_PUBLIC_PUBLIC_HOST || '').toLowerCase();
 export const ADMIN_HOST = (process.env.NEXT_PUBLIC_ADMIN_HOST || '').toLowerCase();
-export const PORTAL_NAME_PUBLIC = process.env.NEXT_PUBLIC_PORTAL_NAME_PUBLIC || 'EpiTravel';
-export const PORTAL_NAME_ADMIN = process.env.NEXT_PUBLIC_PORTAL_NAME_ADMIN || 'EpiTravel — Admin INHP';
+export const PORTAL_NAME_PUBLIC = process.env.NEXT_PUBLIC_PORTAL_NAME_PUBLIC || 'EpiTrace';
+export const PORTAL_NAME_ADMIN = process.env.NEXT_PUBLIC_PORTAL_NAME_ADMIN || 'EpiTrace — Admin INHP';
 
 function makeUrl(host: string, path: string) {
   if (!host) return path;

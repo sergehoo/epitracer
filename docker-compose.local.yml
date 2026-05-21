@@ -9,7 +9,7 @@ version: "3.9"
 # Une fois lancé, les URLs suivantes sont accessibles sur ta machine
 # SANS toucher /etc/hosts (lvh.me résout toujours vers 127.0.0.1) :
 #
-#   Portail public : http://publictraveler.lvh.me
+#   Portail public : http://destinationci.lvh.me
 #   Portail admin  : http://inhpadmin.lvh.me
 #   API Django     : http://api.lvh.me
 #   Traefik UI     : http://traefik.lvh.me:8080
@@ -40,8 +40,8 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings.dev
       DJANGO_DEBUG: "1"
       DJANGO_ALLOWED_HOSTS: "*"
-      DJANGO_CSRF_TRUSTED_ORIGINS: http://api.lvh.me,http://publictraveler.lvh.me,http://inhpadmin.lvh.me
-      DJANGO_CORS_ALLOWED_ORIGINS: http://publictraveler.lvh.me,http://inhpadmin.lvh.me
+      DJANGO_CSRF_TRUSTED_ORIGINS: http://api.lvh.me,http://destinationci.lvh.me,http://inhpadmin.lvh.me
+      DJANGO_CORS_ALLOWED_ORIGINS: http://destinationci.lvh.me,http://inhpadmin.lvh.me
     labels:
       - traefik.enable=true
       - traefik.http.routers.api-local.rule=Host(`api.lvh.me`)
@@ -62,12 +62,12 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://api.lvh.me
       NEXT_PUBLIC_WS_URL: ws://ws.lvh.me
-      NEXT_PUBLIC_PUBLIC_HOST: publictraveler.lvh.me
+      NEXT_PUBLIC_PUBLIC_HOST: destinationci.lvh.me
       NEXT_PUBLIC_ADMIN_HOST: inhpadmin.lvh.me
       NODE_ENV: production
     labels:
       - traefik.enable=true
-      - traefik.http.routers.front-public-local.rule=Host(`publictraveler.lvh.me`)
+      - traefik.http.routers.front-public-local.rule=Host(`destinationci.lvh.me`)
       - traefik.http.routers.front-public-local.entrypoints=web
       - traefik.http.routers.front-public-local.service=front-local-svc
       - traefik.http.routers.front-admin-local.rule=Host(`inhpadmin.lvh.me`)

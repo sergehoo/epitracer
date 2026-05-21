@@ -1,7 +1,7 @@
 /**
  * Middleware Next.js — séparation stricte des deux portails par hostname.
  *
- *   publictraveler.ci  → portail PUBLIC voyageurs (groupe (public))
+ *   destinationci.com  → portail PUBLIC voyageurs (groupe (public))
  *                        + assets statiques + /api/* (proxy)
  *                        ⇒ toute autre route est redirigée vers l'hôte admin.
  *
@@ -9,7 +9,7 @@
  *                        ⇒ toute route publique est redirigée vers l'hôte public.
  *
  * Configuration via env :
- *   NEXT_PUBLIC_PUBLIC_HOST=publictraveler.ci
+ *   NEXT_PUBLIC_PUBLIC_HOST=destinationci.com
  *   NEXT_PUBLIC_ADMIN_HOST=inhpadmin.ci
  *
  * En dev local (localhost), aucune restriction n'est appliquée.

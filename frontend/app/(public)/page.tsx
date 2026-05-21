@@ -16,6 +16,7 @@ import {
 export default function HomePage() {
   return (
     <>
+      <OfficialBanner />
       <Hero />
       <Accompagnement />
       <PreventionEbola />
@@ -28,10 +29,64 @@ export default function HomePage() {
   );
 }
 
+/* ----------------- BANDEAU INSTITUTIONNEL -----------------
+   À GAUCHE : MSHPCMU + INHP
+   À DROITE : Emblème CI, juste au-dessus de "Union · Discipline · Travail"
+   --------------------------------------------------------- */
+function OfficialBanner() {
+  return (
+    <section className="relative bg-white border-b border-slate-200">
+      <div className="absolute inset-0 pattern-dots opacity-30" />
+      <div className="relative max-w-7xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+        {/* GAUCHE : logos institutionnels MSHPCMU + INHP */}
+        <div className="flex items-center gap-5">
+          <img
+            src="/logo-min-sante-2.png"
+            alt="MSHPCMU"
+            className="h-16 w-16 object-contain"
+          />
+          <div className="border-l border-slate-200 pl-5 leading-tight">
+            <div className="text-[10px] uppercase tracking-widest text-ciOrange font-bold">
+              Ministère
+            </div>
+            <div className="font-display font-black text-ciDark text-base">
+              MSHPCMU
+            </div>
+            <div className="text-[10px] text-slate-500 max-w-xs leading-snug">
+              Ministère de la Santé, de l'Hygiène Publique<br />
+              et de la Couverture Maladie Universelle
+            </div>
+          </div>
+          <img
+            src="/logo-INHP.png"
+            alt="Institut National d'Hygiène Publique"
+            className="hidden sm:block h-12 w-auto object-contain"
+          />
+        </div>
+
+        {/* DROITE : emblème CI au-dessus de la devise */}
+        <div className="flex flex-col items-center text-center">
+          <img
+            src="/armoirie-ci-2.png"
+            alt="Armoiries de la République de Côte d'Ivoire"
+            className="h-20 w-20 object-contain drop-shadow-sm"
+          />
+          <div className="mt-1 text-[10px] uppercase tracking-widest text-ciOrange font-bold">
+            République de Côte d'Ivoire
+          </div>
+          <div className="italic text-xs text-ciDark font-semibold">
+            Union · Discipline · Travail
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ----------------------------- HERO ----------------------------- */
 function Hero() {
   return (
-    <section className="relative -mt-20 min-h-screen pt-36 pb-24 overflow-hidden bg-gradient-to-br from-orange-50 via-white to-emerald-50">
+    <section className="relative min-h-[90vh] pt-16 pb-24 overflow-hidden bg-gradient-to-br from-orange-50 via-white to-emerald-50">
       <div className="absolute inset-0 pattern-dots opacity-50" />
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-ciOrange/25 rounded-full blur-3xl" />
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-ciGreen/25 rounded-full blur-3xl" />
@@ -325,7 +380,7 @@ function Fonctionnement() {
 function Urgence() {
   const phones = [
     { label: 'SAMU National', sub: 'Appel gratuit', n: '185' },
-    { label: 'Allô Santé', sub: 'Ministère de la Santé', n: '143' },
+    { label: 'Allô Santé', sub: 'MSHPCMU (Ministère de la Santé)', n: '143' },
     { label: 'Police / Secours', sub: 'Centre national', n: '101' },
   ];
   return (

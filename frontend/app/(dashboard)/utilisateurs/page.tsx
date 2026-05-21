@@ -23,7 +23,7 @@ export default function UtilisateursPage() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-3xl font-bold">Utilisateurs</h1>
-        <p className="text-sm text-slate-500 mt-1">Comptes professionnels (MINSAN, INHP, districts, points d'entrée, agents).</p>
+        <p className="text-sm text-slate-500 mt-1">Comptes professionnels (MSHPCMU, INHP, districts, points d'entrée, agents).</p>
       </div>
       {err && <div className="card p-6 text-rose-600">{err}</div>}
       <div className="card overflow-hidden">

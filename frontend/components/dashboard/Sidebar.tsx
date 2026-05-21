@@ -24,11 +24,16 @@ export function Sidebar() {
   const pathname = usePathname();
   return (
     <aside className="hidden lg:flex w-64 shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex-col">
-      <div className="h-16 flex items-center gap-2 px-5 border-b border-slate-200 dark:border-slate-800">
-        <div className="h-9 w-9 rounded-xl bg-emerald-600 grid place-items-center text-white shadow-glow">
-          <ShieldCheck className="h-4 w-4" />
-        </div>
-        <Link href="/dashboard" className="font-display font-bold">EpiTravel <span className="text-xs font-medium text-slate-500">/ admin</span></Link>
+      <div className="h-auto py-3 flex items-center gap-2 px-4 border-b border-slate-200 dark:border-slate-800">
+        <img src="/logo-min-sante-2.png" alt="MSHPCMU" className="h-9 w-9 object-contain" />
+        <img src="/armoirie-ci-2.png" alt="Armoiries CI" className="h-9 w-9 object-contain" />
+        <img src="/logo-INHP.png" alt="INHP" className="h-7 w-auto object-contain" />
+        <Link href="/dashboard" className="ml-1 leading-tight">
+          <div className="font-display font-black text-sm text-ciDark dark:text-emerald-200">
+            EpiTrace CI
+          </div>
+          <div className="text-[10px] text-slate-500">MSHPCMU · INHP / admin</div>
+        </Link>
       </div>
       <nav className="flex-1 overflow-y-auto p-3 space-y-1">
         {NAV.map(({ href, label, icon: Icon }) => {
@@ -50,7 +55,7 @@ export function Sidebar() {
         })}
       </nav>
       <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500">
-        v0.1.0 · MINSAN · INHP
+        v0.1.0 · MSHPCMU · INHP
       </div>
     </aside>
   );

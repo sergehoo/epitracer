@@ -367,7 +367,7 @@ HEALTHPASS = {
         "HEALTHPASS_PUBLIC_KEY_PATH",
         default=str(BASE_DIR / "keys" / "healthpass_ed25519_public.pem"),
     ),
-    "ISSUER": env("HEALTHPASS_ISSUER", default="MINSAN-CI"),
+    "ISSUER": env("HEALTHPASS_ISSUER", default="MSHPCMU-CI"),
     "DEFAULT_TTL_DAYS": env.int("HEALTHPASS_DEFAULT_TTL_DAYS", default=30),
 }
 
@@ -389,7 +389,7 @@ NOTIFICATIONS = {
 # ---------------------------------------------------------------------------
 APP_METADATA = {
     "COUNTRY_CODE": env("COUNTRY_CODE", default="CI"),
-    "NATIONAL_ORG_NAME": env("NATIONAL_ORG_NAME", default="Ministère de la Santé"),
+    "NATIONAL_ORG_NAME": env("NATIONAL_ORG_NAME", default="MSHPCMU"),
     "INHP_ORG_NAME": env("INHP_ORG_NAME", default="Institut National d'Hygiène Publique"),
     "DEFAULT_QUARANTINE_DAYS": env.int("DEFAULT_QUARANTINE_DAYS", default=21),
 }

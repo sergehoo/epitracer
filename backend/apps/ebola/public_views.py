@@ -11,9 +11,13 @@
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import re
 from datetime import datetime
 
 from django.contrib.gis.geos import Point
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -67,6 +71,31 @@ def _parse_datetime(v):
         return datetime.fromisoformat(s)
     except ValueError:
         return None
+
+
+_DATA_URL_RE = re.compile(r"^data:image/(?P<ext>png|jpeg|jpg|webp);base64,(?P<b64>.+)$", re.S)
+
+
+def _decode_signature(data_url: str, public_id: str) -> tuple[ContentFile | None, str]:
+    """Décode une signature data:URL (PNG/JPEG base64) en ContentFile + hash sha256.
+
+    Retourne (file, hash_hex). Si data_url est invalide, (None, '').
+    Limite la taille à 2 Mo (assez large pour une signature).
+    """
+    if not data_url:
+        return None, ""
+    m = _DATA_URL_RE.match(data_url.strip())
+    if not m:
+        return None, ""
+    try:
+        raw = base64.b64decode(m.group("b64"), validate=True)
+    except Exception:
+        return None, ""
+    if len(raw) > 2 * 1024 * 1024:
+        return None, ""
+    ext = m.group("ext").replace("jpeg", "jpg")
+    digest = hashlib.sha256(raw).hexdigest()
+    return ContentFile(raw, name=f"signature_{public_id}.{ext}"), digest
 
 
 class PublicTravelerRegisterView(APIView):
@@ -218,8 +247,11 @@ class PublicTravelerRegisterView(APIView):
                 other_symptoms=(symptoms.get("other_symptoms") or "").strip(),
             )
 
-            # --- Section 7 : déclaration ---
-            EbolaDeclaration.objects.create(
+            # --- Section 7 : déclaration (avec signature manuscrite scannée) ---
+            sig_file, sig_hash = _decode_signature(
+                declaration.get("signature_data_url", ""), traveler.public_id,
+            )
+            decl_obj = EbolaDeclaration.objects.create(
                 investigation=investigation,
                 declared_at=_parse_datetime(declaration.get("declared_at")) or timezone.now(),
                 declarant_full_name=(declaration.get("declarant_full_name") or traveler.full_name).strip(),
@@ -228,7 +260,13 @@ class PublicTravelerRegisterView(APIView):
                 consent_data_processing=True,
                 consent_health_followup=True,
                 consent_quarantine_if_needed=True,
+                signature_hash=sig_hash,
             )
+            if sig_file is not None:
+                decl_obj.signature.save(sig_file.name, sig_file, save=True)
+                # On répercute aussi côté Traveler pour exports rapides
+                traveler.consent_signature.save(sig_file.name, sig_file, save=False)
+                traveler.save(update_fields=["consent_signature"])
 
             # --- Scoring + workflow ---
             apply_risk_outcome(investigation)
@@ -328,9 +366,14 @@ class PublicPassConsultView(APIView):
                 "current_health_status": traveler.current_health_status,
                 "arrival_date": traveler.arrival_date,
                 "entry_point": traveler.entry_point.name if traveler.entry_point_id else None,
+                "has_passport": bool(traveler.passport_document),
             },
             "investigation": EbolaInvestigationSerializer(last_inv).data if last_inv else None,
             "pass": None,
+            "downloads": {
+                "pass_pdf": f"/api/v1/ebola/public/pass/{public_id}/pdf/",
+                "official_form_pdf": f"/api/v1/ebola/public/pass/{public_id}/official-form.pdf",
+            },
         }
         if hp:
             data["pass"] = {
@@ -346,3 +389,103 @@ class PublicPassConsultView(APIView):
                 "qr_token": _safe_qr_token(hp),
             }
         return Response(data)
+
+
+# ============================================================================
+#                   Téléchargement public — pass + fiche officielle
+# ============================================================================
+from django.http import FileResponse, HttpResponse  # noqa: E402
+
+from apps.health_pass.services import render_official_form_pdf  # noqa: E402
+
+
+class PublicPassPdfView(APIView):
+    """Télécharge le PDF du pass sanitaire (sans auth, lié au public_id)."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, public_id: str):
+        traveler = get_object_or_404(Traveler, public_id=public_id)
+        hp = HealthPass.objects.filter(traveler=traveler).order_by("-created_at").first()
+        if not hp or not hp.pdf_file:
+            return Response({"detail": "Pass PDF indisponible."}, status=404)
+        audit(request, action="export",
+              summary=f"Téléchargement public pass {hp.pass_number}", target=hp)
+        return FileResponse(
+            open(hp.pdf_file.path, "rb"),
+            as_attachment=True,
+            filename=f"PassSanitaire_{traveler.public_id}.pdf",
+            content_type="application/pdf",
+        )
+
+
+class PublicOfficialFormPdfView(APIView):
+    """Génère et télécharge la FICHE OFFICIELLE INHP pré-remplie en PDF."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, public_id: str):
+        traveler = get_object_or_404(Traveler, public_id=public_id)
+        pdf_bytes = render_official_form_pdf(traveler)
+        audit(request, action="export",
+              summary=f"Téléchargement fiche officielle INHP {traveler.public_id}",
+              target=traveler)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'attachment; filename="FicheINHP_{traveler.public_id}.pdf"'
+        )
+        return response
+
+
+# ============================================================================
+#               Upload public du passeport / document de voyage
+# ============================================================================
+class PublicPassportUploadView(APIView):
+    """Permet à un voyageur de joindre/remplacer sa copie de document de voyage.
+
+    POST /api/v1/ebola/public/upload-passport/<public_id>/
+        multipart/form-data : passport_document=<fichier>
+
+    Accepte PDF / JPG / PNG, taille max 8 Mo.
+    """
+
+    permission_classes = [AllowAny]
+    parser_classes = []  # injectés explicitement ci-dessous
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        from rest_framework.parsers import FormParser, MultiPartParser
+        self.parser_classes = [MultiPartParser, FormParser]
+
+    @extend_schema(
+        summary="Joindre une copie du passeport / document de voyage",
+        description="Champ : `passport_document` (PDF/JPG/PNG, 8 Mo max).",
+        responses={200: OpenApiResponse(description="Document enregistré.")},
+    )
+    def post(self, request, public_id: str):
+        traveler = get_object_or_404(Traveler, public_id=public_id)
+        file = request.FILES.get("passport_document")
+        if file is None:
+            return Response({"detail": "Aucun fichier transmis (champ 'passport_document')."}, status=400)
+        # Validation basique
+        max_bytes = 8 * 1024 * 1024
+        if file.size > max_bytes:
+            return Response({"detail": "Fichier trop volumineux (max 8 Mo)."}, status=413)
+        allowed_ct = ("application/pdf", "image/jpeg", "image/png")
+        if file.content_type not in allowed_ct:
+            return Response(
+                {"detail": "Format invalide. Acceptés : PDF, JPG, PNG."},
+                status=415,
+            )
+        traveler.passport_document = file
+        traveler.passport_uploaded_at = timezone.now()
+        traveler.save(update_fields=["passport_document", "passport_uploaded_at"])
+        audit(request, action="update",
+              summary=f"Upload passeport public {traveler.public_id}",
+              target=traveler, payload={"size": file.size, "ct": file.content_type})
+        return Response({
+            "detail": "Document de voyage enregistré.",
+            "public_id": traveler.public_id,
+            "url": traveler.passport_document.url,
+            "uploaded_at": traveler.passport_uploaded_at,
+        })

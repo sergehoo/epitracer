@@ -99,6 +99,14 @@ class Traveler(BaseModel):
     email = models.EmailField(_("Adresse e-mail"), blank=True, db_index=True)
     postal_address = models.CharField(_("Adresse postale"), max_length=300, blank=True)
 
+    # Pièce d'identité / document de voyage scanné
+    passport_document = models.FileField(
+        _("Copie du passeport / document de voyage"),
+        upload_to="passports/%Y/%m/", null=True, blank=True,
+        help_text=_("PDF, JPG ou PNG — 8 Mo maximum."),
+    )
+    passport_uploaded_at = models.DateTimeField(null=True, blank=True)
+
     # Conservé pour compatibilité — alias de phone_mobile
     @property
     def phone(self) -> str:

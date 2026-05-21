@@ -41,21 +41,35 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
-      <aside className="hidden lg:flex flex-col justify-between p-12 bg-gradient-to-br from-emerald-700 via-emerald-600 to-emerald-800 text-white">
-        <Link href="/" className="font-display text-2xl font-bold flex items-center gap-2">
-          <ShieldCheck className="h-6 w-6" /> EpiTravel
+      <aside className="hidden lg:flex flex-col justify-between p-12 bg-gradient-to-br from-emerald-900 via-emerald-700 to-emerald-800 text-white relative overflow-hidden">
+        <div className="absolute -top-32 -left-32 w-96 h-96 bg-ciOrange/30 rounded-full blur-3xl" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-ciGreen/30 rounded-full blur-3xl" />
+
+        <Link href="/" className="flex items-center gap-3 relative">
+          <img src="/logo-min-sante-2.png" alt="MSHPCMU" className="h-12 w-12 bg-white rounded-xl p-1 object-contain" />
+          <img src="/armoirie-ci-2.png" alt="Armoiries CI" className="h-12 w-12 bg-white rounded-xl p-1 object-contain" />
+          <img src="/logo-INHP.png" alt="INHP" className="h-10 w-auto bg-white rounded-xl p-1 object-contain" />
         </Link>
-        <div>
-          <h1 className="font-display text-4xl font-extrabold">Espace professionnel</h1>
+
+        <div className="relative">
+          <div className="text-xs uppercase tracking-widest text-emerald-200 mb-2">
+            République de Côte d'Ivoire — MSHPCMU · INHP
+          </div>
+          <h1 className="font-display text-4xl font-extrabold flex items-center gap-3">
+            <ShieldCheck className="h-8 w-8 text-ciOrange" />
+            Espace professionnel
+          </h1>
           <p className="mt-3 opacity-90 max-w-md">
-            Accès réservé aux agents du Ministère de la Santé, de l'INHP, des districts sanitaires
+            Accès réservé aux agents du MSHPCMU, de l'INHP, des districts sanitaires
             et des points d'entrée frontaliers.
           </p>
           <p className="mt-6 text-sm opacity-80">
             En cas d'incident, contactez le support INHP au 27 21 25 35 10.
           </p>
         </div>
-        <div className="text-xs opacity-70">© République de Côte d'Ivoire · MINSAN · INHP</div>
+        <div className="text-xs opacity-70 relative">
+          © {new Date().getFullYear()} République de Côte d'Ivoire · MSHPCMU · INHP
+        </div>
       </aside>
 
       <main className="flex items-center justify-center p-8">

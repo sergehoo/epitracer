@@ -1,0 +1,56 @@
+{
+  "name": "EpiTrace CI — MSHPCMU · INHP",
+  "short_name": "EpiTrace CI",
+  "description": "Portail national MSHPCMU / INHP d'accompagnement sanitaire des voyageurs entrant en Côte d'Ivoire. Pass sanitaire numérique et suivi 21 jours.",
+  "lang": "fr-FR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#064E3B",
+  "categories": ["health", "government", "travel"],
+  "icons": [
+    {
+      "src": "/logo-min-sante-2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Préparer mon arrivée",
+      "short_name": "Enregistrer",
+      "description": "Remplir la fiche INHP",
+      "url": "/voyageur",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mon pass",
+      "short_name": "Pass",
+      "description": "Consulter mon pass sanitaire",
+      "url": "/pass",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Vérifier un QR",
+      "short_name": "Vérifier",
+      "description": "Scanner un pass",
+      "url": "/verifier",
+      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192" }]
+    }
+  ]
+}

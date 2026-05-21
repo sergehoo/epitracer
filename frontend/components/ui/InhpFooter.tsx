@@ -4,15 +4,47 @@ import { adminUrl } from '@/lib/hosts';
 export function InhpFooter() {
   return (
     <footer className="bg-ciDark text-white">
-      <div className="max-w-7xl mx-auto px-6 py-14 grid md:grid-cols-4 gap-10">
+      {/* Bande institutionnelle haute avec 3 logos */}
+      <div className="border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <img
+              src="/logo-min-sante-2.png"
+              alt="MSHPCMU"
+              className="h-14 w-14 bg-white rounded-xl p-1 object-contain"
+            />
+            <img
+              src="/armoirie-ci-2.png"
+              alt="Armoiries Côte d'Ivoire"
+              className="h-14 w-14 bg-white rounded-xl p-1 object-contain"
+            />
+            <img
+              src="/logo-INHP.png"
+              alt="INHP"
+              className="h-12 w-auto bg-white rounded-xl p-1 object-contain"
+            />
+          </div>
+          <div className="text-right text-xs md:text-sm">
+            <div className="font-bold uppercase tracking-widest text-ciGold">
+              République de Côte d'Ivoire
+            </div>
+            <div className="italic opacity-80">Union · Discipline · Travail</div>
+            <div className="mt-1 font-semibold">
+              MSHPCMU · Institut National d'Hygiène Publique
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-4 gap-10">
         <div>
-          <h4 className="font-display font-black text-xl">EpiTravel CI</h4>
+          <h4 className="font-display font-black text-xl">EpiTrace CI</h4>
           <p className="mt-3 text-sm text-emerald-100/90 leading-6">
             Plateforme nationale d'accompagnement sanitaire des voyageurs entrant
             sur le territoire ivoirien.
           </p>
           <p className="mt-4 text-xs text-emerald-100/60">
-            © {new Date().getFullYear()} République de Côte d'Ivoire — MINSAN · INHP.
+            © {new Date().getFullYear()} République de Côte d'Ivoire — MSHPCMU · INHP.
           </p>
         </div>
 
@@ -29,7 +61,7 @@ export function InhpFooter() {
         <div>
           <h5 className="font-bold mb-3">Institutionnel</h5>
           <ul className="space-y-2 text-sm text-emerald-100/90">
-            <li><a href="https://www.sante.gouv.ci" target="_blank" rel="noreferrer" className="hover:text-ciOrange transition">Ministère de la Santé</a></li>
+            <li><a href="https://www.sante.gouv.ci" target="_blank" rel="noreferrer" className="hover:text-ciOrange transition">MSHPCMU</a></li>
             <li><a href="https://www.inhp.ci" target="_blank" rel="noreferrer" className="hover:text-ciOrange transition">INHP</a></li>
             <li><Link href="/#fonctionnement" className="hover:text-ciOrange transition">Points d'entrée</Link></li>
             <li><a href={adminUrl('/auth/login')} className="hover:text-ciOrange transition">Espace professionnel</a></li>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#064E3B"/>
+      <stop offset="1" stop-color="#009B5A"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="40" fill="url(#g)"/>
+  <!-- Bandeau drapeau CI en haut -->
+  <rect x="0" y="0" width="64" height="14" fill="#F77F00"/>
+  <rect x="64" y="0" width="64" height="14" fill="#FFFFFF"/>
+  <rect x="128" y="0" width="64" height="14" fill="#009B5A"/>
+  <!-- Soleil / emblème stylisé -->
+  <circle cx="96" cy="96" r="46" fill="#F77F00" opacity="0.95"/>
+  <circle cx="96" cy="96" r="28" fill="#064E3B"/>
+  <text x="96" y="106" text-anchor="middle" fill="#FFFFFF" font-family="Helvetica, Arial, sans-serif" font-weight="900" font-size="26">CI</text>
+  <!-- Texte EPI bas -->
+  <text x="96" y="170" text-anchor="middle" fill="#FFFFFF" font-family="Helvetica, Arial, sans-serif" font-weight="800" font-size="20" letter-spacing="2">EPI</text>
+</svg>

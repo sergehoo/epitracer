@@ -71,7 +71,7 @@ export default function AssistancePage() {
                 <li className="flex items-center justify-between rounded-xl bg-emerald-50 dark:bg-emerald-950/30 px-3 py-3">
                   <div>
                     <div className="text-sm font-semibold">Allô Santé</div>
-                    <div className="text-xs text-slate-500">Ministère de la Santé</div>
+                    <div className="text-xs text-slate-500">MSHPCMU (Ministère de la Santé)</div>
                   </div>
                   <a href="tel:143" className="inline-flex items-center gap-2 font-bold text-emerald-700">
                     <PhoneCall className="h-4 w-4" /> 143

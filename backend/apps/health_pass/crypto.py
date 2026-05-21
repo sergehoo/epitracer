@@ -12,7 +12,7 @@ Format du QR (compact, base64url) :
 
 Champs payload signés :
 {
-    "iss": "MINSAN-CI",
+    "iss": "MSHPCMU-CI",
     "kid": "<id clé>",
     "pid": "<pass_number>",
     "tid": "<traveler public id>",

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { Send, ShieldCheck } from 'lucide-react';
+import { FileUp, Send, ShieldCheck, Trash2 } from 'lucide-react';
 import { useRegistrationStore } from '@/lib/store';
 import { declarationSchema } from '@/lib/schema';
 import { FieldGroup, FieldRow } from '@/components/form/Field';
@@ -24,6 +24,7 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
   );
   const [truthful, setTruthful] = useState<boolean>(store.declaration?.truthful_declaration ?? false);
   const [signature, setSignature] = useState<string>(store.declaration?.signature_data_url ?? '');
+  const [passportFile, setPassportFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +33,23 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
       setDeclarantName(`${store.identite.last_name} ${store.identite.first_name}`.trim());
     }
   }, [declarantName, store.identite]);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) {
+      toast.error('Fichier > 8 Mo. Choisissez un fichier plus léger.');
+      e.target.value = '';
+      return;
+    }
+    const ok = ['application/pdf', 'image/jpeg', 'image/png'].includes(f.type);
+    if (!ok) {
+      toast.error('Format invalide. PDF, JPG ou PNG uniquement.');
+      e.target.value = '';
+      return;
+    }
+    setPassportFile(f);
+  };
 
   const submit = async () => {
     setError(null);
@@ -66,9 +84,24 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
           declared_at: new Date(declaredAt).toISOString(),
           declarant_full_name: declarantName,
           truthful_declaration: truthful,
+          signature_data_url: signature,
         },
       };
       const { data } = await api.post<RegistrationResponse>('/ebola/public/register/', payload);
+
+      // Upload passport en best-effort (n'empêche pas la redirection si échoue)
+      if (passportFile) {
+        try {
+          const fd = new FormData();
+          fd.append('passport_document', passportFile);
+          await api.post(`/ebola/public/upload-passport/${data.traveler.public_id}/`, fd, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch {
+          toast.error('Document de voyage non envoyé — vous pourrez le joindre depuis votre pass.');
+        }
+      }
+
       toast.success('Fiche enregistrée. Pass délivré.');
       store.reset();
       router.replace(`/pass/${data.traveler.public_id}?just_issued=1`);
@@ -101,6 +134,42 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
 
       <FieldGroup label="Nom complet du déclarant" required>
         <input className="input" value={declarantName} onChange={(e) => setDeclarantName(e.target.value)} />
+      </FieldGroup>
+
+      {/* ----- Upload du passeport / document de voyage ----- */}
+      <FieldGroup
+        label="Copie du passeport ou document de voyage"
+        help="Format PDF, JPG ou PNG (8 Mo max). Vous pouvez aussi le joindre plus tard depuis votre pass."
+      >
+        {!passportFile ? (
+          <label className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-6 cursor-pointer hover:border-ciOrange transition">
+            <FileUp className="h-7 w-7 text-ciOrange" />
+            <span className="text-sm font-semibold text-ciDark dark:text-emerald-200">
+              Cliquez pour sélectionner votre passeport
+            </span>
+            <span className="text-xs text-slate-500">PDF · JPG · PNG — 8 Mo max</span>
+            <input type="file" accept=".pdf,image/jpeg,image/png" className="hidden" onChange={handleFile} />
+          </label>
+        ) : (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <FileUp className="h-5 w-5 text-emerald-700 shrink-0" />
+              <div className="min-w-0">
+                <div className="font-semibold truncate">{passportFile.name}</div>
+                <div className="text-xs text-slate-500">
+                  {(passportFile.size / 1024).toFixed(0)} Ko · {passportFile.type}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPassportFile(null)}
+              className="btn-ghost text-rose-600 text-xs"
+            >
+              <Trash2 className="h-4 w-4" /> Retirer
+            </button>
+          </div>
+        )}
       </FieldGroup>
 
       <label className="card p-4 flex items-start gap-3 cursor-pointer">

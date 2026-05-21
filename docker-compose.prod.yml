@@ -5,11 +5,11 @@ version: "3.9"
 # Usage : docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Traefik route :
-#   https://api.epitravel.gouv.ci      → service web (Django REST)
-#   https://ws.epitravel.gouv.ci       → service channels (WebSocket)
-#   https://publictraveler.ci          → service frontend (portail PUBLIC)
+#   https://api.epitrace.gouv.ci      → service web (Django REST)
+#   https://ws.epitrace.gouv.ci       → service channels (WebSocket)
+#   https://destinationci.com          → service frontend (portail PUBLIC)
 #   https://inhpadmin.ci               → service frontend (portail ADMIN)
-#   https://grafana.epitravel.gouv.ci  → Grafana
+#   https://grafana.epitrace.gouv.ci  → Grafana
 # ===========================================================================
 
 services:
@@ -24,7 +24,7 @@ services:
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
-      - --certificatesresolvers.le.acme.email=${ACME_EMAIL:-admin@epitravel.gouv.ci}
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL:-admin@epitrace.gouv.ci}
       - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.le.acme.tlschallenge=true
       - --metrics.prometheus=true
@@ -43,16 +43,16 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DJANGO_DEBUG: "0"
-      DJANGO_ALLOWED_HOSTS: ${API_HOST:-api.epitravel.gouv.ci},${PUBLIC_HOST:-publictraveler.ci},${ADMIN_HOST:-inhpadmin.ci},web
-      DJANGO_CSRF_TRUSTED_ORIGINS: https://${API_HOST:-api.epitravel.gouv.ci},https://${PUBLIC_HOST:-publictraveler.ci},https://${ADMIN_HOST:-inhpadmin.ci}
-      DJANGO_CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOST:-publictraveler.ci},https://${ADMIN_HOST:-inhpadmin.ci}
+      DJANGO_ALLOWED_HOSTS: ${API_HOST:-api.epitrace.gouv.ci},${PUBLIC_HOST:-destinationci.com},${ADMIN_HOST:-inhpadmin.ci},web
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://${API_HOST:-api.epitrace.gouv.ci},https://${PUBLIC_HOST:-destinationci.com},https://${ADMIN_HOST:-inhpadmin.ci}
+      DJANGO_CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOST:-destinationci.com},https://${ADMIN_HOST:-inhpadmin.ci}
       SECURE_SSL_REDIRECT: "1"
       SESSION_COOKIE_SECURE: "1"
       CSRF_COOKIE_SECURE: "1"
       SECURE_HSTS_SECONDS: "31536000"
     labels:
       - traefik.enable=true
-      - traefik.http.routers.api.rule=Host(`${API_HOST:-api.epitravel.gouv.ci}`)
+      - traefik.http.routers.api.rule=Host(`${API_HOST:-api.epitrace.gouv.ci}`)
       - traefik.http.routers.api.entrypoints=websecure
       - traefik.http.routers.api.tls.certresolver=le
       - traefik.http.services.api.loadbalancer.server.port=8000
@@ -60,23 +60,23 @@ services:
   channels:
     labels:
       - traefik.enable=true
-      - traefik.http.routers.ws.rule=Host(`${WS_HOST:-ws.epitravel.gouv.ci}`)
+      - traefik.http.routers.ws.rule=Host(`${WS_HOST:-ws.epitrace.gouv.ci}`)
       - traefik.http.routers.ws.entrypoints=websecure
       - traefik.http.routers.ws.tls.certresolver=le
       - traefik.http.services.ws.loadbalancer.server.port=8001
 
   frontend:
     environment:
-      NEXT_PUBLIC_API_URL: https://${API_HOST:-api.epitravel.gouv.ci}
-      NEXT_PUBLIC_WS_URL: wss://${WS_HOST:-ws.epitravel.gouv.ci}
-      NEXT_PUBLIC_PUBLIC_HOST: ${PUBLIC_HOST:-publictraveler.ci}
+      NEXT_PUBLIC_API_URL: https://${API_HOST:-api.epitrace.gouv.ci}
+      NEXT_PUBLIC_WS_URL: wss://${WS_HOST:-ws.epitrace.gouv.ci}
+      NEXT_PUBLIC_PUBLIC_HOST: ${PUBLIC_HOST:-destinationci.com}
       NEXT_PUBLIC_ADMIN_HOST: ${ADMIN_HOST:-inhpadmin.ci}
       NODE_ENV: production
     labels:
       - traefik.enable=true
       # Le SAME conteneur sert les deux domaines — c'est le middleware Next.js
       # qui filtre les routes selon le Host header.
-      - traefik.http.routers.public.rule=Host(`${PUBLIC_HOST:-publictraveler.ci}`) || Host(`www.${PUBLIC_HOST:-publictraveler.ci}`)
+      - traefik.http.routers.public.rule=Host(`${PUBLIC_HOST:-destinationci.com}`) || Host(`www.${PUBLIC_HOST:-destinationci.com}`)
       - traefik.http.routers.public.entrypoints=websecure
       - traefik.http.routers.public.tls.certresolver=le
       - traefik.http.routers.public.service=frontend-svc
@@ -105,7 +105,7 @@ services:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     labels:
       - traefik.enable=true
-      - traefik.http.routers.grafana.rule=Host(`${GRAFANA_HOST:-grafana.epitravel.gouv.ci}`)
+      - traefik.http.routers.grafana.rule=Host(`${GRAFANA_HOST:-grafana.epitrace.gouv.ci}`)
       - traefik.http.routers.grafana.entrypoints=websecure
       - traefik.http.routers.grafana.tls.certresolver=le
       - traefik.http.services.grafana.loadbalancer.server.port=3000
