@@ -22,6 +22,15 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SESSION_COOKIE_SAMESITE = "Strict"
 
+# Routes exemptées du redirect HTTP→HTTPS — appelées en HTTP interne par
+# le healthcheck Docker, par Prometheus (scraping /metrics) et par Traefik
+# (sondes ping). Sans cette exemption elles répondent 301 et tout le
+# monitoring tombe.
+SECURE_REDIRECT_EXEMPT = [
+    r"^healthz/?$",
+    r"^metrics(/.*)?$",
+]
+
 # Sentry
 SENTRY_DSN = env("SENTRY_DSN", default="")
 if SENTRY_DSN:
