@@ -50,7 +50,7 @@ function PublicHeader({
         <Link href="/" className="group flex flex-col leading-none select-none">
           <span
             className="font-script text-ciOrange leading-[0.85] -mb-1
-                       text-[2.6rem] sm:text-[3.4rem]
+                       text-[2.6rem] sm:text-[1.6rem]
                        drop-shadow-[0_2px_0_rgba(247,127,0,0.18)]
                        group-hover:scale-[1.02] origin-left transition-transform"
           >
@@ -58,7 +58,7 @@ function PublicHeader({
           </span>
           <span
             className="font-display font-extrabold uppercase tracking-[0.18em]
-                       text-ciGreen text-base sm:text-xl"
+                       text-ciGreen text-base sm:text-m"
           >
             Côte d'Ivoire
           </span>
@@ -90,12 +90,7 @@ function PublicHeader({
           >
             M'enregistrer
           </Link>
-          <a
-            href={adminUrl('/auth/login')}
-            className="text-xs text-slate-500 hover:text-ciOrange"
-          >
-            Espace agent
-          </a>
+
         </div>
 
         <button

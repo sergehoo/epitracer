@@ -94,9 +94,16 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
         try {
           const fd = new FormData();
           fd.append('passport_document', passportFile);
-          await api.post(`/ebola/public/upload-passport/${data.traveler.public_id}/`, fd, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          // IMPORTANT : on NE FIXE PAS Content-Type manuellement.
+          // Axios + le navigateur le construisent automatiquement avec le
+          // boundary multipart (ex: "multipart/form-data; boundary=----WebKit...").
+          // Forcer "multipart/form-data" sans boundary produit un body
+          // que le parser DRF refuse → Django retourne un 301/redirect
+          // que le navigateur suit en GET, et on tombe sur le 405.
+          await api.post(
+            `/ebola/public/upload-passport/${data.traveler.public_id}/`,
+            fd,
+          );
         } catch {
           toast.error('Document de voyage non envoyé — vous pourrez le joindre depuis votre pass.');
         }

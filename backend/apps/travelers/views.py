@@ -15,7 +15,9 @@ from .serializers import (
 
 class TravelerViewSet(viewsets.ModelViewSet):
     queryset = (
-        Traveler.objects.select_related("nationality", "origin_country", "entry_point")
+        Traveler.objects.select_related(
+            "nationality", "id_document_country", "entry_point",
+        )
         .prefetch_related("travel_history", "companions")
         .all()
     )
@@ -27,9 +29,12 @@ class TravelerViewSet(viewsets.ModelViewSet):
         RoleCode.BORDER_AGENT, RoleCode.FIELD_AGENT, RoleCode.OBSERVER,
     ]
     lookup_field = "public_id"
-    search_fields = ["public_id", "first_name", "last_name", "id_document_number", "phone", "email"]
+    search_fields = [
+        "public_id", "first_name", "last_name", "id_document_number",
+        "phone_mobile", "email",
+    ]
     filterset_fields = [
-        "current_health_status", "entry_point", "origin_country",
+        "current_health_status", "entry_point", "nationality",
         "arrival_date", "gender", "transport_mode",
     ]
 
@@ -41,7 +46,7 @@ class TravelerViewSet(viewsets.ModelViewSet):
             "full_name": t.full_name,
             "arrival_date": t.arrival_date,
             "entry_point": t.entry_point.name if t.entry_point_id else None,
-            "origin": t.origin_country.code if t.origin_country_id else None,
+            "nationality": t.nationality.code if t.nationality_id else None,
             "current_health_status": t.current_health_status,
         })
 
@@ -50,7 +55,7 @@ class TravelHistoryViewSet(viewsets.ModelViewSet):
     queryset = TravelHistoryEntry.objects.select_related("traveler", "country").all()
     serializer_class = TravelHistoryEntrySerializer
     permission_classes = [IsAuthenticatedAndActive]
-    filterset_fields = ["traveler", "country", "is_transit"]
+    filterset_fields = ["traveler", "country", "role"]
 
 
 class CompanionLinkViewSet(viewsets.ModelViewSet):

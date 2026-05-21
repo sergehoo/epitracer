@@ -31,9 +31,9 @@ export function PassportUploader({
     try {
       const fd = new FormData();
       fd.append('passport_document', f);
-      await api.post(`/ebola/public/upload-passport/${publicId}/`, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // Pas de Content-Type manuel : axios/navigateur ajoutent automatiquement
+      // le boundary multipart (sinon le parser DRF refuse le body).
+      await api.post(`/ebola/public/upload-passport/${publicId}/`, fd);
       toast.success('Document de voyage enregistré.');
       onUploaded?.();
     } catch (err) {

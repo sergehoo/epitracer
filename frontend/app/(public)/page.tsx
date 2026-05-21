@@ -45,10 +45,8 @@ function OfficialBanner() {
             alt="MSHPCMU"
             className="h-16 w-16 object-contain"
           />
-          <div className="border-l border-slate-200 pl-5 leading-tight">
-            <div className="text-[10px] uppercase tracking-widest text-ciOrange font-bold">
-              Ministère
-            </div>
+          <div className="border-l border-slate-200 pl-2 leading-tight">
+
             <div className="font-display font-black text-ciDark text-base">
               MSHPCMU
             </div>

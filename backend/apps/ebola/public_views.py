@@ -76,6 +76,17 @@ def _parse_datetime(v):
 _DATA_URL_RE = re.compile(r"^data:image/(?P<ext>png|jpeg|jpg|webp);base64,(?P<b64>.+)$", re.S)
 
 
+def _trim(value, max_len: int) -> str:
+    """Strip + tronque à la longueur max du champ DB.
+
+    Protège l'INSERT contre `StringDataRightTruncation` quand un voyageur
+    tape un texte plus long que la colonne CharField correspondante.
+    """
+    if value is None:
+        return ""
+    return str(value).strip()[:max_len]
+
+
 def _decode_signature(data_url: str, public_id: str) -> tuple[ContentFile | None, str]:
     """Décode une signature data:URL (PNG/JPEG base64) en ContentFile + hash sha256.
 
@@ -152,44 +163,46 @@ class PublicTravelerRegisterView(APIView):
                 except (TypeError, ValueError):
                     location = None
 
+            # Truncation défensive alignée sur les max_length du modèle Traveler,
+            # pour ne plus jamais lever StringDataRightTruncation côté DB.
             traveler = Traveler.objects.create(
                 # Section 1
                 arrival_date=_parse_date(voyage.get("arrival_date")),
                 arrival_time=voyage.get("arrival_time") or None,
-                transport_mode=voyage.get("transport_mode", "") or "",
-                flight_or_voyage_number=voyage.get("flight_or_voyage_number", "") or "",
-                seat_number=voyage.get("seat_number", "") or "",
+                transport_mode=_trim(voyage.get("transport_mode"), 20),
+                flight_or_voyage_number=_trim(voyage.get("flight_or_voyage_number"), 60),
+                seat_number=_trim(voyage.get("seat_number"), 20),
                 entry_point=entry_point,
                 # Section 2
-                last_name=(identite.get("last_name") or "").strip(),
-                first_name=(identite.get("first_name") or "").strip(),
-                middle_name=(identite.get("middle_name") or "").strip(),
+                last_name=_trim(identite.get("last_name"), 120),
+                first_name=_trim(identite.get("first_name"), 120),
+                middle_name=_trim(identite.get("middle_name"), 120),
                 age=identite.get("age") or None,
-                age_unit=identite.get("age_unit") or "years",
+                age_unit=_trim(identite.get("age_unit"), 10) or "years",
                 date_of_birth=_parse_date(identite.get("date_of_birth")),
-                gender=identite.get("gender", "") or "",
-                profession=identite.get("profession", "") or "",
-                id_document_type=identite.get("id_document_type", "passport") or "passport",
-                id_document_number=(identite.get("id_document_number") or "").strip(),
+                gender=_trim(identite.get("gender"), 2),
+                profession=_trim(identite.get("profession"), 160),
+                id_document_type=_trim(identite.get("id_document_type"), 20) or "passport",
+                id_document_number=_trim(identite.get("id_document_number"), 60),
                 id_document_country=id_country,
                 nationality=nationality,
-                phone_mobile=(identite.get("phone_mobile") or "").strip(),
-                email=(identite.get("email") or "").strip(),
-                postal_address=(identite.get("postal_address") or "").strip(),
+                phone_mobile=_trim(identite.get("phone_mobile"), 32),
+                email=_trim(identite.get("email"), 254),
+                postal_address=_trim(identite.get("postal_address"), 300),
                 # Section 4
-                confinement_city=(confinement.get("city") or "").strip(),
-                confinement_commune=(confinement.get("commune") or "").strip(),
-                confinement_neighborhood=(confinement.get("neighborhood") or "").strip(),
-                confinement_street_number=(confinement.get("street_number") or "").strip(),
-                confinement_lot=(confinement.get("lot") or "").strip(),
-                confinement_hotel=(confinement.get("hotel") or "").strip(),
-                confinement_room_number=(confinement.get("room_number") or "").strip(),
-                emergency_phone_ci=(confinement.get("emergency_phone_ci") or "").strip(),
+                confinement_city=_trim(confinement.get("city"), 120),
+                confinement_commune=_trim(confinement.get("commune"), 120),
+                confinement_neighborhood=_trim(confinement.get("neighborhood"), 160),
+                confinement_street_number=_trim(confinement.get("street_number"), 120),
+                confinement_lot=_trim(confinement.get("lot"), 120),
+                confinement_hotel=_trim(confinement.get("hotel"), 200),
+                confinement_room_number=_trim(confinement.get("room_number"), 120),
+                emergency_phone_ci=_trim(confinement.get("emergency_phone_ci"), 32),
                 confinement_location=location,
                 # Déclaration de la section 7
                 consented_data_processing=bool(declaration.get("truthful_declaration")),
                 signed_at=_parse_datetime(declaration.get("declared_at")) or timezone.now(),
-                signed_place=(declaration.get("signed_place") or "").strip(),
+                signed_place=_trim(declaration.get("signed_place"), 120),
             )
 
             # --- Section 3 : historique des déplacements ---
@@ -199,15 +212,15 @@ class PublicTravelerRegisterView(APIView):
                     continue
                 TravelHistoryEntry.objects.create(
                     traveler=traveler,
-                    role=item.get("role", "visited"),
+                    role=_trim(item.get("role"), 10) or "visited",
                     country=country,
-                    city=item.get("city", "") or "",
-                    residence_address=item.get("residence_address", "") or "",
-                    hotel=item.get("hotel", "") or "",
-                    room_number=item.get("room_number", "") or "",
+                    city=_trim(item.get("city"), 120),
+                    residence_address=_trim(item.get("residence_address"), 300),
+                    hotel=_trim(item.get("hotel"), 200),
+                    room_number=_trim(item.get("room_number"), 120),
                     arrival_date=item.get("arrival_date"),
                     departure_date=item.get("departure_date"),
-                    duration_text=item.get("duration_text", "") or "",
+                    duration_text=_trim(item.get("duration_text"), 120),
                 )
 
             # --- Enquête Ebola ---

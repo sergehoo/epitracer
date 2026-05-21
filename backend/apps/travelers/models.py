@@ -118,10 +118,10 @@ class Traveler(BaseModel):
     confinement_city = models.CharField(_("Ville (CI)"), max_length=120, blank=True)
     confinement_commune = models.CharField(_("Commune (CI)"), max_length=120, blank=True)
     confinement_neighborhood = models.CharField(_("Quartier (CI)"), max_length=160, blank=True)
-    confinement_street_number = models.CharField(_("N° de rue"), max_length=40, blank=True)
-    confinement_lot = models.CharField(_("N° de lot"), max_length=40, blank=True)
+    confinement_street_number = models.CharField(_("N° de rue"), max_length=120, blank=True)
+    confinement_lot = models.CharField(_("N° de lot"), max_length=120, blank=True)
     confinement_hotel = models.CharField(_("Hôtel / lieu d'hébergement"), max_length=200, blank=True)
-    confinement_room_number = models.CharField(_("N° de chambre"), max_length=40, blank=True)
+    confinement_room_number = models.CharField(_("N° de chambre"), max_length=120, blank=True)
     emergency_phone_ci = models.CharField(
         _("Téléphone d'urgence obligatoire en CI"), max_length=32, blank=True,
     )
@@ -220,7 +220,7 @@ class TravelHistoryEntry(BaseModel):
     city = models.CharField(max_length=120, blank=True)
     residence_address = models.CharField(max_length=300, blank=True)
     hotel = models.CharField(max_length=200, blank=True)
-    room_number = models.CharField(max_length=40, blank=True)
+    room_number = models.CharField(max_length=120, blank=True)
     arrival_date = models.DateField(null=True, blank=True)
     departure_date = models.DateField(null=True, blank=True)
     duration_days = models.PositiveSmallIntegerField(null=True, blank=True)

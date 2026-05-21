@@ -36,6 +36,18 @@ export function getRefresh() {
 api.interceptors.request.use((cfg) => {
   const token = getAccess();
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
+
+  // Si le body est un FormData, on supprime le Content-Type par défaut
+  // ("application/json") pour laisser le navigateur ajouter automatiquement
+  // "multipart/form-data; boundary=...". Sans cela, le parser DRF ne sait
+  // pas découper le body, Django renvoie une redirection que le navigateur
+  // suit en GET → 405 sur l'endpoint POST-only.
+  if (typeof FormData !== 'undefined' && cfg.data instanceof FormData) {
+    if (cfg.headers && 'Content-Type' in cfg.headers) {
+      delete (cfg.headers as Record<string, unknown>)['Content-Type'];
+    }
+  }
+
   return cfg;
 });
 
