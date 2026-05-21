@@ -69,3 +69,38 @@ body { background-color: rgb(var(--background)); color: rgb(var(--foreground)); 
 
 /* Pour signature canvas */
 .signature-pad-wrapper { @apply rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-1; }
+
+/* =============================================================
+   Landing INHP — utilitaires inspirés du mockup officiel
+   ============================================================= */
+html { scroll-behavior: smooth; }
+
+.glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.dark .glass {
+  background: rgba(11, 24, 19, 0.78);
+}
+
+.pattern-dots {
+  background-image: radial-gradient(circle at 1px 1px, rgba(6, 78, 59, 0.10) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+.dark .pattern-dots {
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.06) 1px, transparent 0);
+}
+
+/* Pills typiques du mockup (rounded-full + font-black) */
+.pill {
+  @apply inline-flex items-center gap-2 rounded-full px-5 py-2 text-xs font-black uppercase tracking-wide;
+}
+.pill-orange { @apply pill bg-orange-50 text-ciOrange ring-1 ring-inset ring-orange-100; }
+.pill-green  { @apply pill bg-emerald-50 text-ciGreen ring-1 ring-inset ring-emerald-100; }
+.pill-dark   { @apply pill bg-white/90 text-ciDark ring-1 ring-inset ring-white shadow-sm; }
+
+/* Boutons style mockup INHP */
+.btn-orange { @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-ciOrange px-8 py-4 text-base font-black text-white shadow-xl shadow-orange-500/25 transition hover:bg-orange-600 hover:-translate-y-0.5; }
+.btn-dark   { @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-ciDark px-8 py-4 text-base font-black text-white shadow-xl transition hover:bg-emerald-950 hover:-translate-y-0.5; }
+.btn-paper  { @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-4 text-base font-black text-ciDark border border-slate-200 shadow transition hover:-translate-y-0.5; }

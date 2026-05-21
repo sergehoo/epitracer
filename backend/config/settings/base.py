@@ -145,7 +145,7 @@ TEMPLATES = [
 DATABASES = {
     "default": env.db_url(
         "DATABASE_URL",
-        default="postgis://epidemi:epidemi@db:5432/epidemitracker",
+        default="postgis://postgres:postgres@db:5433/epidemiebola",
     )
 }
 # Force engine PostGIS

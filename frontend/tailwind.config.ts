@@ -19,14 +19,19 @@ const config: Config = {
         display: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
       },
       colors: {
-        // Palette CI MINSAN
+        // Palette officielle Côte d'Ivoire INHP — alignée sur le mockup landing
+        ciOrange: '#F77F00',     // orange drapeau ivoirien (CTA, accents)
+        ciGreen:  '#009B5A',     // vert drapeau ivoirien (success, badges)
+        ciDark:   '#064E3B',     // vert sombre (titres, footer, sections sombres)
+        ciGold:   '#D4A017',     // gold (highlights)
+        // Alias historiques (compat avec les anciens composants)
         ci: {
-          green: '#009E60',     // vert drapeau ivoirien
-          orange: '#FF7F00',    // orange drapeau ivoirien
-          deep: '#0B3D2E',
-          night: '#0F172A',
+          green:   '#009B5A',
+          orange:  '#F77F00',
+          deep:    '#064E3B',
+          night:   '#0F172A',
           surface: '#F8FAFC',
-          mute: '#64748B',
+          mute:    '#64748B',
         },
         risk: {
           low: '#10B981',
