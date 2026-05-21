@@ -1,27 +1,28 @@
 # ===========================================================================
 # EpiTrace — overlay PRODUCTION (Traefik EXTERNE déjà installé sur l'hôte).
 #
-# Ce fichier suppose qu'un service Traefik tourne déjà sur le serveur,
-# rattaché à un réseau Docker dont le nom est passé via $TRAEFIK_NETWORK
-# (défaut : `traefik` — équivalent du nom courant sur la plupart des stacks).
+# Configuration alignée sur le Traefik existant du serveur :
+#   - Réseau Docker externe : `proxy`
+#   - Cert resolver         : `lets`
 #
-# Usage :
-#   export TRAEFIK_NETWORK=traefik              # nom du réseau Traefik externe
-#   export TRAEFIK_CERT_RESOLVER=le             # nom du resolver dans Traefik
+# Surcharges possibles via env :
+#   export TRAEFIK_NETWORK=proxy
+#   export TRAEFIK_CERT_RESOLVER=lets
 #   export PUBLIC_HOST=destinationci.com
 #   export ADMIN_HOST=inhpadmin.ci
 #   export API_HOST=api.epitrace.gouv.ci
 #   export WS_HOST=ws.epitrace.gouv.ci
 #   export GRAFANA_HOST=grafana.epitrace.gouv.ci
 #
+# Usage :
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# Aucune publication de port 80/443 : c'est Traefik (hôte) qui s'en occupe.
+# Aucune publication de port 80/443 : Traefik (hôte) gère le routage TLS.
 # ===========================================================================
 
 services:
 
-  # --- Backend Django -----------------------------------------------------
+  # --- Backend Django (gunicorn) -----------------------------------------
   web:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
@@ -33,27 +34,38 @@ services:
       SESSION_COOKIE_SECURE: "1"
       CSRF_COOKIE_SECURE: "1"
       SECURE_HSTS_SECONDS: "31536000"
-    ports: []   # on retire la publication directe (Traefik s'en charge)
-    networks: [default, traefik]
+    ports: []
+    networks: [default, proxy]
+    restart: unless-stopped
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
-      - traefik.http.routers.epitrace-api.rule=Host(`${API_HOST:-api.epitrace.gouv.ci}`)
-      - traefik.http.routers.epitrace-api.entrypoints=websecure
-      - traefik.http.routers.epitrace-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-le}
-      - traefik.http.services.epitrace-api.loadbalancer.server.port=8000
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
+      # Router HTTPS API
+      - "traefik.http.routers.epitrace-api.rule=Host(`${API_HOST:-api.epitrace.gouv.ci}`)"
+      - "traefik.http.routers.epitrace-api.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.services.epitrace-api.loadbalancer.server.port=8000"
+      # Middlewares sécurité + compression
+      - "traefik.http.middlewares.epitrace-api-compress.compress=true"
+      - "traefik.http.middlewares.epitrace-api-sec.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.epitrace-api-sec.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.epitrace-api-sec.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.epitrace-api-sec.headers.frameDeny=true"
+      - "traefik.http.middlewares.epitrace-api-sec.headers.contentTypeNosniff=true"
+      - "traefik.http.routers.epitrace-api.middlewares=epitrace-api-compress,epitrace-api-sec"
 
   # --- WebSocket / Channels ----------------------------------------------
   channels:
     ports: []
-    networks: [default, traefik]
+    networks: [default, proxy]
+    restart: unless-stopped
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
-      - traefik.http.routers.epitrace-ws.rule=Host(`${WS_HOST:-ws.epitrace.gouv.ci}`)
-      - traefik.http.routers.epitrace-ws.entrypoints=websecure
-      - traefik.http.routers.epitrace-ws.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-le}
-      - traefik.http.services.epitrace-ws.loadbalancer.server.port=8001
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
+      - "traefik.http.routers.epitrace-ws.rule=Host(`${WS_HOST:-ws.epitrace.gouv.ci}`)"
+      - "traefik.http.routers.epitrace-ws.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-ws.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.services.epitrace-ws.loadbalancer.server.port=8001"
 
   # --- Frontend Next.js (deux hostnames : public + admin) ---------------
   frontend:
@@ -64,23 +76,37 @@ services:
       NEXT_PUBLIC_ADMIN_HOST: ${ADMIN_HOST:-inhpadmin.ci}
       NODE_ENV: production
     ports: []
-    networks: [default, traefik]
+    networks: [default, proxy]
+    restart: unless-stopped
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
-      # Portail PUBLIC voyageurs
-      - traefik.http.routers.epitrace-public.rule=Host(`${PUBLIC_HOST:-destinationci.com}`) || Host(`www.${PUBLIC_HOST:-destinationci.com}`)
-      - traefik.http.routers.epitrace-public.entrypoints=websecure
-      - traefik.http.routers.epitrace-public.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-le}
-      - traefik.http.routers.epitrace-public.service=epitrace-frontend
-      # Portail ADMIN INHP
-      - traefik.http.routers.epitrace-admin.rule=Host(`${ADMIN_HOST:-inhpadmin.ci}`) || Host(`www.${ADMIN_HOST:-inhpadmin.ci}`)
-      - traefik.http.routers.epitrace-admin.entrypoints=websecure
-      - traefik.http.routers.epitrace-admin.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-le}
-      - traefik.http.routers.epitrace-admin.service=epitrace-frontend
-      - traefik.http.services.epitrace-frontend.loadbalancer.server.port=3000
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
 
-  # --- Observabilité interne (non exposée publiquement par défaut) ------
+      # Portail PUBLIC voyageurs
+      - "traefik.http.routers.epitrace-public.rule=Host(`${PUBLIC_HOST:-destinationci.com}`) || Host(`www.${PUBLIC_HOST:-destinationci.com}`)"
+      - "traefik.http.routers.epitrace-public.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-public.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.routers.epitrace-public.service=epitrace-frontend"
+
+      # Portail ADMIN INHP
+      - "traefik.http.routers.epitrace-admin.rule=Host(`${ADMIN_HOST:-inhpadmin.ci}`) || Host(`www.${ADMIN_HOST:-inhpadmin.ci}`)"
+      - "traefik.http.routers.epitrace-admin.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-admin.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.routers.epitrace-admin.service=epitrace-frontend"
+
+      - "traefik.http.services.epitrace-frontend.loadbalancer.server.port=3000"
+
+      # Middlewares sécurité + compression
+      - "traefik.http.middlewares.epitrace-front-compress.compress=true"
+      - "traefik.http.middlewares.epitrace-front-sec.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.epitrace-front-sec.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.epitrace-front-sec.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.epitrace-front-sec.headers.frameDeny=true"
+      - "traefik.http.middlewares.epitrace-front-sec.headers.contentTypeNosniff=true"
+      - "traefik.http.routers.epitrace-public.middlewares=epitrace-front-compress,epitrace-front-sec"
+      - "traefik.http.routers.epitrace-admin.middlewares=epitrace-front-compress,epitrace-front-sec"
+
+  # --- Observabilité interne ---------------------------------------------
   prometheus:
     image: prom/prometheus:v2.55.1
     restart: unless-stopped
@@ -98,14 +124,14 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-    networks: [default, traefik]
+    networks: [default, proxy]
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
-      - traefik.http.routers.epitrace-grafana.rule=Host(`${GRAFANA_HOST:-grafana.epitrace.gouv.ci}`)
-      - traefik.http.routers.epitrace-grafana.entrypoints=websecure
-      - traefik.http.routers.epitrace-grafana.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-le}
-      - traefik.http.services.epitrace-grafana.loadbalancer.server.port=3000
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
+      - "traefik.http.routers.epitrace-grafana.rule=Host(`${GRAFANA_HOST:-grafana.epitrace.gouv.ci}`)"
+      - "traefik.http.routers.epitrace-grafana.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-grafana.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.services.epitrace-grafana.loadbalancer.server.port=3000"
 
   loki:
     image: grafana/loki:3.2.0
@@ -126,9 +152,9 @@ services:
 
 networks:
   # Réseau Traefik EXTERNE (créé par le déploiement Traefik existant)
-  traefik:
+  proxy:
     external: true
-    name: ${TRAEFIK_NETWORK:-traefik}
+    name: ${TRAEFIK_NETWORK:-proxy}
 
 volumes:
   prometheus_data:
