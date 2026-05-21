@@ -7,13 +7,17 @@ export type AgeUnit = 'years' | 'months';
 export type TransportMode = 'plane' | 'boat' | 'car' | 'bus' | 'train' | 'foot' | 'other';
 export type RiskLevel = 'low' | 'moderate' | 'high' | 'critical';
 
-/** Section 1 — Voyage */
+/** Section 1 — Voyage
+ *  Note typage : les champs "non encore sélectionnés" sont rendus optionnels
+ *  (`?: T`) plutôt que `T | ''`, pour rester structurellement compatible
+ *  avec les types Zod inférés et la signature `DefaultValues<>` de RHF.
+ */
 export interface SectionVoyage {
   arrival_date: string;           // YYYY-MM-DD
   arrival_time?: string;          // HH:MM
-  transport_mode: TransportMode | '';
+  transport_mode?: TransportMode;
   flight_or_voyage_number: string;
-  seat_number: string;
+  seat_number?: string;
   entry_point_code: string;       // ex: ABJ-AIRPORT
 }
 
@@ -28,18 +32,18 @@ export interface SectionIdentite {
   last_name: string;
   first_name: string;
   middle_name?: string;
-  age: number | '';
+  age?: number;
   age_unit: AgeUnit;
   date_of_birth?: string;
-  gender: Gender | '';
+  gender?: Gender;
   profession: string;
   id_document_type: 'passport' | 'cni' | 'driver_license' | 'residence' | 'other';
   id_document_number: string;
   id_document_country_code?: string;
   nationality_code?: string;
   phone_mobile: string;
-  email: string;
-  postal_address: string;
+  email?: string;
+  postal_address?: string;
 }
 
 /** Section 3 — Historique des déplacements (3 dernières semaines) */
