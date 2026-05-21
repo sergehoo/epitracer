@@ -30,8 +30,9 @@ services:
       POSTGRES_DB: epidemitracker
       POSTGRES_USER: epidemi
       POSTGRES_PASSWORD: epidemi
-    ports:
-      - "5432:5432"
+    # Pas de publication de port par défaut : `db` est interne au réseau Docker.
+    # Pour accéder depuis l'hôte (ex: pgAdmin), surcoucher avec
+    # docker-compose.dev-ports.yml (voir ce fichier).
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -44,8 +45,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
-    ports:
-      - "6379:6379"
+    # Pas de publication de port par défaut (voir db ci-dessus).
     volumes:
       - redis_data:/data
     healthcheck:
@@ -66,8 +66,8 @@ services:
     depends_on:
       db: {condition: service_healthy}
       redis: {condition: service_healthy}
-    ports:
-      - "8000:8000"
+    # Pas de publication par défaut : Traefik (ou docker-compose.dev-ports.yml)
+    # publie le port quand nécessaire.
     volumes:
       - ./backend:/app
       - keys_data:/app/keys
@@ -85,8 +85,6 @@ services:
     depends_on:
       db: {condition: service_healthy}
       redis: {condition: service_healthy}
-    ports:
-      - "8001:8001"
     volumes:
       - ./backend:/app
       - keys_data:/app/keys
@@ -126,8 +124,6 @@ services:
   mailhog:
     image: mailhog/mailhog:latest
     restart: unless-stopped
-    ports:
-      - "8025:8025"
 
   frontend:
     build:
@@ -140,8 +136,6 @@ services:
       NODE_ENV: production
     depends_on:
       - web
-    ports:
-      - "3000:3000"
 
 volumes:
   db_data:

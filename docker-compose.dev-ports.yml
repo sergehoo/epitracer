@@ -1,0 +1,37 @@
+# ===========================================================================
+# Overlay DEV — publie sur l'hôte tous les ports internes utiles au débug.
+#
+# Utile pour brancher pgAdmin / DBeaver / RedisInsight sur db & redis,
+# et pour accéder directement à Django / Channels / Next.js / Mailhog
+# sans passer par Traefik.
+#
+# Usage :
+#   docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml up -d
+#
+# Ne PAS utiliser en production (risque de conflit + surface d'attaque).
+# ===========================================================================
+
+services:
+  db:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  web:
+    ports:
+      - "8000:8000"
+
+  channels:
+    ports:
+      - "8001:8001"
+
+  frontend:
+    ports:
+      - "3000:3000"
+
+  mailhog:
+    ports:
+      - "8025:8025"

@@ -22,16 +22,10 @@
 
 services:
 
-  # --- Services internes : on retire toute publication de port pour ne
-  #     pas entrer en conflit avec d'autres stacks (parcelaireweb, etc.)
-  #     déjà présentes sur le serveur. Ils restent accessibles aux autres
-  #     containers EpiTrace via le réseau interne `default`.
-  db:
-    ports: []
-  redis:
-    ports: []
-  mailhog:
-    ports: []
+  # Note : aucun port n'est publié sur l'hôte dans le compose de base.
+  # Cet overlay rajoute uniquement les labels Traefik et les variables
+  # de production. Mailhog reste interne en prod (les emails partent par
+  # Anymail / SMTP réel — voir DEFAULT_FROM_EMAIL + ANYMAIL_*).
 
   # --- Backend Django (gunicorn) -----------------------------------------
   web:
