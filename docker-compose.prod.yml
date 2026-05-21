@@ -22,6 +22,17 @@
 
 services:
 
+  # --- Services internes : on retire toute publication de port pour ne
+  #     pas entrer en conflit avec d'autres stacks (parcelaireweb, etc.)
+  #     déjà présentes sur le serveur. Ils restent accessibles aux autres
+  #     containers EpiTrace via le réseau interne `default`.
+  db:
+    ports: []
+  redis:
+    ports: []
+  mailhog:
+    ports: []
+
   # --- Backend Django (gunicorn) -----------------------------------------
   web:
     environment:
