@@ -5,7 +5,13 @@
  * pour la consultation publique du pass (permet de consulter son pass
  * sans connexion une fois affiché au moins une fois).
  */
-const CACHE = 'epitrace-v1';
+// Bump cette version à chaque redéploiement modifiant des chunks JS ou des
+// variables NEXT_PUBLIC_*. L'event "activate" supprime les anciens caches,
+// ce qui force tous les navigateurs (déjà installés) à refetch le nouveau
+// bundle au prochain chargement. Sans ce bump, les clients avec le SW
+// installé continueraient à servir les anciens chunks (et donc les anciennes
+// URLs comme http://localhost:8000) depuis le cache "cache first".
+const CACHE = 'epitrace-v2-api-veillesanitaire';
 
 const STATIC_ASSETS = [
   '/',
