@@ -3,14 +3,15 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
   ConfinementInput, DeclarationInput, ExposureInput,
-  HistoryItemInput, IdentiteInput, SymptomsInput, VoyageInput,
+  IdentiteInput, SymptomsInput, VoyageInput,
 } from './schema';
+import type { HistoryItem } from '@/types/ebola';
 
 interface RegistrationDraft {
   step: number;
   voyage?: VoyageInput;
   identite?: IdentiteInput;
-  historique?: HistoryItemInput[];
+  historique?: HistoryItem[];
   confinement?: ConfinementInput;
   exposure?: ExposureInput;
   symptoms?: SymptomsInput;

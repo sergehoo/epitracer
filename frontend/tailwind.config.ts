@@ -17,6 +17,7 @@ const config: Config = {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+        script: ['"Sacramento"', '"Dancing Script"', 'cursive'],
       },
       colors: {
         // Palette officielle Côte d'Ivoire INHP — alignée sur le mockup landing

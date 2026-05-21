@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Menu, Palmtree, Sun, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { adminUrl, publicUrl } from '@/lib/hosts';
 
@@ -46,21 +46,25 @@ function PublicHeader({
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
-        {/* Logo touristique stylisé — pas de logos institutionnels ici */}
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="relative h-12 w-12 grid place-items-center rounded-2xl bg-gradient-to-br from-ciOrange via-ciGold to-ciGreen shadow-lg shadow-ciOrange/30 group-hover:scale-105 transition-transform">
-            <Sun className="absolute -top-1.5 -right-1.5 h-5 w-5 text-ciGold drop-shadow-lg fill-ciGold" />
-            <Palmtree className="h-6 w-6 text-white drop-shadow" />
-          </div>
-          <div className="leading-tight">
-            <div className="font-display text-lg sm:text-2xl font-black tracking-tight bg-gradient-to-r from-ciOrange via-ciDark to-ciGreen bg-clip-text text-transparent">
-              Destination
-              Côte d'Ivoire
-            </div>
-            <div className="text-[10px] sm:text-xs italic text-slate-500 dark:text-slate-400">
-              Akwaba · Bienvenue · Welcome
-            </div>
-          </div>
+        {/* Marque typographique — lettrage script orange + caractères droits verts */}
+        <Link href="/" className="group flex flex-col leading-none select-none">
+          <span
+            className="font-script text-ciOrange leading-[0.85] -mb-1
+                       text-[2.6rem] sm:text-[3.4rem]
+                       drop-shadow-[0_2px_0_rgba(247,127,0,0.18)]
+                       group-hover:scale-[1.02] origin-left transition-transform"
+          >
+            Destination
+          </span>
+          <span
+            className="font-display font-extrabold uppercase tracking-[0.18em]
+                       text-ciGreen text-base sm:text-xl"
+          >
+            Côte d'Ivoire
+          </span>
+          <span className="mt-1 text-[10px] sm:text-xs italic text-slate-500 dark:text-slate-400">
+            Akwaba · Bienvenue · Welcome
+          </span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-700 dark:text-slate-200">

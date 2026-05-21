@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ===========================================================================
 # EpidemiTracker - stack de développement complète.
 # Pour la production, surcoucher avec docker-compose.prod.yml
@@ -76,6 +74,10 @@ services:
       - media_data:/app/media
 
   channels:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "1"
     image: epidemitracker/backend:dev
     restart: unless-stopped
     environment: *django-env
@@ -90,6 +92,10 @@ services:
       - keys_data:/app/keys
 
   worker:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "1"
     image: epidemitracker/backend:dev
     restart: unless-stopped
     environment: *django-env
@@ -103,6 +109,10 @@ services:
       - media_data:/app/media
 
   beat:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "1"
     image: epidemitracker/backend:dev
     restart: unless-stopped
     environment: *django-env
