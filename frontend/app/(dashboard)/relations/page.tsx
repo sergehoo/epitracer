@@ -1,46 +1,14 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ChevronDown, ChevronRight, Filter, Home, Hospital, MapPin, Phone, Plane,
-  RefreshCcw, Search, Users, X,
+  Filter, Home, MapPin, Pause, Phone, Plane, Play, RefreshCcw, Search, Users, X,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
-import { RiskBadge } from '@/components/ui/RiskBadge';
-import { STATUS_LABELS } from '@/lib/utils';
-import type { RiskLevel } from '@/types/ebola';
-
-/* ============================================================
-   Types
-   ============================================================ */
-type ClusterType = 'flight' | 'phone' | 'origin' | 'companion' | 'residence';
-
-interface Member {
-  public_id: string;
-  full_name: string;
-  status: string;
-  risk_level: RiskLevel | null;
-  risk_score: number | null;
-  phone: string | null;
-  flight: string | null;
-  arrival_date: string | null;
-  entry_point: string | null;
-  nationality: string | null;
-  hotel: string | null;
-  commune: string | null;
-}
-
-interface Cluster {
-  type: ClusterType;
-  key: string;
-  label: string;
-  size: number;
-  members: Member[];
-}
+import { ForceGraph, type ClusterShape, type ClusterType } from '@/components/dashboard/ForceGraph';
 
 interface RelationsResp {
-  clusters: Cluster[];
+  clusters: ClusterShape[];
   stats: {
     total_travelers: number;
     total_clusters: number;
@@ -49,25 +17,23 @@ interface RelationsResp {
 }
 
 /* ============================================================
-   Config visuelle par type de relation
+   Config visuelle
    ============================================================ */
-const TYPE_META: Record<ClusterType, { label: string; icon: React.ComponentType<any>; color: string; ring: string }> = {
-  flight:    { label: 'Vol',              icon: Plane,    color: '#F77F00', ring: 'ring-orange-200/60'  },
-  phone:     { label: 'Téléphone',        icon: Phone,    color: '#0EA5E9', ring: 'ring-sky-200/60'     },
-  origin:    { label: 'Provenance',       icon: MapPin,   color: '#D4A017', ring: 'ring-amber-200/60'   },
-  companion: { label: 'Cas-contact',      icon: Users,    color: '#EF4444', ring: 'ring-rose-200/60'    },
-  residence: { label: 'Résidence Abidjan', icon: Home,    color: '#009B5A', ring: 'ring-emerald-200/60' },
+const TYPE_META: Record<ClusterType, { label: string; icon: React.ComponentType<any>; color: string }> = {
+  flight:    { label: 'Vol',               icon: Plane,  color: '#F77F00' },
+  phone:     { label: 'Téléphone',         icon: Phone,  color: '#0EA5E9' },
+  origin:    { label: 'Provenance',        icon: MapPin, color: '#D4A017' },
+  companion: { label: 'Cas-contact',       icon: Users,  color: '#EF4444' },
+  residence: { label: 'Résidence Abidjan', icon: Home,   color: '#009B5A' },
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  cleared:    '#10B981',
-  monitoring: '#0EA5E9',
-  quarantine: '#F59E0B',
-  suspect:    '#EF4444',
-  confirmed:  '#7F1D1D',
-  recovered:  '#6366F1',
-  deceased:   '#111827',
-};
+const STATUS_LEGEND: { value: string; label: string; color: string }[] = [
+  { value: 'cleared',    label: 'Autorisé',     color: '#10B981' },
+  { value: 'monitoring', label: 'Surveillance', color: '#0EA5E9' },
+  { value: 'quarantine', label: 'Quarantaine',  color: '#F59E0B' },
+  { value: 'suspect',    label: 'Cas suspect',  color: '#EF4444' },
+  { value: 'confirmed',  label: 'Cas confirmé', color: '#7F1D1D' },
+];
 
 /* ============================================================
    PAGE
@@ -77,19 +43,21 @@ export default function RelationsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // Filtres
-  const [type, setType] = useState<'' | ClusterType>('');
+  // Filtres serveur
   const [search, setSearch] = useState('');
   const [minSize, setMinSize] = useState(2);
   const [days, setDays] = useState<string>('');
 
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Filtres client
+  const [typeFilter, setTypeFilter] = useState<Set<ClusterType>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [topN, setTopN] = useState<number>(0);
+  const [frozen, setFrozen] = useState(false);
 
   const load = () => {
     setLoading(true);
     setErr(null);
     const params = new URLSearchParams();
-    if (type) params.set('type', type);
     if (search.trim()) params.set('search', search.trim());
     if (minSize !== 2) params.set('min_size', String(minSize));
     if (days) params.set('days', days);
@@ -99,30 +67,72 @@ export default function RelationsPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [type, minSize, days]);
-  // Debounce search
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [minSize, days]);
   useEffect(() => {
     const id = setTimeout(load, 350);
     return () => clearTimeout(id);
     // eslint-disable-next-line
   }, [search]);
 
-  // Groupe les clusters par type pour l'arbre
-  const grouped = useMemo(() => {
-    const g: Record<ClusterType, Cluster[]> = {
-      flight: [], phone: [], origin: [], companion: [], residence: [],
-    };
-    (data?.clusters || []).forEach((c) => g[c.type].push(c));
-    return g;
-  }, [data]);
+  // -----------------------------------------------------------
+  // Filtrage CLIENT — supprime réellement clusters/voyageurs
+  // -----------------------------------------------------------
+  const visibleClusters: ClusterShape[] = useMemo(() => {
+    if (!data) return [];
+    let list = data.clusters;
 
-  const toggle = (key: string) => setExpanded((e) => ({ ...e, [key]: !e[key] }));
+    // (1) Filtre type (hubs) — supprime les clusters non sélectionnés
+    if (typeFilter.size > 0) {
+      list = list.filter((c) => typeFilter.has(c.type));
+    }
 
-  const hasFilters = !!(type || search || minSize !== 2 || days);
+    // (2) Filtre statut — supprime les voyageurs non sélectionnés
+    if (statusFilter.size > 0) {
+      list = list
+        .map((c) => {
+          const filteredMembers = c.members.filter((m) => statusFilter.has(m.status));
+          const ids = new Set(filteredMembers.map((m) => m.public_id));
+          const filteredPairs = c.pairs?.filter((p) => ids.has(p.a) && ids.has(p.b));
+          return {
+            ...c,
+            members: filteredMembers,
+            size: filteredMembers.length,
+            pairs: filteredPairs,
+          };
+        })
+        // On retire les clusters devenus vides ou sous le seuil
+        .filter((c) => c.members.length >= Math.min(2, minSize));
+    }
+
+    // (3) Top N (plus gros clusters)
+    if (topN > 0) {
+      list = [...list].sort((a, b) => b.size - a.size).slice(0, topN);
+    }
+    return list;
+  }, [data, typeFilter, statusFilter, topN, minSize]);
+
+  const toggleType = (t: ClusterType) => {
+    setTypeFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
+  };
+  const toggleStatus = (s: string) => {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  };
+
+  const hasFilters = !!(typeFilter.size || statusFilter.size || search || minSize !== 2 || days || topN);
 
   return (
-    <div className="space-y-6 animate-fade-up">
-      {/* Header */}
+    <div className="space-y-5 animate-fade-up">
+      {/* ============ Header ============ */}
       <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <div className="text-[11px] uppercase tracking-widest text-ciOrange font-bold">
@@ -134,18 +144,34 @@ export default function RelationsPage() {
             lieu de résidence à Abidjan.
           </p>
         </div>
-        <button onClick={load} className="btn-outline text-sm">
-          <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Actualiser
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFrozen((f) => !f)}
+            className="btn-outline text-sm"
+            title={frozen ? "Reprendre l'animation" : 'Figer le graphe (drag instantané)'}
+          >
+            {frozen ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+            {frozen ? 'Animer' : 'Geler'}
+          </button>
+          <button onClick={load} className="btn-outline text-sm">
+            <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Actualiser
+          </button>
+        </div>
       </header>
 
-      {/* Stats */}
+      {/* ============ Stats (cliquables → filtre type) ============ */}
       {data && (
         <section className="grid grid-cols-2 md:grid-cols-6 gap-3">
-          <StatBox label="Voyageurs analysés" value={data.stats.total_travelers} tone="dark" icon={<Users className="h-4 w-4" />} />
+          <StatBox
+            label="Voyageurs analysés"
+            value={data.stats.total_travelers}
+            tone="dark"
+            icon={<Users className="h-4 w-4" />}
+          />
           {(Object.keys(TYPE_META) as ClusterType[]).map((t) => {
             const Meta = TYPE_META[t];
             const s = data.stats.by_type?.[t];
+            const active = typeFilter.has(t);
             return (
               <StatBox
                 key={t}
@@ -155,14 +181,16 @@ export default function RelationsPage() {
                 tone="custom"
                 customColor={Meta.color}
                 icon={<Meta.icon className="h-4 w-4" />}
+                active={active}
+                onClick={() => toggleType(t)}
               />
             );
           })}
         </section>
       )}
 
-      {/* Filtres */}
-      <section className="card p-4">
+      {/* ============ Barre de filtres complète ============ */}
+      <section className="card p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[260px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -172,18 +200,6 @@ export default function RelationsPage() {
               placeholder="Rechercher nom, public_id, vol, hôtel…"
               className="input pl-9"
             />
-          </div>
-
-          <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-700 p-1">
-            <PillType active={type === ''} onClick={() => setType('')}>Tous</PillType>
-            {(Object.keys(TYPE_META) as ClusterType[]).map((t) => {
-              const M = TYPE_META[t];
-              return (
-                <PillType key={t} active={type === t} onClick={() => setType(type === t ? '' : t)}>
-                  <M.icon className="h-3.5 w-3.5" /> {M.label}
-                </PillType>
-              );
-            })}
           </div>
 
           <select className="select max-w-[120px]" value={minSize} onChange={(e) => setMinSize(Number(e.target.value))}>
@@ -201,80 +217,102 @@ export default function RelationsPage() {
             <option value="90">90 derniers j.</option>
           </select>
 
+          <select
+            className="select max-w-[160px]"
+            value={topN}
+            onChange={(e) => setTopN(Number(e.target.value))}
+            title="Affiche uniquement les N plus gros clusters pour soulager le rendu"
+          >
+            <option value={0}>Tous les clusters</option>
+            <option value={20}>Top 20 clusters</option>
+            <option value={50}>Top 50 clusters</option>
+            <option value={100}>Top 100 clusters</option>
+          </select>
+
           {hasFilters && (
             <button
-              onClick={() => { setType(''); setSearch(''); setMinSize(2); setDays(''); }}
+              onClick={() => {
+                setSearch(''); setMinSize(2); setDays('');
+                setTypeFilter(new Set()); setStatusFilter(new Set());
+                setTopN(0);
+              }}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               <X className="h-3 w-3" /> Réinitialiser
             </button>
           )}
         </div>
-      </section>
 
-      {err && <div className="card p-6 text-rose-600">{err}</div>}
-      {loading && !data && <div className="card p-10 animate-pulse h-40" />}
-
-      {/* Arbre */}
-      {data && (
-        <section className="space-y-3">
+        {/* Pills par type de hub */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mr-1">
+            Hubs :
+          </span>
           {(Object.keys(TYPE_META) as ClusterType[]).map((t) => {
-            const list = grouped[t];
-            if (list.length === 0) return null;
-            const Meta = TYPE_META[t];
-            const sectionKey = `__sec__${t}`;
-            const open = expanded[sectionKey] !== false; // par défaut ouvert
-            const total = list.reduce((a, c) => a + c.size, 0);
+            const M = TYPE_META[t];
+            const active = typeFilter.has(t);
             return (
-              <article key={t} className="card overflow-hidden">
-                <button
-                  onClick={() => toggle(sectionKey)}
-                  className="w-full px-5 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/60 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="h-9 w-9 rounded-xl grid place-items-center text-white shadow-sm"
-                      style={{ background: Meta.color }}
-                    >
-                      <Meta.icon className="h-4 w-4" />
-                    </span>
-                    <div className="text-left">
-                      <div className="font-display text-base font-black">
-                        Par {Meta.label.toLowerCase()}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {list.length} cluster(s) · {total} voyageur(s)
-                      </div>
-                    </div>
-                  </div>
-                  {open ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
-                </button>
-
-                {open && (
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {list.map((c) => (
-                      <ClusterRow
-                        key={c.key}
-                        cluster={c}
-                        meta={Meta}
-                        expanded={!!expanded[c.key]}
-                        onToggle={() => toggle(c.key)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </article>
+              <button
+                key={t}
+                onClick={() => toggleType(t)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full font-bold transition border ${
+                  active ? 'text-white border-transparent shadow-sm' : 'text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                }`}
+                style={active ? { background: M.color } : undefined}
+                title={active ? `Cliquer pour retirer ${M.label}` : `Filtrer sur ${M.label}`}
+              >
+                <M.icon className="h-3.5 w-3.5" />
+                {M.label}
+              </button>
             );
           })}
 
-          {data.clusters.length === 0 && (
-            <div className="card p-10 text-center text-slate-500">
-              <Filter className="h-6 w-6 text-slate-300 mx-auto mb-2" />
-              Aucun cluster ne correspond aux filtres actuels.
-            </div>
-          )}
+          <span className="mx-2 h-3 w-px bg-slate-300" />
+
+          <span className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mr-1">
+            Statuts :
+          </span>
+          {STATUS_LEGEND.map((s) => {
+            const active = statusFilter.has(s.value);
+            return (
+              <button
+                key={s.value}
+                onClick={() => toggleStatus(s.value)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full font-bold transition border ${
+                  active ? 'text-white border-transparent shadow-sm' : 'text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                }`}
+                style={active ? { background: s.color } : undefined}
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full ring-2 ring-white"
+                  style={{ background: active ? '#ffffff' : s.color }}
+                />
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {err && <div className="card p-6 text-rose-600">{err}</div>}
+
+      {/* ============ Graphe full-width ============ */}
+      {loading && !data ? (
+        <div className="card p-10 animate-pulse h-[60vh]" />
+      ) : data ? (
+        <section className="space-y-2">
+          <ForceGraph clusters={visibleClusters} height={760} frozen={frozen} />
+
+          <div className="text-[11px] text-slate-500 px-1 flex flex-wrap gap-x-4 gap-y-1">
+            <span>
+              <Filter className="inline h-3 w-3 mr-1 -mt-0.5" />
+              Molette pour zoomer · glisser pour déplacer · clic voyageur → fiche détaillée
+            </span>
+            <span>· {visibleClusters.length} cluster(s) affiché(s) sur {data.clusters.length}</span>
+            {frozen && <span className="font-bold text-ciOrange">· Graphe figé</span>}
+          </div>
         </section>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -282,25 +320,8 @@ export default function RelationsPage() {
 /* ============================================================
    Sub-components
    ============================================================ */
-function PillType({
-  active, onClick, children,
-}: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-bold transition ${
-        active
-          ? 'bg-ciDark text-white'
-          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 function StatBox({
-  label, value, sub, icon, tone, customColor,
+  label, value, sub, icon, tone, customColor, active, onClick,
 }: {
   label: string;
   value: number;
@@ -308,10 +329,19 @@ function StatBox({
   icon: React.ReactNode;
   tone: 'dark' | 'custom';
   customColor?: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
   const color = tone === 'dark' ? '#064E3B' : (customColor || '#0F172A');
+  const Tag: any = onClick ? 'button' : 'div';
   return (
-    <div className="relative card p-3.5 overflow-hidden">
+    <Tag
+      onClick={onClick}
+      className={`relative card p-3.5 overflow-hidden text-left w-full transition ${
+        onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md' : ''
+      } ${active ? 'ring-2 ring-offset-1' : ''}`}
+      style={active ? { boxShadow: `0 0 0 2px ${color}88` } : undefined}
+    >
       <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: color }} />
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
@@ -328,155 +358,6 @@ function StatBox({
           {icon}
         </div>
       </div>
-    </div>
-  );
-}
-
-function ClusterRow({
-  cluster, meta, expanded, onToggle,
-}: {
-  cluster: Cluster;
-  meta: typeof TYPE_META[ClusterType];
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const Icon = meta.icon;
-  return (
-    <div>
-      <button
-        onClick={onToggle}
-        className="w-full px-5 py-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/60 transition text-left"
-      >
-        {expanded ? <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />}
-        <span
-          className={`h-7 w-7 rounded-lg grid place-items-center text-white shrink-0 ring-2 ${meta.ring}`}
-          style={{ background: meta.color }}
-        >
-          <Icon className="h-3.5 w-3.5" />
-        </span>
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold truncate">{cluster.label}</div>
-          <div className="text-xs text-slate-500">{cluster.size} voyageur(s) regroupé(s)</div>
-        </div>
-        <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-black text-slate-700 dark:text-slate-300">
-          {cluster.size}
-        </span>
-      </button>
-
-      {expanded && (
-        <div className="px-5 pb-5 grid lg:grid-cols-[300px,1fr] gap-5 items-start">
-          {/* Mini-graphe radial */}
-          <RadialGraph cluster={cluster} color={meta.color} />
-
-          {/* Liste des membres */}
-          <ul className="space-y-1.5">
-            {cluster.members.map((m) => (
-              <li key={m.public_id}>
-                <Link
-                  href={`/surveillance/${m.public_id}`}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-800 px-3 py-2 hover:border-ciOrange/60 hover:bg-orange-50/30 dark:hover:bg-orange-950/20 transition group"
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-white dark:ring-slate-900"
-                    style={{ background: STATUS_COLOR[m.status] || '#94A3B8' }}
-                    title={STATUS_LABELS[m.status] || m.status}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-sm truncate group-hover:text-ciOrange transition">{m.full_name}</div>
-                    <div className="text-[11px] text-slate-500 font-mono truncate">
-                      {m.public_id}
-                      {m.entry_point ? ` · ${m.entry_point}` : ''}
-                      {m.arrival_date ? ` · ${new Date(m.arrival_date).toLocaleDateString('fr-FR')}` : ''}
-                    </div>
-                  </div>
-                  {m.risk_level && (
-                    <RiskBadge level={m.risk_level} score={m.risk_score ?? undefined} />
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ============================================================
-   Mini-graphe radial : hub central + voyageurs autour
-   ============================================================ */
-function RadialGraph({ cluster, color }: { cluster: Cluster; color: string }) {
-  const size = 280;
-  const cx = size / 2;
-  const cy = size / 2;
-  const hubR = 28;
-  const ringR = 100;
-  const dotR = 11;
-
-  const visible = cluster.members.slice(0, 14);
-  const more = Math.max(0, cluster.members.length - visible.length);
-
-  return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-950 p-3">
-      <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Vue tree</div>
-      <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-auto">
-        {/* Cercle de fond très léger */}
-        <circle cx={cx} cy={cy} r={ringR + 22} fill="none" stroke={color} strokeOpacity={0.08} strokeDasharray="3 5" />
-
-        {/* Lignes hub → membres */}
-        {visible.map((m, i) => {
-          const angle = (i / visible.length) * Math.PI * 2 - Math.PI / 2;
-          const x = cx + Math.cos(angle) * ringR;
-          const y = cy + Math.sin(angle) * ringR;
-          return (
-            <line
-              key={`l-${m.public_id}`}
-              x1={cx}
-              y1={cy}
-              x2={x}
-              y2={y}
-              stroke={color}
-              strokeOpacity={0.35}
-              strokeWidth={1.5}
-            />
-          );
-        })}
-
-        {/* Hub central */}
-        <circle cx={cx} cy={cy} r={hubR} fill={color} />
-        <circle cx={cx} cy={cy} r={hubR} fill="none" stroke="#ffffff" strokeWidth={3} />
-        <text
-          x={cx} y={cy + 4} textAnchor="middle"
-          fontSize="12" fontWeight="900" fill="#ffffff"
-        >
-          {cluster.size}
-        </text>
-
-        {/* Membres */}
-        {visible.map((m, i) => {
-          const angle = (i / visible.length) * Math.PI * 2 - Math.PI / 2;
-          const x = cx + Math.cos(angle) * ringR;
-          const y = cy + Math.sin(angle) * ringR;
-          const c = STATUS_COLOR[m.status] || '#94A3B8';
-          return (
-            <g key={`m-${m.public_id}`}>
-              <title>{m.full_name} · {STATUS_LABELS[m.status] || m.status}</title>
-              <circle cx={x} cy={y} r={dotR + 2} fill="#ffffff" />
-              <circle cx={x} cy={y} r={dotR} fill={c} />
-            </g>
-          );
-        })}
-
-        {/* Badge +N */}
-        {more > 0 && (
-          <g transform={`translate(${cx + ringR + 10}, ${cy + ringR - 6})`}>
-            <rect x={-18} y={-10} width={36} height={20} rx={10} fill={color} />
-            <text x={0} y={4} textAnchor="middle" fontSize="10" fontWeight="900" fill="#ffffff">
-              +{more}
-            </text>
-          </g>
-        )}
-      </svg>
-    </div>
+    </Tag>
   );
 }

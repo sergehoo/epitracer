@@ -102,8 +102,12 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # Middleware
 # ---------------------------------------------------------------------------
 MIDDLEWARE = [
-    "django_prometheus.middleware.PrometheusBeforeMiddleware",
+    # CORS DOIT être tout en haut, AVANT les autres middlewares qui
+    # peuvent produire une réponse (Prometheus, Security, etc.). Sinon
+    # la preflight OPTIONS peut être interceptée et renvoyée sans les
+    # headers Access-Control-* attendus par le navigateur.
     "corsheaders.middleware.CorsMiddleware",
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -278,7 +282,33 @@ SPECTACULAR_SETTINGS = {
 # ---------------------------------------------------------------------------
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env.list("DJANGO_CORS_ALLOWED_ORIGINS", default=[])
-CORS_ALLOWED_ORIGIN_REGEXES = env.list("DJANGO_CORS_ALLOWED_ORIGIN_REGEXES", default=[])
+# Par défaut on autorise les domaines de l'environnement de test :
+#   destinationci.com (portail public)
+#   inhpadmin.ci      (portail admin)
+#   *.lvh.me          (tests locaux avec sous-domaines)
+#   localhost / 127.0.0.1 (tous ports)
+CORS_ALLOWED_ORIGIN_REGEXES = env.list(
+    "DJANGO_CORS_ALLOWED_ORIGIN_REGEXES",
+    default=[
+        r"^https?://(.*\.)?destinationci\.com(:\d+)?$",
+        r"^https?://(.*\.)?inhpadmin\.ci(:\d+)?$",
+        r"^https?://(.*\.)?lvh\.me(:\d+)?$",
+        r"^http://localhost(:\d+)?$",
+        r"^http://127\.0\.0\.1(:\d+)?$",
+    ],
+)
+# Headers explicitement autorisés sur la preflight (utile car notre client
+# envoie Authorization, Content-Type, X-Requested-With, etc.)
+CORS_ALLOW_HEADERS = list(
+    env.list(
+        "DJANGO_CORS_ALLOW_HEADERS",
+        default=[
+            "accept", "accept-encoding", "authorization", "content-type",
+            "dnt", "origin", "user-agent", "x-csrftoken", "x-requested-with",
+        ],
+    )
+)
+CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
 
 # ---------------------------------------------------------------------------
 # Cache (Redis)

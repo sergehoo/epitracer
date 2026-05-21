@@ -79,13 +79,16 @@ def _traveler_payload(t: Traveler, risk_index: dict[int, dict]) -> dict:
         "status": t.current_health_status,
         "risk_level": risk.get("risk_level"),
         "risk_score": risk.get("risk_score"),
-        "phone": t.phone_mobile or t.emergency_phone_ci,
+        "phone": t.phone_mobile,
+        "emergency_phone": t.emergency_phone_ci,
         "flight": t.flight_or_voyage_number,
+        "seat_number": t.seat_number,
         "arrival_date": t.arrival_date.isoformat() if t.arrival_date else None,
         "entry_point": t.entry_point.name if t.entry_point_id else None,
         "nationality": t.nationality.code if t.nationality_id else None,
         "hotel": t.confinement_hotel,
         "commune": t.confinement_commune,
+        "room_number": t.confinement_room_number,
     }
 
 
@@ -184,10 +187,20 @@ class TravelerRelationsView(APIView):
             origin_groups[code]["members"].append(h.traveler_id)
 
         # ------ 4) Companion clusters ------
-        companion_pairs: list[tuple[int, int]] = list(
+        companion_links = list(
             CompanionLink.objects.filter(traveler_id__in=ids)
-            .values_list("traveler_id", "companion_id")
+            .values("traveler_id", "companion_id", "relationship")
         )
+        companion_pairs: list[tuple[int, int]] = [
+            (c["traveler_id"], c["companion_id"]) for c in companion_links
+        ]
+        # Index (a,b) → relationship, indépendant de l'ordre
+        pair_relationship: dict[tuple[int, int], str] = {}
+        for c in companion_links:
+            a, b = c["traveler_id"], c["companion_id"]
+            key = tuple(sorted((a, b)))
+            pair_relationship.setdefault(key, c.get("relationship") or "")
+
         # Construit des composantes connexes (union-find léger)
         parent: dict[int, int] = {}
 
@@ -224,7 +237,7 @@ class TravelerRelationsView(APIView):
         id_to_traveler: dict[int, Traveler] = {t.id: t for t in travelers}
         clusters: list[dict] = []
 
-        def make_cluster(cluster_type: str, key: str, label: str, members: list[Traveler]):
+        def make_cluster(cluster_type: str, key: str, label: str, members: list[Traveler], extra: dict | None = None):
             seen = set()
             uniq = []
             for m in members:
@@ -240,13 +253,16 @@ class TravelerRelationsView(APIView):
                 ]) + " " + label.lower()
                 if search not in hay:
                     return None
-            return {
+            out = {
                 "type": cluster_type,
                 "key": f"{cluster_type}:{key}",
                 "label": label or key,
                 "size": len(uniq),
                 "members": [_traveler_payload(m, risk_index) for m in uniq],
             }
+            if extra:
+                out.update(extra)
+            return out
 
         if not type_filter or type_filter == "flight":
             for flight, members in flight_groups.items():
@@ -275,7 +291,22 @@ class TravelerRelationsView(APIView):
                 if not members:
                     continue
                 head = members[0].full_name if members else "Groupe"
-                c = make_cluster("companion", str(root), f"Cas-contact — autour de {head}", members)
+                # Reconstruire les paires effectives pour ce sous-groupe
+                member_id_set = {m.id for m in members}
+                pid_index = {m.id: m.public_id for m in members}
+                pairs = []
+                for (a, b), rel in pair_relationship.items():
+                    if a in member_id_set and b in member_id_set:
+                        pairs.append({
+                            "a": pid_index[a],
+                            "b": pid_index[b],
+                            "relationship": rel or "Cas-contact",
+                        })
+                c = make_cluster(
+                    "companion", str(root),
+                    f"Cas-contact — autour de {head}", members,
+                    extra={"pairs": pairs},
+                )
                 if c:
                     clusters.append(c)
 
