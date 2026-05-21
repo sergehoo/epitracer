@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity, Building2, BarChart3, ChevronLeft, FormInput, LayoutDashboard,
-  Map, MapPin, Siren, Stethoscope, Users,
+  Map, MapPin, Network, Siren, Stethoscope, Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/lib/sidebarStore';
@@ -12,6 +12,7 @@ import { useSidebar } from '@/lib/sidebarStore';
 const NAV = [
   { href: '/dashboard',     label: 'Dashboard',         icon: LayoutDashboard },
   { href: '/surveillance',  label: 'Surveillance',      icon: Activity },
+  { href: '/relations',     label: 'Relations',         icon: Network },
   { href: '/points-entree', label: "Points d'entrée",   icon: MapPin },
   { href: '/districts',     label: 'Districts',         icon: Building2 },
   { href: '/alertes',       label: 'Alertes',           icon: Siren },
