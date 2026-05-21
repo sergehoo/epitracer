@@ -72,6 +72,10 @@ services:
       - ./backend:/app
       - keys_data:/app/keys
       - media_data:/app/media
+      # Volume nommé pour les statiques : le bind-mount ./backend:/app écrase
+      # /app/staticfiles créé dans le Dockerfile ; ce volume rétablit un dossier
+      # accessible en écriture par l'utilisateur "app" du container.
+      - staticfiles_data:/app/staticfiles
 
   channels:
     build:
@@ -88,6 +92,7 @@ services:
     volumes:
       - ./backend:/app
       - keys_data:/app/keys
+      - staticfiles_data:/app/staticfiles
 
   worker:
     build:
@@ -105,6 +110,7 @@ services:
       - ./backend:/app
       - keys_data:/app/keys
       - media_data:/app/media
+      - staticfiles_data:/app/staticfiles
 
   beat:
     build:
@@ -120,6 +126,7 @@ services:
       redis: {condition: service_healthy}
     volumes:
       - ./backend:/app
+      - staticfiles_data:/app/staticfiles
 
   mailhog:
     image: mailhog/mailhog:latest
@@ -142,3 +149,4 @@ volumes:
   redis_data:
   keys_data:
   media_data:
+  staticfiles_data:
