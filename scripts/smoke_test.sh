@@ -5,13 +5,13 @@
 #
 # Usage :
 #   bash scripts/smoke_test.sh
-#   bash scripts/smoke_test.sh http://localhost:8000 http://publictraveler.lvh.me http://inhpadmin.lvh.me
+#   bash scripts/smoke_test.sh http://localhost:8000 http://publictraveler.lvh.me http://admin.lvh.me
 # ---------------------------------------------------------------------------
 set -u
 
 API=${1:-http://api.lvh.me}
 PUBLIC=${2:-http://publictraveler.lvh.me}
-ADMIN=${3:-http://inhpadmin.lvh.me}
+ADMIN=${3:-http://admin.lvh.me}
 
 ok()  { printf "  \033[32m✓\033[0m %s\n" "$1"; }
 ko()  { printf "  \033[31m✗\033[0m %s\n" "$1"; FAILED=1; }
@@ -119,14 +119,14 @@ code=$(curl -s -o /dev/null -w "%{http_code}" "$PUBLIC/dashboard")
   || ko "Public /dashboard devrait rediriger, reçu $code"
 
 code=$(curl -s -o /dev/null -w "%{http_code}" "$ADMIN/")
-[[ "$code" == "308" || "$code" == "307" ]] && ok "inhpadmin.lvh.me/ → redirect /dashboard" \
+[[ "$code" == "308" || "$code" == "307" ]] && ok "admin.lvh.me/ → redirect /dashboard" \
   || ko "Admin / devrait rediriger, reçu $code"
 
 code=$(curl -s -o /dev/null -w "%{http_code}" "$ADMIN/auth/login")
-[[ "$code" == "200" ]] && ok "inhpadmin.lvh.me/auth/login → 200" || ko "Admin /auth/login : $code"
+[[ "$code" == "200" ]] && ok "admin.lvh.me/auth/login → 200" || ko "Admin /auth/login : $code"
 
 code=$(curl -s -o /dev/null -w "%{http_code}" "$ADMIN/voyageur")
-[[ "$code" == "308" || "$code" == "307" ]] && ok "inhpadmin.lvh.me/voyageur → redirect vers public" \
+[[ "$code" == "308" || "$code" == "307" ]] && ok "admin.lvh.me/voyageur → redirect vers public" \
   || ko "Admin /voyageur devrait rediriger, reçu $code"
 
 hr "Résultat"

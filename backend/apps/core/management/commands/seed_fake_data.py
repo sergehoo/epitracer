@@ -479,7 +479,7 @@ class Builder:
                 pv = PageVisit.objects.create(
                     session_id=random.choice(sessions),
                     portal=Portal.ADMIN if is_admin else Portal.PUBLIC,
-                    host="destinationci.com" if not is_admin else "inhpadmin.ci",
+                    host="destinationci.com" if not is_admin else "admin.veillesanitaire.com",
                     path=path,
                     referrer="https://google.com/" if random.random() < 0.3 else "",
                     user_agent="Mozilla/5.0 (demo)",

@@ -31,7 +31,9 @@ export function VisitTracker() {
     if (typeof window === 'undefined' || !pathname) return;
     const host = window.location.host.toLowerCase();
     const portal =
-      host.includes('inhpadmin') || host.startsWith('inhp')
+      host.includes('admin.veillesanitaire')
+      || host.includes('admin.lvh.me')
+      || host.startsWith('admin.')
         ? 'admin'
         : 'public';
     const payload = {

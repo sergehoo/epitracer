@@ -9,10 +9,10 @@
 #   export TRAEFIK_NETWORK=proxy
 #   export TRAEFIK_CERT_RESOLVER=lets
 #   export PUBLIC_HOST=destinationci.com
-#   export ADMIN_HOST=inhpadmin.ci
-#   export API_HOST=api.epitrace.gouv.ci
-#   export WS_HOST=ws.epitrace.gouv.ci
-#   export GRAFANA_HOST=grafana.epitrace.gouv.ci
+#   export ADMIN_HOST=admin.veillesanitaire.com
+#   export API_HOST=api.veillesanitaire.com
+#   export WS_HOST=api.veillesanitaire.com
+#   export GRAFANA_HOST=grafana.veillesanitaire.com
 #
 # Usage :
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
@@ -32,9 +32,9 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DJANGO_DEBUG: "0"
-      DJANGO_ALLOWED_HOSTS: ${API_HOST:-api.epitrace.gouv.ci},${PUBLIC_HOST:-destinationci.com},${ADMIN_HOST:-inhpadmin.ci},web
-      DJANGO_CSRF_TRUSTED_ORIGINS: https://${API_HOST:-api.epitrace.gouv.ci},https://${PUBLIC_HOST:-destinationci.com},https://${ADMIN_HOST:-inhpadmin.ci}
-      DJANGO_CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOST:-destinationci.com},https://${ADMIN_HOST:-inhpadmin.ci}
+      DJANGO_ALLOWED_HOSTS: ${API_HOST:-api.veillesanitaire.com},${PUBLIC_HOST:-destinationci.com},${ADMIN_HOST:-admin.veillesanitaire.com},web,localhost,127.0.0.1
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://${API_HOST:-api.veillesanitaire.com},https://${PUBLIC_HOST:-destinationci.com},https://${ADMIN_HOST:-admin.veillesanitaire.com}
+      DJANGO_CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOST:-destinationci.com},https://${ADMIN_HOST:-admin.veillesanitaire.com}
       SECURE_SSL_REDIRECT: "1"
       SESSION_COOKIE_SECURE: "1"
       CSRF_COOKIE_SECURE: "1"
@@ -46,7 +46,7 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
       # Router HTTPS API
-      - "traefik.http.routers.epitrace-api.rule=Host(`${API_HOST:-api.epitrace.gouv.ci}`)"
+      - "traefik.http.routers.epitrace-api.rule=Host(`${API_HOST:-api.veillesanitaire.com}`)"
       - "traefik.http.routers.epitrace-api.entrypoints=websecure"
       - "traefik.http.routers.epitrace-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
       - "traefik.http.services.epitrace-api.loadbalancer.server.port=8000"
@@ -67,7 +67,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
-      - "traefik.http.routers.epitrace-ws.rule=Host(`${WS_HOST:-ws.epitrace.gouv.ci}`)"
+      - "traefik.http.routers.epitrace-ws.rule=Host(`${WS_HOST:-api.veillesanitaire.com}`)"
       - "traefik.http.routers.epitrace-ws.entrypoints=websecure"
       - "traefik.http.routers.epitrace-ws.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
       - "traefik.http.services.epitrace-ws.loadbalancer.server.port=8001"
@@ -75,10 +75,10 @@ services:
   # --- Frontend Next.js (deux hostnames : public + admin) ---------------
   frontend:
     environment:
-      NEXT_PUBLIC_API_URL: https://${API_HOST:-api.epitrace.gouv.ci}
-      NEXT_PUBLIC_WS_URL: wss://${WS_HOST:-ws.epitrace.gouv.ci}
+      NEXT_PUBLIC_API_URL: https://${API_HOST:-api.veillesanitaire.com}
+      NEXT_PUBLIC_WS_URL: wss://${WS_HOST:-api.veillesanitaire.com}
       NEXT_PUBLIC_PUBLIC_HOST: ${PUBLIC_HOST:-destinationci.com}
-      NEXT_PUBLIC_ADMIN_HOST: ${ADMIN_HOST:-inhpadmin.ci}
+      NEXT_PUBLIC_ADMIN_HOST: ${ADMIN_HOST:-admin.veillesanitaire.com}
       NODE_ENV: production
     ports: []
     networks: [default, proxy]
@@ -87,14 +87,14 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
 
-      # Portail PUBLIC voyageurs
-      - "traefik.http.routers.epitrace-public.rule=Host(`${PUBLIC_HOST:-destinationci.com}`) || Host(`www.${PUBLIC_HOST:-destinationci.com}`)"
+      # Portail PUBLIC voyageurs (sans www. — pas de record DNS séparé)
+      - "traefik.http.routers.epitrace-public.rule=Host(`${PUBLIC_HOST:-destinationci.com}`)"
       - "traefik.http.routers.epitrace-public.entrypoints=websecure"
       - "traefik.http.routers.epitrace-public.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
       - "traefik.http.routers.epitrace-public.service=epitrace-frontend"
 
-      # Portail ADMIN INHP
-      - "traefik.http.routers.epitrace-admin.rule=Host(`${ADMIN_HOST:-inhpadmin.ci}`) || Host(`www.${ADMIN_HOST:-inhpadmin.ci}`)"
+      # Portail ADMIN INHP (sans www. — pas de record DNS séparé)
+      - "traefik.http.routers.epitrace-admin.rule=Host(`${ADMIN_HOST:-admin.veillesanitaire.com}`)"
       - "traefik.http.routers.epitrace-admin.entrypoints=websecure"
       - "traefik.http.routers.epitrace-admin.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
       - "traefik.http.routers.epitrace-admin.service=epitrace-frontend"
@@ -133,7 +133,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
-      - "traefik.http.routers.epitrace-grafana.rule=Host(`${GRAFANA_HOST:-grafana.epitrace.gouv.ci}`)"
+      - "traefik.http.routers.epitrace-grafana.rule=Host(`${GRAFANA_HOST:-grafana.veillesanitaire.com}`)"
       - "traefik.http.routers.epitrace-grafana.entrypoints=websecure"
       - "traefik.http.routers.epitrace-grafana.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
       - "traefik.http.services.epitrace-grafana.loadbalancer.server.port=3000"

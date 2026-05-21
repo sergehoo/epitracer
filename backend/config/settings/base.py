@@ -282,16 +282,16 @@ SPECTACULAR_SETTINGS = {
 # ---------------------------------------------------------------------------
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env.list("DJANGO_CORS_ALLOWED_ORIGINS", default=[])
-# Par défaut on autorise les domaines de l'environnement de test :
-#   destinationci.com (portail public)
-#   inhpadmin.ci      (portail admin)
-#   *.lvh.me          (tests locaux avec sous-domaines)
-#   localhost / 127.0.0.1 (tous ports)
+# Par défaut on autorise les domaines de production + tests :
+#   destinationci.com         (portail public voyageurs)
+#   *.veillesanitaire.com     (admin.veillesanitaire.com + api.veillesanitaire.com)
+#   *.lvh.me                  (tests locaux avec sous-domaines)
+#   localhost / 127.0.0.1     (tous ports)
 CORS_ALLOWED_ORIGIN_REGEXES = env.list(
     "DJANGO_CORS_ALLOWED_ORIGIN_REGEXES",
     default=[
         r"^https?://(.*\.)?destinationci\.com(:\d+)?$",
-        r"^https?://(.*\.)?inhpadmin\.ci(:\d+)?$",
+        r"^https?://(.*\.)?veillesanitaire\.com(:\d+)?$",
         r"^https?://(.*\.)?lvh\.me(:\d+)?$",
         r"^http://localhost(:\d+)?$",
         r"^http://127\.0\.0\.1(:\d+)?$",
