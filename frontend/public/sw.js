@@ -11,7 +11,7 @@
 // bundle au prochain chargement. Sans ce bump, les clients avec le SW
 // installé continueraient à servir les anciens chunks (et donc les anciennes
 // URLs comme http://localhost:8000) depuis le cache "cache first".
-const CACHE = 'epitrace-v2-api-veillesanitaire';
+const CACHE = 'epitrace-v5-contact';
 
 const STATIC_ASSETS = [
   '/',

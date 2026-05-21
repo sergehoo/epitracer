@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, QrCode, X } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { adminUrl, publicUrl } from '@/lib/hosts';
 
@@ -78,6 +78,17 @@ function PublicHeader({
 
         <div className="hidden md:flex items-center gap-2">
           <ThemeToggle />
+          {/* Bouton "Scanner un QR" : pour les contrôleurs / voyageurs souhaitant
+              vérifier la signature cryptographique d'un pass (caméra + Ed25519).
+              Distinct de "Voir mon pass" qui ouvre la consultation par ID. */}
+          <Link
+            href="/verifier"
+            aria-label="Scanner un QR code"
+            title="Scanner un QR code pour vérifier un pass"
+            className="h-10 w-10 grid place-items-center rounded-full bg-white border border-slate-200 text-ciDark hover:border-ciOrange hover:text-ciOrange transition"
+          >
+            <QrCode className="h-5 w-5" />
+          </Link>
           <Link
             href="/pass"
             className="px-4 py-2.5 rounded-full bg-white border border-slate-200 font-bold text-ciDark hover:border-ciOrange transition text-sm"
@@ -109,6 +120,13 @@ function PublicHeader({
               {n.label}
             </a>
           ))}
+          <Link
+            href="/verifier"
+            onClick={() => setOpen(false)}
+            className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-slate-200 font-bold text-ciDark text-center"
+          >
+            <QrCode className="h-4 w-4" /> Scanner un QR
+          </Link>
           <Link href="/pass" className="block px-5 py-3 rounded-xl border border-slate-200 font-bold text-ciDark text-center">
             Voir mon pass
           </Link>

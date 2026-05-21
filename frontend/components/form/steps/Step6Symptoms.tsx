@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { HeartPulse } from 'lucide-react';
 import { useRegistrationStore } from '@/lib/store';
 import { FieldGroup, YesNo } from '@/components/form/Field';
 import type { SectionSymptoms } from '@/types/ebola';
@@ -33,15 +32,13 @@ export function Step6Symptoms({ onNext, onBack }: { onNext: () => void; onBack: 
     onNext();
   };
 
-  const positives = SYMPTOMS.filter((s) => state[s.key] === true).length;
-  const redFlag = state.unexplained_bleeding;
-
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-xl font-bold">6. État de santé</h2>
+        <h2 className="font-display text-xl font-bold">6. Comment vous sentez-vous ?</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Présentez-vous actuellement l'un des signes suivants au cours des <strong>48 dernières heures</strong> ?
+          Indiquez si vous avez ressenti l'un des signes suivants au cours des <strong>48 dernières heures</strong>.
+          Vos réponses restent confidentielles.
         </p>
       </div>
 
@@ -74,19 +71,6 @@ export function Step6Symptoms({ onNext, onBack }: { onNext: () => void; onBack: 
           onChange={(e) => setKey('other_symptoms', e.target.value)}
         />
       </FieldGroup>
-
-      <div className={`rounded-xl p-4 border ${redFlag ? 'bg-red-900 text-white border-red-700' : positives >= 2 ? 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900' : 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900'}`}>
-        <div className="text-sm flex items-center gap-2">
-          <HeartPulse className="h-4 w-4" />
-          {redFlag ? (
-            <span><strong>Symptôme alarmant détecté.</strong> Composez immédiatement le 185 (SAMU) ou 143 (Allô Santé).</span>
-          ) : positives >= 2 ? (
-            <span><strong>{positives}</strong> symptômes déclarés — vous serez placé sous surveillance.</span>
-          ) : (
-            <span>{positives === 0 ? 'Aucun symptôme déclaré.' : `${positives} symptôme déclaré.`} — surveillance simple.</span>
-          )}
-        </div>
-      </div>
 
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className="btn-ghost">← Précédent</button>

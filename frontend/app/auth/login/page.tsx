@@ -64,7 +64,7 @@ export default function LoginPage() {
             et des points d'entrée frontaliers.
           </p>
           <p className="mt-6 text-sm opacity-80">
-            En cas d'incident, contactez le support INHP au 27 21 25 35 10.
+            En cas d'incident, contactez le support INHP au 143.
           </p>
         </div>
         <div className="text-xs opacity-70 relative">

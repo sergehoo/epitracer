@@ -34,7 +34,7 @@ HEADER_MINISTRY_FULL = (
 )
 HEADER_MINISTRY = "MSHPCMU"  # abréviation officielle
 HEADER_INHP = "Institut National d'Hygiène Publique (INHP)"
-INHP_CONTACT = "Tél : 27 21 25 35 10  /  27 21 25 97 46     Email : episurvinhp@gmail.com"
+INHP_CONTACT = "Tél : 143     Email : info@destinationci.com"
 
 # --- Fichiers logos officiels (stockés en local) -------------------------
 BRAND_DIR = Path(getattr(settings, "BASE_DIR", Path("."))) / "static" / "branding"

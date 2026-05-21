@@ -198,6 +198,7 @@ class PublicTravelerRegisterView(APIView):
                 confinement_hotel=_trim(confinement.get("hotel"), 200),
                 confinement_room_number=_trim(confinement.get("room_number"), 120),
                 emergency_phone_ci=_trim(confinement.get("emergency_phone_ci"), 32),
+                whatsapp_phone=_trim(confinement.get("whatsapp_phone"), 32),
                 confinement_location=location,
                 # Déclaration de la section 7
                 consented_data_processing=bool(declaration.get("truthful_declaration")),
@@ -214,6 +215,7 @@ class PublicTravelerRegisterView(APIView):
                     traveler=traveler,
                     role=_trim(item.get("role"), 10) or "visited",
                     country=country,
+                    province=_trim(item.get("province"), 160),
                     city=_trim(item.get("city"), 120),
                     residence_address=_trim(item.get("residence_address"), 300),
                     hotel=_trim(item.get("hotel"), 200),
@@ -336,7 +338,7 @@ def _public_instructions(investigation: EbolaInvestigation) -> dict:
             "samu": "185",
             "allo_sante": "143",
             "secours": "101",
-            "inhp_lines": ["27 21 25 35 10", "27 21 25 97 46"],
+            "inhp_lines": ["143"],
         },
         "presented_pass": True,
     }

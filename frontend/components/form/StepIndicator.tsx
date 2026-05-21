@@ -6,9 +6,9 @@ export const STEPS = [
   'Voyage',
   'Identité',
   'Historique',
-  'Confinement',
-  'Évaluation risque',
-  'État de santé',
+  'Résidence',
+  'Prévention',
+  'Santé',
   'Déclaration',
 ] as const;
 

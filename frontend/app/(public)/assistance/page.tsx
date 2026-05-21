@@ -95,11 +95,11 @@ export default function AssistancePage() {
                 INHP — Institut National d'Hygiène Publique
               </div>
               <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                Tél : <a className="underline" href="tel:0027212535 10">27 21 25 35 10</a> · <a className="underline" href="tel:0027212597 46">27 21 25 97 46</a>
+                Tél : <a className="underline" href="tel:143">143</a>
               </div>
               <div className="mt-1 text-sm">
                 <Mail className="inline h-4 w-4 mr-1 text-emerald-600" />
-                <a className="underline" href="mailto:episurvinhp@gmail.com">episurvinhp@gmail.com</a>
+                <a className="underline" href="mailto:info@destinationci.com">info@destinationci.com</a>
               </div>
             </div>
           </aside>

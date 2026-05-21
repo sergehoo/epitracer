@@ -125,6 +125,10 @@ class Traveler(BaseModel):
     emergency_phone_ci = models.CharField(
         _("Téléphone d'urgence obligatoire en CI"), max_length=32, blank=True,
     )
+    whatsapp_phone = models.CharField(
+        _("Numéro WhatsApp international"), max_length=32, blank=True,
+        help_text=_("Format E.164 (ex : +22507XXXXXXXX)."),
+    )
     confinement_address = models.CharField(
         _("Adresse de confinement consolidée"), max_length=300, blank=True,
         help_text=_("Champ calculé pour exports et affichage."),
@@ -217,6 +221,10 @@ class TravelHistoryEntry(BaseModel):
     traveler = models.ForeignKey(Traveler, on_delete=models.CASCADE, related_name="travel_history")
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.VISITED)
     country = models.ForeignKey("geo.Country", on_delete=models.PROTECT)
+    province = models.CharField(
+        _("Province / Région"), max_length=160, blank=True,
+        help_text=_("Subdivision administrative à l'intérieur du pays (ex: Nord-Kivu)."),
+    )
     city = models.CharField(max_length=120, blank=True)
     residence_address = models.CharField(max_length=300, blank=True)
     hotel = models.CharField(max_length=200, blank=True)

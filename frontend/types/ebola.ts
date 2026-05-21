@@ -17,7 +17,8 @@ export interface SectionVoyage {
   arrival_time?: string;          // HH:MM
   transport_mode?: TransportMode;
   flight_or_voyage_number: string;
-  seat_number?: string;
+  // OBLIGATOIRE : nécessaire au contact-tracing entre passagers voisins.
+  seat_number: string;
   entry_point_code: string;       // ex: ABJ-AIRPORT
 }
 
@@ -50,7 +51,8 @@ export interface SectionIdentite {
 export interface HistoryItem {
   role: 'origin' | 'transit' | 'visited';
   country_code: string;
-  city?: string;
+  city: string;
+  province?: string;
   residence_address?: string;
   hotel?: string;
   room_number?: string;
@@ -59,7 +61,7 @@ export interface HistoryItem {
   duration_text?: string;
 }
 
-/** Section 4 — Confinement en Côte d'Ivoire */
+/** Section 4 — Adresse de résidence en Côte d'Ivoire */
 export interface SectionConfinement {
   city: string;
   commune: string;
@@ -69,6 +71,7 @@ export interface SectionConfinement {
   hotel?: string;
   room_number?: string;
   emergency_phone_ci: string;
+  whatsapp_phone: string;
   latitude?: number;
   longitude?: number;
 }

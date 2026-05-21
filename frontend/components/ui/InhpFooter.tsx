@@ -52,8 +52,8 @@ export function InhpFooter() {
           <h5 className="font-bold mb-3">Voyageur</h5>
           <ul className="space-y-2 text-sm text-emerald-100/90">
             <li><Link href="/voyageur" className="hover:text-ciOrange transition">Préparer mon arrivée</Link></li>
-            <li><Link href="/pass" className="hover:text-ciOrange transition">Vérifier mon pass</Link></li>
-            <li><Link href="/verifier" className="hover:text-ciOrange transition">Vérifier un QR</Link></li>
+            <li><Link href="/pass" className="hover:text-ciOrange transition">Consulter mon pass</Link></li>
+            <li><Link href="/verifier" className="hover:text-ciOrange transition">Scanner un QR code</Link></li>
             <li><Link href="/assistance" className="hover:text-ciOrange transition">Conseils sanitaires</Link></li>
           </ul>
         </div>
@@ -85,8 +85,8 @@ export function InhpFooter() {
             </li>
           </ul>
           <p className="mt-4 text-xs text-emerald-100/60">
-            INHP · 27 21 25 35 10 / 27 21 25 97 46<br />
-            episurvinhp@gmail.com
+            INHP · 143<br />
+            info@destinationci.com
           </p>
         </div>
       </div>

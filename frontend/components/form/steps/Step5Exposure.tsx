@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { ShieldAlert } from 'lucide-react';
 import { useRegistrationStore } from '@/lib/store';
 import { FieldGroup, YesNo } from '@/components/form/Field';
 import { exposureSchema } from '@/lib/schema';
@@ -40,15 +39,13 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
     onNext();
   };
 
-  const positives = QUESTIONS.filter((q) => state[q.key] === true).length;
-
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-xl font-bold">5. Évaluation Épidémiologique du Risque</h2>
+        <h2 className="font-display text-xl font-bold">5. Questionnaire de prévention</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Réponses portant sur les <strong>21 derniers jours</strong>. Répondez avec honnêteté —
-          ces réponses sont utilisées pour calculer votre niveau de risque.
+          Réponses portant sur les <strong>21 derniers jours</strong>. Vos réponses aident l'INHP
+          à mieux vous accompagner.
         </p>
       </div>
 
@@ -71,14 +68,6 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
           />
         </FieldGroup>
       )}
-
-      <div className={`rounded-xl p-4 border ${positives >= 2 ? 'bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-900' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800'}`}>
-        <div className="text-sm flex items-center gap-2">
-          <ShieldAlert className={positives >= 2 ? 'h-4 w-4 text-rose-600' : 'h-4 w-4 text-slate-500'} />
-          <strong>{positives}</strong> réponse{positives > 1 ? 's' : ''} positive{positives > 1 ? 's' : ''}
-          {positives >= 2 ? ' — niveau de risque potentiellement élevé.' : ' — répondez aussi à la section suivante.'}
-        </div>
-      </div>
 
       {error && <p className="field-error">{error}</p>}
 

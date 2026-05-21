@@ -1,15 +1,19 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { MapPin } from 'lucide-react';
 import { confinementSchema, type ConfinementInput } from '@/lib/schema';
 import { useRegistrationStore } from '@/lib/store';
 import { FieldGroup, FieldRow } from '@/components/form/Field';
+import { IntlPhoneInput } from '@/components/form/IntlPhoneInput';
 
 export function Step4Confinement({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const { confinement, set, goTo } = useRegistrationStore();
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ConfinementInput>({
+  const {
+    register, handleSubmit, setValue, watch, control,
+    formState: { errors },
+  } = useForm<ConfinementInput>({
     resolver: zodResolver(confinementSchema),
     defaultValues: confinement,
   });
@@ -38,10 +42,10 @@ export function Step4Confinement({ onNext, onBack }: { onNext: () => void; onBac
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-6">
       <div>
-        <h2 className="font-display text-xl font-bold">4. Adresse de résidence et confinement en Côte d'Ivoire</h2>
+        <h2 className="font-display text-xl font-bold">4. Adresse de résidence en Côte d'Ivoire</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Précisez votre lieu de résidence ou de confinement pendant votre séjour. Ces informations
-          permettent à l'INHP de vous joindre durant le suivi sanitaire.
+          Précisez votre lieu de résidence durant votre séjour. Ces informations permettent à
+          l'INHP de vous contacter en cas de besoin.
         </p>
       </div>
 
@@ -75,18 +79,42 @@ export function Step4Confinement({ onNext, onBack }: { onNext: () => void; onBac
         </FieldGroup>
       </FieldRow>
 
-      <FieldGroup
-        label="Téléphone d'urgence obligatoire en Côte d'Ivoire"
-        required
-        error={errors.emergency_phone_ci?.message}
-        help="Numéro joignable à tout moment durant les 21 jours de surveillance."
-      >
-        <input className="input" placeholder="+225 ..." {...register('emergency_phone_ci')} />
-      </FieldGroup>
+      <FieldRow>
+        <FieldGroup
+          label="Téléphone d'urgence en Côte d'Ivoire"
+          required
+          error={errors.emergency_phone_ci?.message}
+          help="Numéro joignable durant votre séjour (ligne fixe ou mobile)."
+        >
+          <input className="input" placeholder="+225 ..." {...register('emergency_phone_ci')} />
+        </FieldGroup>
+
+        <Controller
+          name="whatsapp_phone"
+          control={control}
+          defaultValue=""
+          render={({ field }) => (
+            <FieldGroup
+              label="Numéro WhatsApp"
+              required
+              error={errors.whatsapp_phone?.message}
+              help="Sélectionnez votre pays puis saisissez votre numéro (sans le 0 initial)."
+            >
+              <IntlPhoneInput
+                value={field.value || ''}
+                onChange={field.onChange}
+                invalid={Boolean(errors.whatsapp_phone)}
+              />
+            </FieldGroup>
+          )}
+        />
+      </FieldRow>
 
       <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex items-center justify-between gap-4">
         <div className="text-sm">
-          <div className="font-semibold flex items-center gap-2"><MapPin className="h-4 w-4 text-emerald-600" /> Géolocalisation (optionnelle)</div>
+          <div className="font-semibold flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-emerald-600" /> Géolocalisation (optionnelle)
+          </div>
           {lat && lng ? (
             <div className="text-xs text-slate-500 mt-1">Position enregistrée : {lat.toFixed(5)}, {lng.toFixed(5)}</div>
           ) : (
@@ -100,7 +128,7 @@ export function Step4Confinement({ onNext, onBack }: { onNext: () => void; onBac
 
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className="btn-ghost">← Précédent</button>
-        <button type="submit" className="btn-primary">Suivant : Évaluation risque →</button>
+        <button type="submit" className="btn-primary">Suivant →</button>
       </div>
     </form>
   );
