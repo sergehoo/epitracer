@@ -8,7 +8,7 @@ import { useRegistrationStore } from '@/lib/store';
 import { declarationSchema } from '@/lib/schema';
 import { FieldGroup, FieldRow } from '@/components/form/Field';
 import { SignaturePad } from '@/components/form/SignaturePad';
-import { api, extractApiError } from '@/lib/api';
+import { api, apiPostWithRetry, extractApiError } from '@/lib/api';
 import type { RegistrationResponse } from '@/types/ebola';
 
 export function Step7Declaration({ onBack }: { onBack: () => void }) {
@@ -26,6 +26,7 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
   const [signature, setSignature] = useState<string>(store.declaration?.signature_data_url ?? '');
   const [passportFile, setPassportFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,6 +72,7 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
     }
 
     setSubmitting(true);
+    setAttempt(0);
     try {
       const payload = {
         voyage: store.voyage,
@@ -87,7 +89,32 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
           signature_data_url: signature,
         },
       };
-      const { data } = await api.post<RegistrationResponse>('/ebola/public/register/', payload);
+
+      // Sauvegarde locale AVANT la requête : si le réseau coupe en cours,
+      // on garde la fiche pour la resoumettre plus tard.
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('epi_last_unsubmitted', JSON.stringify({
+            payload, savedAt: new Date().toISOString(),
+          }));
+        } catch { /* quota plein, on ignore */ }
+      }
+
+      // POST avec retry automatique (2 retries, backoff 1s/2s/4s, timeout 90s)
+      const { data } = await apiPostWithRetry<RegistrationResponse>(
+        '/ebola/public/register/',
+        payload,
+        {
+          retries: 2,
+          timeoutMs: 90_000,
+          onAttempt: (n) => setAttempt(n),
+        },
+      );
+
+      // Succès → on nettoie la sauvegarde locale
+      if (typeof window !== 'undefined') {
+        try { localStorage.removeItem('epi_last_unsubmitted'); } catch { /* noop */ }
+      }
 
       // Upload passport en best-effort (n'empêche pas la redirection si échoue)
       if (passportFile) {
@@ -114,10 +141,19 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
       router.replace(`/pass/${data.traveler.public_id}?just_issued=1`);
     } catch (err) {
       const msg = extractApiError(err);
-      setError(msg);
-      toast.error(msg);
+      // Sur erreur réseau, on garde la sauvegarde locale pour proposer un retry plus tard
+      const isNetwork = /network|timeout|connect|fetch|ECONN/i.test(msg);
+      setError(
+        isNetwork
+          ? 'Connexion interrompue après plusieurs tentatives. Vos réponses ont été sauvegardées '
+            + 'localement — revenez sur cette page lorsque votre connexion est stable et cliquez à nouveau '
+            + 'sur « Soumettre ma fiche ».'
+          : msg,
+      );
+      toast.error(isNetwork ? 'Connexion réseau instable.' : msg);
     } finally {
       setSubmitting(false);
+      setAttempt(0);
     }
   };
 
@@ -207,7 +243,9 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className="btn-ghost" disabled={submitting}>← Précédent</button>
         <button type="button" onClick={submit} disabled={submitting} className="btn-primary">
-          {submitting ? 'Soumission…' : (<><Send className="h-4 w-4" /> Soumettre ma fiche</>)}
+          {submitting
+            ? (attempt > 1 ? `Reprise réseau (essai ${attempt}/3)…` : 'Soumission…')
+            : (<><Send className="h-4 w-4" /> Soumettre ma fiche</>)}
         </button>
       </div>
     </div>

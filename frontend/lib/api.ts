@@ -84,6 +84,58 @@ api.interceptors.response.use(
   },
 );
 
+/**
+ * POST avec retry automatique sur erreur réseau / timeout / 5xx transient.
+ *
+ * Utile pour les endpoints lourds (génération PDF, signature crypto) en
+ * réseau mobile instable où la première tentative peut être coupée.
+ *
+ * - Retry uniquement sur : pas de réponse (ECONNABORTED, ERR_NETWORK)
+ *   OU statut 502/503/504 OU timeout
+ * - PAS de retry sur : 4xx (validation), 5xx applicatif (sauf gateway)
+ * - Backoff exponentiel : 1s, 2s, 4s
+ */
+export async function apiPostWithRetry<T = unknown>(
+  url: string,
+  data: unknown,
+  options: {
+    retries?: number;
+    timeoutMs?: number;
+    onAttempt?: (n: number) => void;
+  } = {},
+): Promise<{ data: T }> {
+  const retries = options.retries ?? 2;          // 1 essai + 2 retries
+  const timeoutMs = options.timeoutMs ?? 90_000; // 90 s par défaut
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      options.onAttempt?.(attempt + 1);
+      const r = await api.post<T>(url, data, { timeout: timeoutMs });
+      return { data: r.data };
+    } catch (err) {
+      lastError = err;
+      if (!axios.isAxiosError(err)) throw err;
+
+      const status = err.response?.status;
+      const code = err.code;
+      const isNetworkErr = !err.response && (
+        code === 'ECONNABORTED' || code === 'ERR_NETWORK' || code === 'ETIMEDOUT'
+      );
+      const isGatewayErr = status === 502 || status === 503 || status === 504;
+
+      // Retry uniquement sur ces conditions, et tant qu'on a des essais
+      if ((isNetworkErr || isGatewayErr) && attempt < retries) {
+        const wait = 1000 * Math.pow(2, attempt); // 1s → 2s → 4s
+        await new Promise((res) => setTimeout(res, wait));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 /** Helper pour formater proprement les erreurs DRF. */
 export function extractApiError(err: unknown): string {
   if (axios.isAxiosError(err)) {
