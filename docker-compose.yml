@@ -135,11 +135,19 @@ services:
   frontend:
     build:
       context: ./frontend
+      # IMPORTANT : Next.js bake les NEXT_PUBLIC_* à la phase build (pas runtime).
+      # Ces ARG sont consommés par frontend/Dockerfile pour générer un bundle
+      # qui contient les bonnes URLs (et non les defaults http://localhost:8000).
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://web:8000}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://channels:8001}
+        NEXT_PUBLIC_PUBLIC_HOST: ${NEXT_PUBLIC_PUBLIC_HOST:-${PUBLIC_HOST:-localhost}}
+        NEXT_PUBLIC_ADMIN_HOST: ${NEXT_PUBLIC_ADMIN_HOST:-${ADMIN_HOST:-localhost}}
     image: epidemitracker/frontend:dev
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://web:8000
-      NEXT_PUBLIC_WS_URL: ws://channels:8001
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://web:8000}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://channels:8001}
       NODE_ENV: production
     depends_on:
       - web
