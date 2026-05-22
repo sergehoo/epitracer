@@ -11,7 +11,7 @@
 // bundle au prochain chargement. Sans ce bump, les clients avec le SW
 // installé continueraient à servir les anciens chunks (et donc les anciennes
 // URLs comme http://localhost:8000) depuis le cache "cache first".
-const CACHE = 'epitrace-v19-ws-api-host';
+const CACHE = 'epitrace-v20-offline-scanner';
 
 const STATIC_ASSETS = [
   '/',
@@ -20,6 +20,7 @@ const STATIC_ASSETS = [
   '/voyageur/confidentialite',
   '/pass',
   '/assistance',
+  '/verifier',
   '/manifest.webmanifest',
   '/icons/icon-192.svg',
   '/icons/icon-512.svg',
@@ -46,6 +47,23 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
+
+  // Clé publique Ed25519 pour vérification offline du scanner agent.
+  // Stratégie : cache first (la clé est stable, rotation rare). Le client
+  // refresh manuellement via le bouton "Rafraîchir clé" sur /verifier.
+  if (url.pathname === '/api/v1/passes/public-key.pem'
+      || url.pathname.endsWith('/passes/public-key.pem')) {
+    event.respondWith(
+      caches.open(CACHE).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        const res = await fetch(req);
+        if (res.ok) cache.put(req, res.clone());
+        return res;
+      }).catch(() => fetch(req))
+    );
+    return;
+  }
 
   // API publique de consultation du pass → stale-while-revalidate
   if (url.pathname.startsWith('/api/v1/ebola/public/pass/')) {

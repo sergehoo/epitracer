@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Topbar } from '@/components/dashboard/Topbar';
-import { MobileScanFab } from '@/components/dashboard/MobileScanFab';
+import { BottomNav } from '@/components/dashboard/BottomNav';
 import { getAccess } from '@/lib/api';
 import { useRealtimeAlerts } from '@/lib/useRealtimeAlerts';
+import { useEdgeSwipe } from '@/lib/useEdgeSwipe';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -15,9 +16,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Branchement WebSocket temps réel — affiche un toast à chaque nouvelle
-  // HealthAlert reçue (cliquable vers /alertes). Best-effort, ne casse
-  // pas l'app si le WS est indispo.
+  // HealthAlert reçue (cliquable vers /alertes).
   useRealtimeAlerts();
+
+  // Edge-swipe : swipe right depuis le bord gauche → ouvre drawer.
+  // Swipe left sur drawer ouvert → ferme. Désactivé quand drawer déjà ouvert
+  // (sauf swipe left qui ferme).
+  useEdgeSwipe({
+    onSwipeRight: () => !mobileNavOpen && setMobileNavOpen(true),
+    onSwipeLeft: () => mobileNavOpen && setMobileNavOpen(false),
+    enabled: true,
+  });
 
   useEffect(() => {
     const t = getAccess();
@@ -25,9 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setReady(true);
   }, [router]);
 
-  // Ferme automatiquement le drawer mobile quand l'utilisateur change de page
-  // (sécurité : si le clic sur un lien Sidebar ne déclenche pas onMobileClose,
-  // le pathname change quand même → on referme ici).
+  // Ferme automatiquement le drawer mobile au changement de page
   useEffect(() => {
     setMobileNavOpen(false);
   }, [pathname]);
@@ -55,13 +62,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           title="EpiTrace — Administration"
           onMenuClick={() => setMobileNavOpen(true)}
         />
-        <div className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8">
+        {/* pb-24 mobile pour laisser de la place à la BottomNav (≈ 64px + safe-area) */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 pb-24 lg:pb-8">
           {children}
         </div>
       </div>
 
-      {/* Bouton flottant Scanner QR (mobile uniquement, caché sur /verifier) */}
-      <MobileScanFab />
+      {/* Bottom navigation mobile : 5 onglets avec scanner central surélevé.
+          Remplace l'ancien MobileScanFab. */}
+      <BottomNav onMenuClick={() => setMobileNavOpen(true)} />
     </div>
   );
 }
