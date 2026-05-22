@@ -19,13 +19,42 @@
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
+# ---- Découverte du repo + chargement du .env ----
+# Le script tente de trouver `.env` à la racine du repo (au-dessus de scripts/).
+# Cela permet de lire automatiquement POSTGRES_USER, POSTGRES_DB, etc. sans
+# que l'opérateur ait à les exporter à la main avec sudo.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+cd "$REPO_DIR"
+if [ -f "$REPO_DIR/.env" ]; then
+  # shellcheck disable=SC1091
+  set -o allexport
+  source "$REPO_DIR/.env"
+  set +o allexport
+fi
+
 # ---- Configuration (override via env) ----
 BACKUP_DIR=${BACKUP_DIR:-/backups}
 BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
 COMPOSE_FILE_BASE=${COMPOSE_FILE_BASE:-docker-compose.yml}
 COMPOSE_FILE_PROD=${COMPOSE_FILE_PROD:-docker-compose.prod.yml}
-COMPOSE_PROJECT=${COMPOSE_PROJECT:-epitracer}
+COMPOSE_PROJECT=${COMPOSE_PROJECT:-$(basename "$REPO_DIR")}
 DB_SERVICE=${DB_SERVICE:-db}
+# Détection automatique du user/DB depuis l'env du container db si rien
+# n'est passé : c'est la vérité de référence (le container a été initialisé
+# avec ces credentials au premier docker-compose up).
+if [ -z "${POSTGRES_USER:-}" ] || [ -z "${POSTGRES_DB:-}" ]; then
+  DETECTED_USER=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
+                   --project-name "$COMPOSE_PROJECT" \
+                   exec -T "$DB_SERVICE" \
+                   sh -c 'echo $POSTGRES_USER' 2>/dev/null | tr -d '\r')
+  DETECTED_DB=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
+                  --project-name "$COMPOSE_PROJECT" \
+                  exec -T "$DB_SERVICE" \
+                  sh -c 'echo $POSTGRES_DB' 2>/dev/null | tr -d '\r')
+  POSTGRES_USER=${POSTGRES_USER:-$DETECTED_USER}
+  POSTGRES_DB=${POSTGRES_DB:-$DETECTED_DB}
+fi
 DB_USER=${POSTGRES_USER:-epitrace}
 DB_NAME=${POSTGRES_DB:-epitrace}
 METRICS_DIR=${METRICS_DIR:-/var/lib/node_exporter/textfile_collector}
