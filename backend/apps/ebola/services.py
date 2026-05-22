@@ -117,7 +117,14 @@ def apply_risk_outcome(investigation: "EbolaInvestigation") -> "EbolaInvestigati
         "risk_score", "risk_level", "status", "surveillance_start", "surveillance_end",
     ])
 
-    if level in {"high", "critical"} and disease and disease.requires_quarantine:
+    # IMPORTANT : un QuarantineRecord est ouvert pour TOUS les voyageurs,
+    # quel que soit le niveau de risque. C'est notre "dossier de suivi 21j"
+    # — tous les voyageurs entrent dans le module Companion (check-ins,
+    # rappels push, etc.). Le statut/intensité du suivi est porté par
+    # `current_health_status` sur le Traveler ou par la maladie elle-même.
+    # Sans cette ligne, les low-risk étaient invisibles côté admin et la
+    # plateforme ne pouvait pas leur envoyer de rappels quotidiens.
+    if disease:
         open_quarantine_for_investigation(investigation, disease)
 
     traveler = investigation.traveler

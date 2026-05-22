@@ -179,14 +179,16 @@ def render_pass_pdf(hp: HealthPass, token: str) -> bytes:
     line("ID voyageur", hp.traveler.public_id, y); y -= 9 * mm
     line("Maladie suivie", hp.disease.name if hp.disease else "—", y); y -= 9 * mm
 
-    # Bandeau niveau de risque
-    risk_label = {"low": "FAIBLE", "moderate": "MODÉRÉ", "high": "ÉLEVÉ", "critical": "CRITIQUE"}.get(hp.risk_level, "—")
-    risk_color = {"low": CI_GREEN, "moderate": CI_GOLD, "high": CI_ORANGE,
-                  "critical": colors.HexColor("#7F1D1D")}.get(hp.risk_level, CI_GREEN)
-    c.setFillColor(risk_color)
+    # Bandeau "Suivi sanitaire actif" (remplace l'ancien bandeau de risque).
+    # On retire l'affichage du niveau de risque + score sur le PDF pour ne
+    # pas exposer cette info au voyageur ni à toute personne qui pourrait
+    # avoir le PDF en main (vol, prêt, etc.). Le niveau de risque reste
+    # interne au système (agents INHP) et ne figure plus sur les supports
+    # qui circulent.
+    c.setFillColor(CI_GREEN)
     c.roundRect(info_x, y - 7 * mm, 60 * mm, 8 * mm, 3, stroke=0, fill=1)
     c.setFillColor(CI_WHITE); c.setFont("Helvetica-Bold", 9)
-    c.drawString(info_x + 3 * mm, y - 4.5 * mm, f"RISQUE {risk_label} · {hp.risk_score}/100")
+    c.drawString(info_x + 3 * mm, y - 4.5 * mm, "ACCOMPAGNEMENT SANITAIRE — 21 JOURS")
 
     y -= 14 * mm
     line("Émis le", hp.issued_at.strftime("%d/%m/%Y %H:%M"), y); y -= 9 * mm

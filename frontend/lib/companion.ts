@@ -18,6 +18,18 @@ export type ConsentScope =
 
 export const CONSENT_VERSION = 'v1.0-2026-05';
 
+export interface CheckEntry {
+  check_date: string;
+  day_index: number;
+  has_symptoms: boolean;
+  temperature_celsius: number | null;
+  feeling: 'ok' | 'symptom' | 'assistance' | null;
+  needs_contact?: boolean;
+  positive_symptoms?: string[];
+  notes?: string;
+  alert_raised?: boolean;
+}
+
 export interface FollowUpStatus {
   traveler: { public_id: string; full_name: string };
   quarantine: {
@@ -27,12 +39,8 @@ export interface FollowUpStatus {
     day_index: number | null;
     total_days: number | null;
   };
-  last_check: {
-    check_date: string;
-    has_symptoms: boolean;
-    temperature_celsius: number | null;
-    feeling: 'ok' | 'symptom' | 'assistance' | null;
-  } | null;
+  last_check: CheckEntry | null;
+  checks?: CheckEntry[];
   consents: Record<ConsentScope, boolean>;
   assistance: { samu: string; allo_sante: string; secours: string };
 }

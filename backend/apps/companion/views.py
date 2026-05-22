@@ -287,18 +287,31 @@ class FollowUpStatusView(APIView):
 
         last_check = None
         day_index = None
+        all_checks: list[dict] = []
         if quarantine:
-            check_obj = quarantine.daily_checks.order_by("-check_date").first()
-            if check_obj:
-                last_check = {
+            for check_obj in quarantine.daily_checks.order_by("-check_date"):
+                details = check_obj.symptoms_details or {}
+                # Liste des symptômes effectivement déclarés
+                positive_symptoms = [
+                    k for k, v in details.items()
+                    if v is True and k not in ("feeling", "needs_contact")
+                ]
+                all_checks.append({
                     "check_date": check_obj.check_date,
+                    "day_index": check_obj.day_index,
                     "has_symptoms": check_obj.has_symptoms,
                     "temperature_celsius": (
                         float(check_obj.temperature_celsius)
                         if check_obj.temperature_celsius is not None else None
                     ),
-                    "feeling": (check_obj.symptoms_details or {}).get("feeling"),
-                }
+                    "feeling": details.get("feeling"),
+                    "needs_contact": bool(details.get("needs_contact")),
+                    "positive_symptoms": positive_symptoms,
+                    "notes": check_obj.notes,
+                    "alert_raised": bool(check_obj.alert_raised),
+                })
+            if all_checks:
+                last_check = all_checks[0]
             day_index = max(0, (date.today() - quarantine.started_on).days)
 
         # Consentements actifs (un par scope)
@@ -322,6 +335,7 @@ class FollowUpStatusView(APIView):
                 ),
             },
             "last_check": last_check,
+            "checks": all_checks,
             "consents": consents,
             "assistance": {
                 "samu": "185",

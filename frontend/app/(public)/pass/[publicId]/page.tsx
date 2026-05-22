@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Section } from '@/components/ui/Section';
 import { VoyageurSubnav } from '@/components/public/VoyageurSubnav';
+import { MyMessages } from '@/components/public/MyMessages';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { Companion21Days } from '@/components/public/Companion21Days';
 import { PassportUploader } from '@/components/public/PassportUploader';
@@ -113,9 +114,12 @@ export default function PassDetailPage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* ============ Carte principale du pass ============ */}
-        <article className="lg:col-span-2 rounded-[2rem] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800">
+      <div className="grid lg:grid-cols-3 gap-6 items-start">
+        {/* ============ Colonne principale (2/3) : pass + messages ============ */}
+        <div className="lg:col-span-2 space-y-6">
+
+        {/* ----- Carte principale du pass ----- */}
+        <article className="rounded-[2rem] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800">
           {/* Bandeau drapeau ivoirien */}
           <div className="grid grid-cols-3 h-3">
             <div className="bg-ciOrange" />
@@ -171,8 +175,10 @@ export default function PassDetailPage() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between gap-3">
-                  <RiskBadge level={hp.risk_level} score={hp.risk_score} />
+                {/* Affichage rassurant : on retire le niveau de risque/score
+                    qui peut anxiogène pour le voyageur. On garde uniquement le
+                    statut "Actif" / "Expiré" / "Révoqué" du pass. */}
+                <div className="flex items-center justify-end">
                   <span className={`badge-${hp.status === 'active' ? 'low' : 'high'}`}>
                     {STATUS_LABELS[hp.status] || hp.status}
                   </span>
@@ -217,7 +223,11 @@ export default function PassDetailPage() {
           </div>
         </article>
 
-        {/* ============ Sidebar ============ */}
+        {/* ----- Mes messages (sous le pass, même colonne) ----- */}
+        <MyMessages publicId={t.public_id} />
+
+        </div>
+        {/* ============ Sidebar (1/3) ============ */}
         <aside className="space-y-4">
           <Companion21Days
             surveillanceStart={inv?.surveillance_start}

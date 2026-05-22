@@ -382,10 +382,11 @@ function SuiviPageContent() {
               </div>
             )}
 
-            {/* Calendrier 21 jours */}
+            {/* Calendrier 21 jours — cliquable, affiche le détail d'un check-in */}
             <Companion21Days
               surveillanceStart={status.quarantine.started_on}
               surveillanceEnd={status.quarantine.expected_end_on}
+              checks={status.checks}
             />
           </div>
 

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Siren } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronRight, Siren } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 
@@ -50,19 +51,26 @@ export default function AlertesPage() {
           <div className="card p-10 text-center text-slate-400">Aucune alerte active.</div>
         )}
         {items.map((a) => (
-          <article key={a.uuid} className="card p-5 flex items-start justify-between gap-4">
+          <Link
+            key={a.uuid}
+            href={`/alertes/${a.uuid}`}
+            className="card p-5 flex items-start justify-between gap-4 hover:shadow-lg transition group"
+          >
             <div className="flex items-start gap-3">
               <div className="h-10 w-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 grid place-items-center text-rose-600"><Siren className="h-5 w-5" /></div>
               <div>
-                <div className="font-display text-lg font-bold">{a.title}</div>
+                <div className="font-display text-lg font-bold group-hover:text-ciOrange transition">{a.title}</div>
                 <div className="text-xs text-slate-500 mt-1">
                   {a.code} · {a.disease_code || '—'} · {a.entry_point_name || '—'}
                 </div>
                 <div className="text-xs text-slate-400">{formatDateTime(a.created_at)}</div>
               </div>
             </div>
-            <span className={SEV[a.severity] || 'badge-low'}>{a.severity.toUpperCase()}</span>
-          </article>
+            <div className="flex items-center gap-2">
+              <span className={SEV[a.severity] || 'badge-low'}>{a.severity.toUpperCase()}</span>
+              <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-ciOrange transition" />
+            </div>
+          </Link>
         ))}
       </div>
     </div>
