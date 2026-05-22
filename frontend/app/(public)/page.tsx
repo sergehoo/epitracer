@@ -495,8 +495,8 @@ function CtaFinal() {
           <Link href="/voyageur" className="btn-orange">
             Préparer mon arrivée <ArrowRight className="h-4 w-4" />
           </Link>
-          <Link href="/verifier" className="btn-paper">
-            Scanner un QR code
+          <Link href="/pass" className="btn-paper">
+            Consulter mon pass
           </Link>
         </div>
       </div>

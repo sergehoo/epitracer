@@ -1,9 +1,21 @@
 'use client';
 
+/**
+ * Vérification de pass — version ADMIN.
+ *
+ * Accessible uniquement depuis le portail agents (admin.veillesanitaire.com).
+ * La route publique (/verifier sur destinationci.com) a été retirée pour que
+ * seuls les agents (INHP, points d'entrée, districts) puissent vérifier les
+ * QR codes des voyageurs.
+ *
+ * Cette page conserve l'UX d'origine (caméra ou collage de token), mais elle
+ * est désormais derrière le middleware Next.js qui route le hostname
+ * `admin.veillesanitaire.com` vers cette section.
+ */
+
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Camera, FileSearch, ShieldAlert, ShieldCheck, ShieldX } from 'lucide-react';
-import { Section } from '@/components/ui/Section';
 import { api, extractApiError } from '@/lib/api';
 
 const Scanner = dynamic(
@@ -14,11 +26,11 @@ const Scanner = dynamic(
 interface VerifyResult {
   is_valid: boolean;
   reason?: string;
-  payload?: any;
+  payload?: Record<string, unknown>;
   online_checked?: boolean;
 }
 
-export default function VerifierPage() {
+export default function AdminVerifierPage() {
   const [mode, setMode] = useState<'camera' | 'paste'>('camera');
   const [token, setToken] = useState('');
   const [result, setResult] = useState<VerifyResult | null>(null);
@@ -40,11 +52,20 @@ export default function VerifierPage() {
   };
 
   return (
-    <Section
-      eyebrow="Contrôle sanitaire"
-      title="Vérifier un Pass Sanitaire"
-      description="Scannez le QR code du voyageur ou collez le token reçu. La signature est vérifiée cryptographiquement."
-    >
+    <div className="space-y-6">
+      <header className="flex flex-col gap-1">
+        <span className="text-xs uppercase tracking-widest text-ciOrange font-bold">
+          Contrôle sanitaire
+        </span>
+        <h1 className="font-display text-2xl md:text-3xl font-black text-ciDark dark:text-emerald-100">
+          Vérifier un Pass Sanitaire
+        </h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-3xl">
+          Scannez le QR code du voyageur ou collez le token reçu. La signature est vérifiée
+          cryptographiquement (Ed25519) et l'état en ligne est contrôlé contre la base.
+        </p>
+      </header>
+
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="card p-6 space-y-4">
           <div className="inline-flex rounded-xl border border-slate-300 dark:border-slate-700 p-1">
@@ -107,12 +128,22 @@ export default function VerifierPage() {
           {busy && <div className="card p-10 animate-pulse h-40" />}
 
           {result && (
-            <div className={`card p-6 ${result.is_valid ? 'border-emerald-200 dark:border-emerald-900' : 'border-rose-200 dark:border-rose-900'}`}>
+            <div
+              className={`card p-6 ${
+                result.is_valid
+                  ? 'border-emerald-200 dark:border-emerald-900'
+                  : 'border-rose-200 dark:border-rose-900'
+              }`}
+            >
               <div className="flex items-center gap-3">
                 {result.is_valid ? (
-                  <div className="h-12 w-12 rounded-xl bg-emerald-600 text-white grid place-items-center"><ShieldCheck className="h-6 w-6" /></div>
+                  <div className="h-12 w-12 rounded-xl bg-emerald-600 text-white grid place-items-center">
+                    <ShieldCheck className="h-6 w-6" />
+                  </div>
                 ) : (
-                  <div className="h-12 w-12 rounded-xl bg-rose-600 text-white grid place-items-center"><ShieldX className="h-6 w-6" /></div>
+                  <div className="h-12 w-12 rounded-xl bg-rose-600 text-white grid place-items-center">
+                    <ShieldX className="h-6 w-6" />
+                  </div>
                 )}
                 <div>
                   <div className="font-display text-xl font-bold">
@@ -145,15 +176,15 @@ export default function VerifierPage() {
           )}
         </div>
       </div>
-    </Section>
+    </div>
   );
 }
 
-function Row({ label, value }: { label: string; value?: any }) {
+function Row({ label, value }: { label: string; value?: unknown }) {
   return (
     <div className="flex justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-1.5 last:border-0">
       <span className="text-slate-500">{label}</span>
-      <span className="font-medium text-right">{value ?? '—'}</span>
+      <span className="font-medium text-right">{value == null ? '—' : String(value)}</span>
     </div>
   );
 }

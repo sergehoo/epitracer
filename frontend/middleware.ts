@@ -20,13 +20,14 @@ const PUBLIC_PATHS = [
   '/',
   '/voyageur',
   '/pass',
-  '/verifier',
   '/assistance',
 ];
 
 const ADMIN_PATHS = [
   '/dashboard',
   '/surveillance',
+  '/relations',
+  '/verifier',       // scanner QR — réservé aux agents (INHP, points d'entrée).
   '/points-entree',
   '/districts',
   '/alertes',
@@ -34,6 +35,7 @@ const ADMIN_PATHS = [
   '/maladies',
   '/formulaires',
   '/utilisateurs',
+  '/visites',
   '/auth',
 ];
 

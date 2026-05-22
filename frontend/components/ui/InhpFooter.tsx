@@ -53,7 +53,6 @@ export function InhpFooter() {
           <ul className="space-y-2 text-sm text-emerald-100/90">
             <li><Link href="/voyageur" className="hover:text-ciOrange transition">Préparer mon arrivée</Link></li>
             <li><Link href="/pass" className="hover:text-ciOrange transition">Consulter mon pass</Link></li>
-            <li><Link href="/verifier" className="hover:text-ciOrange transition">Scanner un QR code</Link></li>
             <li><Link href="/assistance" className="hover:text-ciOrange transition">Conseils sanitaires</Link></li>
           </ul>
         </div>

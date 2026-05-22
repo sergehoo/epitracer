@@ -11,13 +11,12 @@
 // bundle au prochain chargement. Sans ce bump, les clients avec le SW
 // installé continueraient à servir les anciens chunks (et donc les anciennes
 // URLs comme http://localhost:8000) depuis le cache "cache first".
-const CACHE = 'epitrace-v5-contact';
+const CACHE = 'epitrace-v6-admin-only-verifier';
 
 const STATIC_ASSETS = [
   '/',
   '/voyageur',
   '/pass',
-  '/verifier',
   '/assistance',
   '/manifest.webmanifest',
   '/icons/icon-192.svg',
