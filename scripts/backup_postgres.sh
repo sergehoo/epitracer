@@ -50,23 +50,24 @@ COMPOSE_FILE_BASE=${COMPOSE_FILE_BASE:-docker-compose.yml}
 COMPOSE_FILE_PROD=${COMPOSE_FILE_PROD:-docker-compose.prod.yml}
 COMPOSE_PROJECT=${COMPOSE_PROJECT:-$(basename "$REPO_DIR")}
 DB_SERVICE=${DB_SERVICE:-db}
-# Détection automatique du user/DB depuis l'env du container db si rien
-# n'est passé : c'est la vérité de référence (le container a été initialisé
-# avec ces credentials au premier docker-compose up).
-if [ -z "${POSTGRES_USER:-}" ] || [ -z "${POSTGRES_DB:-}" ]; then
-  DETECTED_USER=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
-                   --project-name "$COMPOSE_PROJECT" \
-                   exec -T "$DB_SERVICE" \
-                   sh -c 'echo $POSTGRES_USER' 2>/dev/null | tr -d '\r')
-  DETECTED_DB=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
-                  --project-name "$COMPOSE_PROJECT" \
-                  exec -T "$DB_SERVICE" \
-                  sh -c 'echo $POSTGRES_DB' 2>/dev/null | tr -d '\r')
-  POSTGRES_USER=${POSTGRES_USER:-$DETECTED_USER}
-  POSTGRES_DB=${POSTGRES_DB:-$DETECTED_DB}
-fi
-DB_USER=${POSTGRES_USER:-epitrace}
-DB_NAME=${POSTGRES_DB:-epitrace}
+
+# Détection automatique du user/DB depuis l'env RUNTIME du container db.
+# C'est la SEULE source fiable : postgres n'initialise les rôles qu'au
+# premier `up` du volume `db_data`. Si on a changé `.env` après coup,
+# le rôle réel reste celui d'origine. Interroger le container donne
+# toujours la vraie valeur.
+# On peut forcer manuellement via FORCE_POSTGRES_USER / FORCE_POSTGRES_DB.
+DETECTED_USER=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
+                 --project-name "$COMPOSE_PROJECT" \
+                 exec -T "$DB_SERVICE" \
+                 sh -c 'echo $POSTGRES_USER' 2>/dev/null | tr -d '\r\n' || true)
+DETECTED_DB=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
+                --project-name "$COMPOSE_PROJECT" \
+                exec -T "$DB_SERVICE" \
+                sh -c 'echo $POSTGRES_DB' 2>/dev/null | tr -d '\r\n' || true)
+
+DB_USER=${FORCE_POSTGRES_USER:-${DETECTED_USER:-${POSTGRES_USER:-epitrace}}}
+DB_NAME=${FORCE_POSTGRES_DB:-${DETECTED_DB:-${POSTGRES_DB:-epitrace}}}
 METRICS_DIR=${METRICS_DIR:-/var/lib/node_exporter/textfile_collector}
 # Cible distante optionnelle (S3 via aws CLI, ou rsync over SSH)
 REMOTE_TARGET=${REMOTE_TARGET:-}   # ex: "s3://epitrace-backups/postgres/" ou "user@host:/srv/backups/"
@@ -105,6 +106,7 @@ EOF
 
 START_TS=$(date +%s)
 log "Démarrage backup → $DUMP_FILE"
+log "Credentials utilisés : user=$DB_USER, db=$DB_NAME, project=$COMPOSE_PROJECT"
 
 # ---- pg_dump dans le container db ----
 if ! docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \

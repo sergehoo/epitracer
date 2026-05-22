@@ -42,21 +42,20 @@ COMPOSE_FILE_BASE=${COMPOSE_FILE_BASE:-docker-compose.yml}
 COMPOSE_FILE_PROD=${COMPOSE_FILE_PROD:-docker-compose.prod.yml}
 COMPOSE_PROJECT=${COMPOSE_PROJECT:-$(basename "$REPO_DIR")}
 DB_SERVICE=${DB_SERVICE:-db}
-# Auto-detect depuis le container si pas dans .env
-if [ -z "${POSTGRES_USER:-}" ] || [ -z "${POSTGRES_DB:-}" ]; then
-  DETECTED_USER=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
-                   --project-name "$COMPOSE_PROJECT" \
-                   exec -T "$DB_SERVICE" \
-                   sh -c 'echo $POSTGRES_USER' 2>/dev/null | tr -d '\r')
-  DETECTED_DB=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
-                  --project-name "$COMPOSE_PROJECT" \
-                  exec -T "$DB_SERVICE" \
-                  sh -c 'echo $POSTGRES_DB' 2>/dev/null | tr -d '\r')
-  POSTGRES_USER=${POSTGRES_USER:-$DETECTED_USER}
-  POSTGRES_DB=${POSTGRES_DB:-$DETECTED_DB}
-fi
-DB_USER=${POSTGRES_USER:-epitrace}
-DB_NAME=${POSTGRES_DB:-epitrace}
+
+# Toujours interroger le container db (vérité runtime).
+DETECTED_USER=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
+                 --project-name "$COMPOSE_PROJECT" \
+                 exec -T "$DB_SERVICE" \
+                 sh -c 'echo $POSTGRES_USER' 2>/dev/null | tr -d '\r\n' || true)
+DETECTED_DB=$(docker compose -f "$COMPOSE_FILE_BASE" -f "$COMPOSE_FILE_PROD" \
+                --project-name "$COMPOSE_PROJECT" \
+                exec -T "$DB_SERVICE" \
+                sh -c 'echo $POSTGRES_DB' 2>/dev/null | tr -d '\r\n' || true)
+
+DB_USER=${FORCE_POSTGRES_USER:-${DETECTED_USER:-${POSTGRES_USER:-epitrace}}}
+DB_NAME=${FORCE_POSTGRES_DB:-${DETECTED_DB:-${POSTGRES_DB:-epitrace}}}
+echo "Credentials utilisés : user=$DB_USER, db=$DB_NAME, project=$COMPOSE_PROJECT"
 
 # ---- Confirmation interactive ----
 if [ "$FORCE" != "--force" ]; then
