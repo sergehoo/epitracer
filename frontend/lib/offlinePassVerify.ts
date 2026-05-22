@@ -18,10 +18,10 @@
  */
 
 import * as ed from '@noble/ed25519';
-import { sha512 } from '@noble/hashes/sha2';
 
-// ed25519@2.x nécessite que sha512 soit fourni manuellement (sync)
-ed.hashes.sha512 = sha512;
+// @noble/ed25519@2.x : verifyAsync utilise WebCrypto natif (crypto.subtle)
+// disponible dans tous les navigateurs modernes et Node 16+. Aucune
+// configuration sha512 manuelle n'est nécessaire avec verifyAsync.
 
 const TOKEN_PREFIX = 'EPMS1';
 const STORAGE_KEY = 'epitrace:pubkey:ed25519';
