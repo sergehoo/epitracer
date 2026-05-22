@@ -7,6 +7,7 @@ import {
   Download, FileBadge2, FileText, MapPin, ShieldAlert, ShieldCheck, Smartphone,
 } from 'lucide-react';
 import { Section } from '@/components/ui/Section';
+import { VoyageurSubnav } from '@/components/public/VoyageurSubnav';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { Companion21Days } from '@/components/public/Companion21Days';
 import { PassportUploader } from '@/components/public/PassportUploader';
@@ -97,6 +98,8 @@ export default function PassDetailPage() {
       title={`Bonjour ${t.full_name}`}
       description={`Votre identifiant voyageur : ${t.public_id}`}
     >
+      <VoyageurSubnav publicId={t.public_id} />
+
       {justIssued && (
         <div className="mb-6 rounded-2xl bg-gradient-to-r from-emerald-50 to-orange-50 border border-emerald-200 dark:border-emerald-900 p-5 flex items-start gap-3">
           <ShieldCheck className="h-6 w-6 text-emerald-700 mt-0.5" />

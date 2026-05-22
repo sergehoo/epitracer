@@ -230,7 +230,7 @@ def raise_alert_from_checkin(
     }
     summary = title_by_sev.get(severity, "Check-in à surveiller")
 
-    return HealthAlert.objects.create(
+    alert = HealthAlert.objects.create(
         code=f"CHK-{traveler.public_id}",
         title=f"{summary} — {traveler.public_id}",
         description="\n".join(reasons),
@@ -239,3 +239,11 @@ def raise_alert_from_checkin(
         target_ct=ContentType.objects.get_for_model(traveler),
         target_id=traveler.pk,
     )
+    # Broadcast WebSocket vers le dashboard admin (Channels). Best-effort —
+    # si Redis/channel_layer indispo, l'alerte est créée en DB de toute façon.
+    try:
+        from apps.surveillance.services import broadcast_alert
+        broadcast_alert(alert)
+    except Exception:  # noqa: BLE001
+        pass
+    return alert

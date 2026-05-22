@@ -12,6 +12,7 @@ import {
   RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { api, extractApiError } from '@/lib/api';
+import { NationalOverview } from '@/components/dashboard/NationalOverview';
 
 /* ============================================================
    Types
@@ -196,6 +197,10 @@ export default function DashboardPage() {
      ============================================================ */
   return (
     <div className="space-y-6 animate-fade-up">
+      {/* ============ Bandeau premium temps réel (Phase 4) ============ */}
+      {/* Branché sur /api/v1/analytics/national/ — agrégation 1 appel. */}
+      <NationalOverview />
+
       {/* ============ HERO BANNER ============ */}
       <section className="relative overflow-hidden rounded-3xl border border-emerald-900/20 bg-gradient-to-br from-ciDark via-emerald-900 to-emerald-950 text-white shadow-card">
         {/* bande tricolore CI */}

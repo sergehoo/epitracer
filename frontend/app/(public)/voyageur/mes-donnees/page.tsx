@@ -19,6 +19,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Database, Download, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { Section } from '@/components/ui/Section';
+import { VoyageurSubnav } from '@/components/public/VoyageurSubnav';
 import { FieldGroup } from '@/components/form/Field';
 import { api, API_URL } from '@/lib/api';
 import { recordConsent, type ConsentScope } from '@/lib/companion';
@@ -122,6 +123,8 @@ function MesDonneesPageContent() {
       title="Mes données et mes choix"
       description="Consultez ce que nous stockons à votre sujet, retirez un consentement, ou téléchargez l'ensemble de vos données."
     >
+      <VoyageurSubnav publicId={data?.traveler.public_id} />
+
       {!data && (
         <div className="card p-6 max-w-xl mx-auto">
           <FieldGroup

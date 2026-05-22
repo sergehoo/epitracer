@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Section } from '@/components/ui/Section';
 import { Companion21Days } from '@/components/public/Companion21Days';
+import { VoyageurSubnav } from '@/components/public/VoyageurSubnav';
 import { FieldGroup, YesNo } from '@/components/form/Field';
 import {
   CONSENT_VERSION, fetchFollowUpStatus, recordConsent, submitCheckin,
@@ -234,6 +235,8 @@ function SuiviPageContent() {
       title="Comment vous sentez-vous aujourd'hui ?"
       description="Prenez quelques secondes pour nous donner de vos nouvelles. Vos informations restent confidentielles et nous permettent de mieux vous accompagner."
     >
+      <VoyageurSubnav publicId={status?.traveler.public_id} />
+
       {/* ID input */}
       {!status && (
         <div className="card p-6 max-w-xl mx-auto">

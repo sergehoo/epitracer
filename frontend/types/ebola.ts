@@ -17,8 +17,8 @@ export interface SectionVoyage {
   arrival_time?: string;          // HH:MM
   transport_mode?: TransportMode;
   flight_or_voyage_number: string;
-  // OBLIGATOIRE : nécessaire au contact-tracing entre passagers voisins.
-  seat_number: string;
+  // Optionnel — utile pour le contact-tracing mais pas bloquant.
+  seat_number?: string;
   entry_point_code: string;       // ex: ABJ-AIRPORT
 }
 

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { QrCode, Search } from 'lucide-react';
 import { Section } from '@/components/ui/Section';
+import { VoyageurSubnav } from '@/components/public/VoyageurSubnav';
 
 export default function PassLookupPage() {
   const router = useRouter();
@@ -26,6 +27,8 @@ export default function PassLookupPage() {
       title="Récupérez votre pass numérique"
       description="Saisissez votre identifiant voyageur (TRV-…) reçu lors de l'enregistrement pour consulter votre pass et son QR code."
     >
+      <VoyageurSubnav />
+
       <div className="card p-6 lg:p-10 max-w-2xl">
         <form onSubmit={submit} className="space-y-4">
           <label className="field-label">Identifiant voyageur</label>

@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Activity, Building2, BarChart3, ChevronLeft, FormInput, HeartPulse,
-  LayoutDashboard, Map, MapPin, Network, QrCode, Siren, Stethoscope, Users,
+  Activity, Building2, BarChart3, Bell, ChevronLeft, FileText, FormInput,
+  HeartPulse, LayoutDashboard, Map, MapPin, Network, QrCode, Settings,
+  ShieldAlert, Siren, Stethoscope, Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/lib/sidebarStore';
@@ -13,16 +14,20 @@ const NAV = [
   { href: '/dashboard',         label: 'Dashboard',         icon: LayoutDashboard },
   { href: '/surveillance',      label: 'Surveillance',      icon: Activity },
   { href: '/suivi-voyageurs',   label: 'Suivi voyageurs',   icon: HeartPulse },
+  { href: '/checkins',          label: 'Check-ins',         icon: Bell },
   { href: '/verifier',          label: 'Vérifier un pass',  icon: QrCode },
   { href: '/relations',         label: 'Relations',         icon: Network },
-  { href: '/points-entree', label: "Points d'entrée",   icon: MapPin },
-  { href: '/districts',     label: 'Districts',         icon: Building2 },
-  { href: '/alertes',       label: 'Alertes',           icon: Siren },
-  { href: '/cartographie',  label: 'Cartographie',      icon: Map },
-  { href: '/maladies',      label: 'Maladies',          icon: Stethoscope },
-  { href: '/formulaires',   label: 'Formulaires',       icon: FormInput },
-  { href: '/utilisateurs',  label: 'Utilisateurs',      icon: Users },
-  { href: '/visites',       label: 'Visites',           icon: BarChart3 },
+  { href: '/points-entree',     label: "Points d'entrée",   icon: MapPin },
+  { href: '/districts',         label: 'Districts',         icon: Building2 },
+  { href: '/alertes',           label: 'Alertes',           icon: Siren },
+  { href: '/cartographie',      label: 'Cartographie',      icon: Map },
+  { href: '/maladies',          label: 'Maladies',          icon: Stethoscope },
+  { href: '/formulaires',       label: 'Formulaires',       icon: FormInput },
+  { href: '/utilisateurs',      label: 'Utilisateurs',      icon: Users },
+  { href: '/visites',           label: 'Visites',           icon: BarChart3 },
+  { href: '/rapports',          label: 'Rapports',          icon: FileText },
+  { href: '/audit-logs',        label: 'Audit logs',        icon: ShieldAlert },
+  { href: '/parametres',        label: 'Paramètres',        icon: Settings },
 ];
 
 export function Sidebar() {

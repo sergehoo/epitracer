@@ -27,6 +27,7 @@ const ADMIN_PATHS = [
   '/dashboard',
   '/surveillance',
   '/suivi-voyageurs',
+  '/checkins',
   '/voyageurs',      // détail voyageur côté admin (itinéraire, etc.)
   '/relations',
   '/verifier',       // scanner QR — réservé aux agents (INHP, points d'entrée).
@@ -38,6 +39,9 @@ const ADMIN_PATHS = [
   '/formulaires',
   '/utilisateurs',
   '/visites',
+  '/rapports',
+  '/audit-logs',
+  '/parametres',
   '/auth',
 ];
 

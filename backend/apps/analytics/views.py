@@ -87,6 +87,159 @@ class DashboardOverviewView(APIView):
         return Response(data)
 
 
+class NationalDashboardView(APIView):
+    """Endpoint d'agrégation COMPLET pour le tableau de bord national.
+
+    GET /api/v1/analytics/national/
+
+    Une seule requête HTTP renvoie tout ce dont la page /dashboard a besoin :
+    KPIs, série temporelle 14j, top 5 points d'entrée, répartitions, alertes
+    récentes. Cache 60s pour éviter la pression DB en cas de rechargement
+    répété de la page.
+    """
+
+    permission_classes = [IsAuthenticated, HasRole]
+    required_roles = [
+        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
+        RoleCode.DISTRICT, RoleCode.ENTRY_POINT, RoleCode.OBSERVER,
+    ]
+
+    def get(self, request):
+        cache_key = "dashboard:national:v3"
+        data = cache.get(cache_key)
+        if data is not None:
+            return Response(data)
+
+        now = timezone.now()
+        today = now.date()
+        last_24h = now - timedelta(hours=24)
+        last_7d = now - timedelta(days=7)
+        last_14d = now - timedelta(days=14)
+        last_48h = now - timedelta(hours=48)
+
+        # ------------------------------------------------------------------
+        # KPIs principaux
+        # ------------------------------------------------------------------
+        kpis = {
+            "travelers_today": Traveler.objects.filter(created_at__date=today).count(),
+            "travelers_total": Traveler.objects.count(),
+            "active_followups": QuarantineRecord.objects.filter(
+                status__in=[QuarantineStatus.ACTIVE, "EXTENDED"],
+            ).count(),
+            "passes_issued": HealthPass.objects.count(),
+            "passes_active": HealthPass.objects.filter(status="active").count(),
+            "alerts_open": HealthAlert.objects.filter(status__in=["OPEN", "ACK", "INVESTIGATING"]).count(),
+            "alerts_critical_24h": HealthAlert.objects.filter(
+                severity__iexact="critical", created_at__gte=last_24h,
+            ).count(),
+            "high_risk_travelers": Traveler.objects.filter(
+                current_health_status__in=["suspect", "confirmed"],
+            ).count(),
+        }
+
+        # Check-ins (DailyCheck via quarantine)
+        try:
+            from apps.quarantine.models import DailyCheck
+            kpis["checkins_today"] = DailyCheck.objects.filter(check_date=today).count()
+            kpis["checkins_with_symptoms_today"] = DailyCheck.objects.filter(
+                check_date=today, has_symptoms=True,
+            ).count()
+            # Missed = quarantines actives sans daily_check récent
+            active_quars = QuarantineRecord.objects.filter(
+                status__in=[QuarantineStatus.ACTIVE, "EXTENDED"],
+            )
+            kpis["checkins_missed_48h"] = active_quars.exclude(
+                daily_checks__check_date__gte=last_48h.date(),
+            ).count()
+        except Exception:  # noqa: BLE001
+            kpis["checkins_today"] = 0
+            kpis["checkins_with_symptoms_today"] = 0
+            kpis["checkins_missed_48h"] = 0
+
+        # ------------------------------------------------------------------
+        # Série temporelle 14 jours
+        # ------------------------------------------------------------------
+        timeline_raw = (
+            Traveler.objects.filter(created_at__gte=last_14d)
+            .annotate(d=TruncDate("created_at"))
+            .values("d").annotate(count=Count("id")).order_by("d")
+        )
+        timeline_map = {row["d"].isoformat(): row["count"] for row in timeline_raw}
+        timeline = []
+        for i in range(14, -1, -1):
+            d = (today - timedelta(days=i)).isoformat()
+            timeline.append({"date": d, "travelers": timeline_map.get(d, 0)})
+
+        # ------------------------------------------------------------------
+        # Top 5 points d'entrée (7 derniers jours)
+        # ------------------------------------------------------------------
+        top_entry_points = list(
+            Traveler.objects.filter(created_at__gte=last_7d, entry_point__isnull=False)
+            .values("entry_point__name", "entry_point__code")
+            .annotate(count=Count("id")).order_by("-count")[:6]
+        )
+
+        # ------------------------------------------------------------------
+        # Top pays de provenance (via TravelHistoryEntry role=origin)
+        # ------------------------------------------------------------------
+        try:
+            from apps.travelers.models import TravelHistoryEntry
+            top_origins = list(
+                TravelHistoryEntry.objects.filter(
+                    role="origin", created_at__gte=last_14d,
+                ).values("country__code", "country__name")
+                .annotate(count=Count("id")).order_by("-count")[:6]
+            )
+        except Exception:  # noqa: BLE001
+            top_origins = []
+
+        # ------------------------------------------------------------------
+        # Répartition statuts sanitaires
+        # ------------------------------------------------------------------
+        statuses = dict(
+            Traveler.objects.values_list("current_health_status")
+            .annotate(c=Count("id")).values_list("current_health_status", "c")
+        )
+
+        # ------------------------------------------------------------------
+        # Répartition niveau de risque (Ebola)
+        # ------------------------------------------------------------------
+        risk_levels = dict(
+            EbolaInvestigation.objects.values_list("risk_level")
+            .annotate(c=Count("id")).values_list("risk_level", "c")
+        )
+
+        # ------------------------------------------------------------------
+        # Alertes récentes (10 dernières non clôturées)
+        # ------------------------------------------------------------------
+        recent_alerts = [
+            {
+                "id": str(a.uuid),
+                "code": a.code,
+                "title": a.title,
+                "severity": a.severity,
+                "status": a.status,
+                "created_at": a.created_at.isoformat(),
+            }
+            for a in HealthAlert.objects.filter(
+                status__in=["OPEN", "ACK", "INVESTIGATING"],
+            ).order_by("-created_at")[:10]
+        ]
+
+        data = {
+            "kpis": kpis,
+            "timeline": timeline,
+            "top_entry_points": top_entry_points,
+            "top_origins": top_origins,
+            "statuses": statuses,
+            "risk_levels": risk_levels,
+            "recent_alerts": recent_alerts,
+            "generated_at": now.isoformat(),
+        }
+        cache.set(cache_key, data, timeout=60)
+        return Response(data)
+
+
 class EntryPointFlowsView(APIView):
     permission_classes = [IsAuthenticated, HasRole]
     required_roles = [

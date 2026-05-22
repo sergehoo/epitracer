@@ -13,9 +13,11 @@ export const voyageSchema = z.object({
     errorMap: () => ({ message: 'Sélectionnez un moyen de transport.' }),
   }),
   flight_or_voyage_number: z.string().min(1, 'N° de vol / moyen de transport obligatoire.'),
-  // Le numéro de siège est OBLIGATOIRE pour permettre la traçabilité des
-  // contacts à proximité dans l'avion / bateau / bus.
-  seat_number: z.string().min(1, 'N° de siège obligatoire (utilisé pour le contact-tracing).'),
+  // Numéro de siège — OPTIONNEL. Renseigné si possible pour faciliter le
+  // contact-tracing entre passagers voisins en cas d'alerte sanitaire, mais
+  // beaucoup de voyageurs ne le retiennent pas ou ne l'ont pas (bus / bateau
+  // / voiture privée). On ne bloque pas l'enregistrement pour cela.
+  seat_number: z.string().optional().default(''),
   entry_point_code: z.string().min(1, 'Point d\'entrée obligatoire.'),
 });
 

@@ -11,6 +11,7 @@
  */
 
 import { Section } from '@/components/ui/Section';
+import { VoyageurSubnav } from '@/components/public/VoyageurSubnav';
 import { ShieldCheck, Eye, Database, Trash2, MapPin } from 'lucide-react';
 import { CONSENT_VERSION } from '@/lib/companion';
 
@@ -21,6 +22,8 @@ export default function ConfidentialitePage() {
       title="Politique de confidentialité"
       description={`Version ${CONSENT_VERSION} — applicable au moment de votre consentement.`}
     >
+      <VoyageurSubnav />
+
       <div className="prose dark:prose-invert max-w-3xl mx-auto space-y-6 text-sm">
         <Block
           icon={<ShieldCheck className="h-5 w-5 text-emerald-600" />}

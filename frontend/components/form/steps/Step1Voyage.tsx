@@ -58,10 +58,9 @@ export function Step1Voyage({ onNext }: { onNext: () => void }) {
 
       <FieldRow>
         <FieldGroup
-          label="N° de Siège"
-          required
+          label="N° de Siège (optionnel)"
           error={errors.seat_number?.message}
-          help="Indispensable pour identifier les passagers à proximité en cas d'alerte sanitaire."
+          help="Si vous le connaissez — utile pour identifier les passagers à proximité en cas de besoin."
         >
           <input className="input" placeholder="ex : 14A" {...register('seat_number')} />
         </FieldGroup>

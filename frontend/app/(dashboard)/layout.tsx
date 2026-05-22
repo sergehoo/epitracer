@@ -5,10 +5,16 @@ import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Topbar } from '@/components/dashboard/Topbar';
 import { getAccess } from '@/lib/api';
+import { useRealtimeAlerts } from '@/lib/useRealtimeAlerts';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+
+  // Branchement WebSocket temps réel — affiche un toast à chaque nouvelle
+  // HealthAlert reçue (cliquable vers /alertes). Best-effort, ne casse
+  // pas l'app si le WS est indispo.
+  useRealtimeAlerts();
 
   useEffect(() => {
     const t = getAccess();

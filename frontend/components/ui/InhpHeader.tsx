@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
@@ -13,6 +14,20 @@ const PUBLIC_NAV = [
   { href: '#urgence', label: 'Assistance' },
   { href: '#faq', label: 'FAQ' },
 ];
+
+/**
+ * Résout un lien d'ancre (#section) en fonction de la page courante :
+ * - sur "/" → "#section" (scroll local) ;
+ * - ailleurs → "/#section" (navigue d'abord à l'accueil puis scrolle).
+ *
+ * Sans ce résolveur, cliquer "Accompagnement" depuis /voyageur/suivi
+ * tente d'aller à /voyageur/suivi#accompagnement qui n'existe pas.
+ */
+function resolveAnchorHref(href: string, currentPath: string | null): string {
+  if (!href.startsWith('#')) return href;
+  if (currentPath === '/') return href;
+  return `/${href}`; // ex : "#ebola" → "/#ebola"
+}
 const ADMIN_NAV = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/surveillance', label: 'Surveillance' },
@@ -36,6 +51,7 @@ export function InhpHeader({ variant = 'public' }: { variant?: 'public' | 'dashb
 function PublicHeader({
   open, setOpen, nav,
 }: { open: boolean; setOpen: (b: boolean) => void; nav: { href: string; label: string }[] }) {
+  const pathname = usePathname();
   return (
     <header className="fixed inset-x-0 top-0 z-50 glass border-b border-white/70 dark:border-emerald-950/60">
       <div className="bg-gradient-to-r from-ciOrange via-ciGold to-ciGreen text-white text-[10px] uppercase tracking-widest">
@@ -69,7 +85,11 @@ function PublicHeader({
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-700 dark:text-slate-200">
           {nav.map((n) => (
-            <a key={n.href} href={n.href} className="hover:text-ciOrange transition relative group">
+            <a
+              key={n.href}
+              href={resolveAnchorHref(n.href, pathname)}
+              className="hover:text-ciOrange transition relative group"
+            >
               {n.label}
               <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-ciOrange to-ciGreen scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
             </a>
@@ -108,7 +128,12 @@ function PublicHeader({
       {open && (
         <div className="md:hidden px-6 pb-5 space-y-3 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800">
           {nav.map((n) => (
-            <a key={n.href} href={n.href} onClick={() => setOpen(false)} className="block font-semibold py-2">
+            <a
+              key={n.href}
+              href={resolveAnchorHref(n.href, pathname)}
+              onClick={() => setOpen(false)}
+              className="block font-semibold py-2"
+            >
               {n.label}
             </a>
           ))}
