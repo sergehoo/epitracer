@@ -45,11 +45,16 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
-      # Router HTTPS API
-      - "traefik.http.routers.epitrace-api.rule=Host(`${API_HOST:-api.veillesanitaire.com}`)"
+      # Router HTTPS API — capture TOUT sauf /ws/* qui va sur channels.
+      # Sans le !PathPrefix(/ws), web et channels se battaient sur la même
+      # règle Host(api.veillesanitaire.com) et Traefik en choisissait un
+      # au hasard → WebSocket cassée en boucle d'échec côté navigateur.
+      - "traefik.http.routers.epitrace-api.rule=Host(`${API_HOST:-api.veillesanitaire.com}`) && !PathPrefix(`/ws`)"
       - "traefik.http.routers.epitrace-api.entrypoints=websecure"
       - "traefik.http.routers.epitrace-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
       - "traefik.http.services.epitrace-api.loadbalancer.server.port=8000"
+      # Priorité explicite pour éviter toute ambiguïté (web < channels)
+      - "traefik.http.routers.epitrace-api.priority=10"
       # Middlewares sécurité + compression
       - "traefik.http.middlewares.epitrace-api-compress.compress=true"
       - "traefik.http.middlewares.epitrace-api-sec.headers.stsSeconds=31536000"
@@ -60,6 +65,9 @@ services:
       - "traefik.http.routers.epitrace-api.middlewares=epitrace-api-compress,epitrace-api-sec"
 
   # --- WebSocket / Channels ----------------------------------------------
+  # Routes /ws/* (et seulement /ws/*) vers Daphne ASGI sur port 8001.
+  # Le routeur a une priorité plus haute que celui de web pour gagner
+  # l'arbitrage Traefik en cas de match concurrent.
   channels:
     ports: []
     networks: [default, proxy]
@@ -67,10 +75,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
-      - "traefik.http.routers.epitrace-ws.rule=Host(`${WS_HOST:-api.veillesanitaire.com}`)"
+      - "traefik.http.routers.epitrace-ws.rule=Host(`${WS_HOST:-api.veillesanitaire.com}`) && PathPrefix(`/ws`)"
       - "traefik.http.routers.epitrace-ws.entrypoints=websecure"
       - "traefik.http.routers.epitrace-ws.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
       - "traefik.http.services.epitrace-ws.loadbalancer.server.port=8001"
+      - "traefik.http.routers.epitrace-ws.priority=100"
 
   # --- Frontend Next.js (deux hostnames : public + admin) ---------------
   # IMPORTANT : ces variables doivent être présentes AU BUILD pour que Next.js
