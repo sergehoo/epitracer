@@ -21,8 +21,14 @@ class HealthAlertViewSet(viewsets.ModelViewSet):
     filterset_fields = ["severity", "status", "disease", "entry_point", "zone"]
     search_fields = ["code", "title", "description"]
 
+    # Le frontend admin référence les alertes par leur UUID (URL publique
+    # /alertes/<uuid>), pas par leur PK numérique interne. On expose donc
+    # l'UUID comme lookup primaire.
+    lookup_field = "uuid"
+    lookup_value_regex = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+
     @action(detail=True, methods=["post"], url_path="acknowledge")
-    def acknowledge(self, request, pk=None):
+    def acknowledge(self, request, uuid=None):
         alert = self.get_object()
         alert.status = "ack"
         alert.acknowledged_by = request.user

@@ -198,18 +198,31 @@ def evaluate_checkin_severity(symptoms: dict) -> tuple[str, list[str]]:
     return "INFO", []
 
 
+#: Fenêtre de silence anti-spam pour les alertes répétées d'un même voyageur
+#: avec la même sévérité. Au-delà, une nouvelle alerte autonome est créée.
+ALERT_DEDUP_WINDOW_HOURS = 4
+
+
 def raise_alert_from_checkin(
     *, traveler, symptoms: dict, location: TravelerLocationPing | None = None,
     needs_assistance: bool = False,
 ) -> object | None:
     """Crée une HealthAlert si nécessaire à partir d'un check-in.
 
-    Retourne l'instance HealthAlert créée, ou None si rien à signaler.
-    Le HealthAlert est mis sur le voyageur (target générique). L'app
-    surveillance gère la suite (notification dashboard, assignation
-    équipe, etc.).
+    Comportement :
+      * Inférence automatique de `disease` et `entry_point` depuis le
+        voyageur (quarantaine la plus récente + point d'arrivée).
+      * **Anti-spam** : si une alerte de même sévérité est déjà ouverte
+        pour ce voyageur dans les `ALERT_DEDUP_WINDOW_HOURS` précédentes,
+        on n'en crée pas une nouvelle. On incrémente plutôt
+        `metadata.duplicate_count` et on enregistre l'historique des
+        répétitions (limité aux 20 derniers événements).
+      * Retourne l'instance HealthAlert (créée OU mise à jour), ou None
+        si la sévérité évaluée est INFO.
     """
+    from datetime import timedelta
     from django.contrib.contenttypes.models import ContentType
+    from django.utils import timezone
     from apps.surveillance.models import HealthAlert
 
     if needs_assistance:
@@ -229,15 +242,57 @@ def raise_alert_from_checkin(
         "LOW": "Symptôme isolé",
     }
     summary = title_by_sev.get(severity, "Check-in à surveiller")
+    trv_ct = ContentType.objects.get_for_model(traveler)
 
+    # -------- Anti-spam : dédoublonnage 4h, même voyageur + même sévérité ----
+    now = timezone.now()
+    cutoff = now - timedelta(hours=ALERT_DEDUP_WINDOW_HOURS)
+    existing = (
+        HealthAlert.objects
+        .filter(
+            target_ct=trv_ct,
+            target_id=str(traveler.pk),
+            severity=severity,
+            status__in=["open", "ack", "investigating", "OPEN", "ACK", "INVESTIGATING"],
+            created_at__gte=cutoff,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if existing:
+        meta = existing.metadata or {}
+        meta["duplicate_count"] = int(meta.get("duplicate_count") or 0) + 1
+        meta["last_repeat_at"] = now.isoformat()
+        repeats = list(meta.get("repeat_reasons") or [])
+        repeats.append({"at": now.isoformat(), "reasons": reasons})
+        meta["repeat_reasons"] = repeats[-20:]
+        existing.metadata = meta
+        existing.save(update_fields=["metadata", "updated_at"])
+        return existing
+
+    # -------- Inférer disease + entry_point depuis le voyageur ---------------
+    disease = None
+    try:
+        qr = traveler.quarantines.order_by("-started_on").first()
+        if qr and qr.disease_id:
+            disease = qr.disease
+    except Exception:  # noqa: BLE001 — voyageur sans relation quarantines
+        disease = None
+
+    entry_point = traveler.entry_point if getattr(traveler, "entry_point_id", None) else None
+
+    # -------- Création de l'alerte -------------------------------------------
     alert = HealthAlert.objects.create(
         code=f"CHK-{traveler.public_id}",
         title=f"{summary} — {traveler.public_id}",
         description="\n".join(reasons),
         severity=severity,
         status="OPEN",
-        target_ct=ContentType.objects.get_for_model(traveler),
-        target_id=traveler.pk,
+        disease=disease,
+        entry_point=entry_point,
+        target_ct=trv_ct,
+        target_id=str(traveler.pk),
+        metadata={"alert_type": alert_type, "duplicate_count": 0},
     )
     # Broadcast WebSocket vers le dashboard admin (Channels). Best-effort —
     # si Redis/channel_layer indispo, l'alerte est créée en DB de toute façon.
