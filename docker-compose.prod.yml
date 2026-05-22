@@ -73,10 +73,20 @@ services:
   # Service explicite `epitrace-ws` + le router `epitrace-api` ci-dessus
   # référence explicitement son propre service `epitrace-api` pour éviter
   # toute ambiguïté de matching service↔router côté Traefik.
+  #
+  # CRITIQUE : on overrride le HEALTHCHECK hérité du Dockerfile (qui teste
+  # gunicorn sur 8000) → ici on test Daphne sur 8001. Sans ça, Docker marque
+  # le container `unhealthy` et Traefik DÉSACTIVE le router en silence.
   channels:
     ports: []
     networks: [default, proxy]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8001/healthz/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
@@ -86,6 +96,16 @@ services:
       - "traefik.http.routers.epitrace-ws.priority=100"
       - "traefik.http.routers.epitrace-ws.service=epitrace-ws"
       - "traefik.http.services.epitrace-ws.loadbalancer.server.port=8001"
+
+  # Worker Celery et Beat : pas de port HTTP exposé → on désactive le
+  # HEALTHCHECK hérité du Dockerfile pour éviter le statut `unhealthy`.
+  worker:
+    healthcheck:
+      test: ["NONE"]
+
+  beat:
+    healthcheck:
+      test: ["NONE"]
 
   # --- Frontend Next.js (deux hostnames : public + admin) ---------------
   # IMPORTANT : ces variables doivent être présentes AU BUILD pour que Next.js
