@@ -13,7 +13,7 @@
  * PWA voyageur.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -47,7 +47,17 @@ interface DataSummary {
   };
 }
 
+// Wrapper Suspense requis (Next.js 14 + useSearchParams) — voir
+// /voyageur/suivi/page.tsx pour l'explication détaillée.
 export default function MesDonneesPage() {
+  return (
+    <Suspense fallback={<div className="card p-10 animate-pulse h-72" />}>
+      <MesDonneesPageContent />
+    </Suspense>
+  );
+}
+
+function MesDonneesPageContent() {
   const params = useSearchParams();
   const [publicId, setPublicId] = useState('');
   const [data, setData] = useState<DataSummary | null>(null);

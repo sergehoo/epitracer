@@ -14,7 +14,7 @@
  * "vos nouvelles") — pas de "surveillance" ni "quarantaine" affichés.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -45,7 +45,19 @@ const SYMPTOM_KEYS = [
 
 const LS_KEY = 'epi.suivi.last_public_id';
 
+// Wrapper Suspense — requis par Next.js 14 dès qu'on utilise
+// useSearchParams() dans un Client Component avec rendu statique. Sans ce
+// wrapper, le build casse avec "useSearchParams() should be wrapped in a
+// suspense boundary".
 export default function SuiviPage() {
+  return (
+    <Suspense fallback={<div className="card p-10 animate-pulse h-72" />}>
+      <SuiviPageContent />
+    </Suspense>
+  );
+}
+
+function SuiviPageContent() {
   const params = useSearchParams();
   const [publicId, setPublicId] = useState<string>('');
   const [status, setStatus] = useState<FollowUpStatus | null>(null);
