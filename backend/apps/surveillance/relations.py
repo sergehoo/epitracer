@@ -133,6 +133,16 @@ class TravelerRelationsView(APIView):
             except (TypeError, ValueError):
                 pass
 
+        # GARDE PERFORMANCE : limite dure à 5000 voyageurs récents.
+        # Au-delà, le graphe D3 frontend devient injouable et la mémoire
+        # serveur grimpe. Pour des analyses plus larges, utiliser un
+        # paramètre `days` plus restrictif ou interroger directement
+        # l'entrepôt analytique.
+        MAX_TRAVELERS = 5000
+        total_count = qs.count()
+        truncated = total_count > MAX_TRAVELERS
+        qs = qs[:MAX_TRAVELERS]
+
         travelers = list(qs[:5000])
         if not travelers:
             return Response({
@@ -337,6 +347,9 @@ class TravelerRelationsView(APIView):
                 "total_travelers": len(travelers),
                 "by_type": by_type,
                 "total_clusters": len(clusters),
+                "truncated": truncated,
+                "total_in_db": total_count,
+                "max_per_query": MAX_TRAVELERS,
             },
             "filters": {
                 "type": type_filter or None,

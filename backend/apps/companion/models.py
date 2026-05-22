@@ -255,6 +255,62 @@ class TravelerLocationPing(BaseModel):
 # ============================================================================
 
 
+class DataRetentionPolicy(BaseModel):
+    """Politique de rétention configurable.
+
+    Permet à un admin national de modifier les délais sans redéploiement.
+    En production, on peut avoir UNE seule politique active à un instant T,
+    versionée pour audit (RGPD : démontrer la traçabilité de la décision).
+    """
+
+    name = models.CharField(_("Nom"), max_length=120, default="Politique par défaut")
+    is_active = models.BooleanField(_("Active"), default=True, db_index=True)
+    # Délai (jours) après clôture du suivi pour purger / anonymiser
+    followup_retention_days = models.PositiveIntegerField(
+        _("Délai après clôture (jours)"), default=30,
+        help_text=_("Délai entre la fin du suivi 21j et l'anonymisation effective."),
+    )
+    location_retention_days = models.PositiveIntegerField(
+        _("Conservation des positions (jours)"), default=90,
+        help_text=_("Les pings GPS plus anciens sont purgés indépendamment du suivi."),
+    )
+    audit_log_retention_years = models.PositiveSmallIntegerField(
+        _("Conservation des logs d'audit (années)"), default=5,
+    )
+    description = models.TextField(_("Justification"), blank=True)
+
+    class Meta(BaseModel.Meta):
+        verbose_name = _("Politique de rétention des données")
+        verbose_name_plural = _("Politiques de rétention")
+
+    def __str__(self) -> str:
+        return f"{self.name} ({'active' if self.is_active else 'archivée'})"
+
+
+class DataPurgeLog(BaseModel):
+    """Journal des purges effectuées par la tâche Celery.
+
+    Append-only. Permet de démontrer à un régulateur que les données
+    ont bien été supprimées dans le délai annoncé.
+    """
+
+    traveler_id = models.BigIntegerField(_("ID interne (avant purge)"), null=True, blank=True)
+    traveler_public_id = models.CharField(_("Public ID"), max_length=32, blank=True, db_index=True)
+    policy = models.ForeignKey(
+        DataRetentionPolicy, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="purges",
+    )
+    pings_deleted = models.PositiveIntegerField(default=0)
+    subs_disabled = models.PositiveIntegerField(default=0)
+    email_redacted = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
+
+    class Meta(BaseModel.Meta):
+        verbose_name = _("Journal de purge")
+        verbose_name_plural = _("Journal de purges")
+        ordering = ["-created_at"]
+
+
 class DataAccessLog(BaseModel):
     """Trace de chaque accès à des données sensibles (positions, contacts,
     pièce d'identité). Obligatoire pour répondre à un éventuel droit

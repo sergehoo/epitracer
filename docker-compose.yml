@@ -111,6 +111,8 @@ services:
       - keys_data:/app/keys
       - media_data:/app/media
       - staticfiles_data:/app/staticfiles
+      # Backups écrits par la tâche Celery core.run_postgres_backup
+      - backups_data:/backups
 
   beat:
     build:
@@ -158,3 +160,7 @@ volumes:
   keys_data:
   media_data:
   staticfiles_data:
+  # Dumps PostgreSQL produits par scripts/backup_postgres.sh ou Celery.
+  # En prod, à monter en bind-mount sur le disque secondaire ou à syncer
+  # vers S3/Backblaze (voir scripts/backup_postgres.sh + REMOTE_TARGET).
+  backups_data:

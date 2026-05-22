@@ -234,6 +234,10 @@ REST_FRAMEWORK = {
         "anon": "60/min",
         "login": "10/min",
         "qr_verify": "300/min",
+        # Consultation publique d'un pass par public_id — protégé contre
+        # l'énumération brute (30/min par IP est largement suffisant pour
+        # un usage légitime, et bloque un scanner massif).
+        "qr_verify_public": "30/min",
         # Companion : limites généreuses pour la PWA, plus serrées
         # sur les pings de localisation pour éviter le tracking abusif.
         "companion_checkin": "12/hour",

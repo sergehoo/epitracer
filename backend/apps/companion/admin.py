@@ -1,6 +1,22 @@
 from django.contrib import admin
 
-from .models import DataAccessLog, PrivacyConsent, PushSubscription, TravelerLocationPing
+from .models import (
+    DataAccessLog, DataPurgeLog, DataRetentionPolicy,
+    PrivacyConsent, PushSubscription, TravelerLocationPing,
+)
+
+
+@admin.register(DataRetentionPolicy)
+class DataRetentionPolicyAdmin(admin.ModelAdmin):
+    list_display = ("name", "is_active", "followup_retention_days", "location_retention_days")
+    list_filter = ("is_active",)
+
+
+@admin.register(DataPurgeLog)
+class DataPurgeLogAdmin(admin.ModelAdmin):
+    list_display = ("traveler_public_id", "created_at", "pings_deleted", "subs_disabled")
+    search_fields = ("traveler_public_id",)
+    readonly_fields = [f.name for f in DataPurgeLog._meta.fields]
 
 
 @admin.register(PrivacyConsent)

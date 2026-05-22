@@ -366,9 +366,17 @@ def _public_instructions(investigation: EbolaInvestigation) -> dict:
 
 
 class PublicPassConsultView(APIView):
-    """Consultation publique du statut + pass d'un voyageur par son public_id."""
+    """Consultation publique du statut + pass d'un voyageur par son public_id.
+
+    SÉCURITÉ : rate-limit `qr_verify_public` (30/min/IP) pour éviter
+    l'énumération du public_id. Combiné aux 12+ chars aléatoires du
+    public_id (~70 bits entropie), un attaquant ne peut pas brute-forcer
+    le namespace en un temps raisonnable.
+    """
 
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "qr_verify_public"
 
     def get(self, request, public_id: str):
         traveler = get_object_or_404(Traveler, public_id=public_id)

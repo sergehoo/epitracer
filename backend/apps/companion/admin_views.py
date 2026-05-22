@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Exists, F, Max, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework import status as http_status
 from rest_framework.response import Response
@@ -58,34 +58,63 @@ class FollowupsOverviewView(APIView):
     required_roles = ALLOWED_ROLES
 
     def get(self, request):
-        from apps.quarantine.models import QuarantineRecord, QuarantineStatus
+        from apps.quarantine.models import DailyCheck, QuarantineRecord, QuarantineStatus
         from apps.surveillance.models import HealthAlert
 
-        active = QuarantineRecord.objects.filter(
-            status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
-        ).select_related("traveler", "traveler__entry_point")
-
         today = date.today()
-        checked_today = active.filter(daily_checks__check_date=today).distinct().count()
-        # On considère "manqué 48h" si dernier check-in > 48h ou aucun depuis 48h post-création
-        cutoff = today - timedelta(days=2)
-        missed_48h = (
-            active.annotate(last_check=Max("daily_checks__check_date"))
-            .filter(Q(last_check__lt=cutoff) | Q(last_check__isnull=True))
-            .count()
-        )
-        open_alerts = HealthAlert.objects.filter(status__in=["OPEN", "ACK", "INVESTIGATING"]).count()
-        recent_locations = TravelerLocationPing.objects.filter(
-            captured_at__gte=today - timedelta(days=7),
-        ).values("traveler").distinct().count()
+        cutoff_48h = today - timedelta(days=2)
+        cutoff_7d = today - timedelta(days=7)
 
-        # Liste (limitée à 200 pour ne pas exploser la réponse)
+        # --- OPTIMISATION : 1 requête annotée au lieu de 400 boucle Python.
+        # Subqueries pour last_check_date, last_check_feeling, has_symptoms,
+        # last_location_at. Tout est exécuté en SQL côté Postgres.
+
+        last_check_sq = (
+            DailyCheck.objects.filter(quarantine=OuterRef("pk"))
+            .order_by("-check_date")
+        )
+        last_ping_sq = (
+            TravelerLocationPing.objects.filter(traveler=OuterRef("traveler"))
+            .order_by("-captured_at")
+        )
+
+        active = (
+            QuarantineRecord.objects
+            .filter(status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED])
+            .select_related("traveler", "traveler__entry_point")
+            .annotate(
+                last_check_date=Subquery(last_check_sq.values("check_date")[:1]),
+                last_check_has_symptoms=Subquery(last_check_sq.values("has_symptoms")[:1]),
+                last_check_details=Subquery(last_check_sq.values("symptoms_details")[:1]),
+                last_location_at=Subquery(last_ping_sq.values("captured_at")[:1]),
+            )
+            .order_by("-started_on")
+        )
+
+        # KPIs en 1 agrégat (sans matérialiser le queryset complet)
+        kpis_qs = active.aggregate(
+            active_count=Count("id"),
+            checked_today=Count("id", filter=Q(last_check_date=today)),
+            missed_48h=Count("id", filter=Q(last_check_date__lt=cutoff_48h) | Q(last_check_date__isnull=True)),
+        )
+        kpis = {
+            "active": kpis_qs["active_count"] or 0,
+            "checked_today": kpis_qs["checked_today"] or 0,
+            "missed_48h": kpis_qs["missed_48h"] or 0,
+            "open_alerts": HealthAlert.objects.filter(
+                status__in=["OPEN", "ACK", "INVESTIGATING"],
+            ).count(),
+            "with_recent_location": TravelerLocationPing.objects
+                .filter(captured_at__gte=cutoff_7d)
+                .values("traveler").distinct().count(),
+        }
+
+        # Liste (limitée à 200) — itération sur queryset annoté → 1 SQL
         rows = []
-        for q in active.order_by("-started_on")[:200]:
+        for q in active[:200]:
             t = q.traveler
-            last_check = q.daily_checks.order_by("-check_date").first()
-            last_ping = t.location_pings.order_by("-captured_at").first()
             day_index = max(0, (today - q.started_on).days)
+            feeling = (q.last_check_details or {}).get("feeling") if q.last_check_details else None
             rows.append({
                 "public_id": t.public_id,
                 "full_name": t.full_name,
@@ -94,26 +123,14 @@ class FollowupsOverviewView(APIView):
                 "started_on": q.started_on,
                 "day_index": day_index,
                 "total_days": (q.expected_end_on - q.started_on).days,
-                "last_check_date": last_check.check_date if last_check else None,
-                "last_check_feeling": (
-                    (last_check.symptoms_details or {}).get("feeling")
-                    if last_check else None
-                ),
-                "has_symptoms": bool(last_check.has_symptoms) if last_check else False,
-                "last_location_at": last_ping.captured_at if last_ping else None,
+                "last_check_date": q.last_check_date,
+                "last_check_feeling": feeling,
+                "has_symptoms": bool(q.last_check_has_symptoms),
+                "last_location_at": q.last_location_at,
                 "current_health_status": t.current_health_status,
             })
 
-        return Response({
-            "kpis": {
-                "active": active.count(),
-                "checked_today": checked_today,
-                "missed_48h": missed_48h,
-                "open_alerts": open_alerts,
-                "with_recent_location": recent_locations,
-            },
-            "rows": rows,
-        })
+        return Response({"kpis": kpis, "rows": rows})
 
 
 # ============================================================================

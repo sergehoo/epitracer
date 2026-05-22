@@ -50,6 +50,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    postgresql-client \
     libjpeg62-turbo \
     libpng16-16 \
     libfreetype6 \

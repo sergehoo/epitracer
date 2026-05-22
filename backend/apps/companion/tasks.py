@@ -200,6 +200,88 @@ def send_completion_messages(self) -> dict[str, int]:
 # ============================================================================
 
 
+@shared_task(name="companion.purge_closed_followups")
+def purge_closed_followups(retention_days: int = 30, dry_run: bool = False) -> dict:
+    """Purge / anonymise les données voyageur après la fin du suivi (J+30).
+
+    Conforme à la loi 2013-450 (CI) et au RGPD : on conserve les données
+    le strict nécessaire à la mission. Une fois le suivi 21j clôturé
+    + 30 jours de tolérance, on :
+
+    1. **Anonymise** le Traveler (nom, contact, document) — on garde
+       l'enregistrement pour les statistiques mais sans PII.
+    2. **Supprime** les pings GPS associés (hard delete).
+    3. **Désactive** les push subscriptions.
+    4. **Conserve** les HealthAlert et DataAccessLog (audit).
+
+    Note : le `DataPurgeLog` est créé pour tracer chaque purge.
+    Pour un test, passer `dry_run=True` — aucune écriture en DB.
+    """
+    from datetime import timedelta
+    from apps.quarantine.models import QuarantineRecord, QuarantineStatus
+    from apps.travelers.models import Traveler
+    from .models import DataPurgeLog
+
+    cutoff = timezone.now() - timedelta(days=retention_days)
+    # Quarantaines clôturées (COMPLETED ou CANCELLED) il y a >= retention_days
+    closed = QuarantineRecord.objects.filter(
+        status__in=[QuarantineStatus.COMPLETED, "CANCELLED"],
+        actual_end_on__isnull=False,
+        updated_at__lt=cutoff,
+    ).select_related("traveler")
+
+    stats = {"candidates": 0, "anonymized": 0, "pings_deleted": 0, "subs_disabled": 0}
+
+    for q in closed:
+        t = q.traveler
+        if not t or "ANON-" in (t.last_name or ""):
+            continue  # déjà anonymisé
+        stats["candidates"] += 1
+
+        if dry_run:
+            continue
+
+        # Hard delete des pings (déjà inutiles, contiennent des positions)
+        pings_count = t.location_pings.count()
+        t.location_pings.all().delete()
+        stats["pings_deleted"] += pings_count
+
+        # Désactivation soft des push subscriptions
+        n_subs = t.push_subscriptions.filter(is_active=True).update(is_active=False)
+        stats["subs_disabled"] += n_subs
+
+        # Anonymisation des champs PII du Traveler (on garde la ligne pour stats)
+        old_email = t.email
+        Traveler.objects.filter(pk=t.pk).update(
+            last_name=f"ANON-{t.public_id}",
+            first_name="—",
+            middle_name="",
+            email="",
+            phone_mobile="",
+            whatsapp_phone="",
+            id_document_number="",
+            postal_address="",
+            confinement_street_number="",
+            confinement_lot="",
+            confinement_hotel="",
+            confinement_room_number="",
+            emergency_phone_ci="",
+        )
+
+        DataPurgeLog.objects.create(
+            traveler_id=t.pk,
+            traveler_public_id=t.public_id,
+            policy_id=None,
+            pings_deleted=pings_count,
+            subs_disabled=n_subs,
+            email_redacted=bool(old_email),
+        )
+        stats["anonymized"] += 1
+
+    logger.info("purge_closed_followups: %s (dry_run=%s)", stats, dry_run)
+    return stats
+
+
 @shared_task(name="companion.cleanup_stale_push_subscriptions")
 def cleanup_stale_push_subscriptions(days: int = 90) -> dict[str, int]:
     """Désactive (soft) les subscriptions qui n'ont pas été utilisées avec

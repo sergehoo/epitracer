@@ -44,6 +44,25 @@ app.conf.beat_schedule = {
         "task": "companion.cleanup_stale_push_subscriptions",
         "schedule": crontab(hour=3, minute=0, day_of_week=0),
     },
+    # Purge RGPD hebdomadaire des voyageurs dont le suivi est clôturé > 30j.
+    # Anonymisation + suppression des pings GPS. Dimanche à 03:30.
+    "companion-purge-closed-followups": {
+        "task": "companion.purge_closed_followups",
+        "schedule": crontab(hour=3, minute=30, day_of_week=0),
+    },
+    # ---- Maintenance core ----
+    # Backup PostgreSQL quotidien à 02:00 UTC. Préférer le cron host pour
+    # plus de robustesse — voir scripts/backup_postgres.sh. La tâche Celery
+    # est un fallback qui dépend de la présence de pg_dump dans le worker.
+    "core-postgres-backup": {
+        "task": "core.run_postgres_backup",
+        "schedule": crontab(hour=2, minute=0),
+    },
+    # Rotation des audit logs > 5 ans, mensuel (1er du mois à 04:00).
+    "core-rotate-audit-logs": {
+        "task": "core.rotate_old_audit_logs",
+        "schedule": crontab(day_of_month=1, hour=4, minute=0),
+    },
 }
 
 

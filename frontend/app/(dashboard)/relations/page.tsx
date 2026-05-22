@@ -1,11 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import {
   Filter, Home, MapPin, Pause, Phone, Plane, Play, RefreshCcw, Search, Users, X,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
-import { ForceGraph, type ClusterShape, type ClusterType } from '@/components/dashboard/ForceGraph';
+import type { ClusterShape, ClusterType } from '@/components/dashboard/ForceGraph';
+
+// D3 (180 KB) chargé uniquement quand la page Relations est ouverte.
+// ssr:false évite l'évaluation côté serveur (Node sans canvas).
+const ForceGraph = dynamic(
+  () => import('@/components/dashboard/ForceGraph').then((m) => m.ForceGraph),
+  { ssr: false, loading: () => <div className="h-[600px] animate-pulse bg-slate-100 dark:bg-slate-900 rounded-2xl" /> },
+);
 
 interface RelationsResp {
   clusters: ClusterShape[];
