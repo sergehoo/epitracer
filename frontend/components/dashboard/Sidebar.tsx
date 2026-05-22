@@ -55,9 +55,7 @@ export function Sidebar() {
         ) : (
           <>
             <img src="/logo-min-sante-2.png" alt="MSHPCMU" className="h-9 w-9 object-contain" />
-            <img src="/armoirie-ci-2.png" alt="Armoiries CI" className="h-9 w-9 object-contain" />
-            <img src="/logo-INHP.png" alt="INHP" className="h-7 w-auto object-contain" />
-            <Link href="/dashboard" className="ml-1 leading-tight">
+             <Link href="/dashboard" className="ml-1 leading-tight">
               <div className="font-display font-black text-sm text-ciDark dark:text-emerald-200">
                 EpiTrace CI
               </div>

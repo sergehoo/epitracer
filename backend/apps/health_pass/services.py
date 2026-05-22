@@ -119,26 +119,29 @@ def render_pass_pdf(hp: HealthPass, token: str) -> bytes:
     logo_size = 18 * mm
     logo_y = height - 8 * mm - header_h / 2 - logo_size / 2
 
-    # Logo MSHPCMU à gauche
+    # Disposition officielle : MSHPCMU (gauche) · INHP (centre) · Armoirie (droite)
+    cx_center = width / 2
+
+    # Logo MSHPCMU à l'extrême gauche
     mshpcmu = get_mshpcmu_logo()
     if mshpcmu:
         c.drawImage(mshpcmu, 6 * mm, logo_y, logo_size, logo_size,
                     preserveAspectRatio=True, mask="auto")
 
-    # Emblème (armoiries CI) au centre
-    armoirie = get_armoirie_logo()
-    cx_center = width / 2
-    if armoirie:
-        c.drawImage(armoirie, cx_center - logo_size / 2, logo_y, logo_size, logo_size,
-                    preserveAspectRatio=True, mask="auto")
-    else:
-        draw_ci_emblem(c, cx_center, logo_y + logo_size / 2, logo_size / 2)
-
-    # Logo INHP à droite
+    # Logo INHP au centre
     inhp = get_inhp_logo()
     if inhp:
-        c.drawImage(inhp, width - 6 * mm - logo_size, logo_y,
+        c.drawImage(inhp, cx_center - logo_size / 2, logo_y, logo_size, logo_size,
+                    preserveAspectRatio=True, mask="auto")
+
+    # Armoirie de la République à droite
+    armoirie = get_armoirie_logo()
+    if armoirie:
+        c.drawImage(armoirie, width - 6 * mm - logo_size, logo_y,
                     logo_size, logo_size, preserveAspectRatio=True, mask="auto")
+    else:
+        draw_ci_emblem(c, width - 6 * mm - logo_size / 2,
+                       logo_y + logo_size / 2, logo_size / 2)
 
     # Textes d'en-tête (sous les logos, centrés)
     text_top = logo_y - 1 * mm
@@ -278,7 +281,15 @@ def render_official_form_pdf(traveler: Traveler) -> bytes:
 
     story: list = []
 
-    # En-tête République + 3 logos officiels (MSHPCMU · Armoiries · INHP)
+    # ====================================================================
+    # EN-TÊTE OFFICIEL — disposition à 3 colonnes équi-largeur
+    #   ┌──────────────┬──────────────┬──────────────┐
+    #   │   MSHPCMU    │     INHP     │   ARMOIRIE   │
+    #   │ (ministère)  │  (institut)  │  (république)│
+    #   └──────────────┴──────────────┴──────────────┘
+    #   Sous l'en-tête : pavé légendes (MSHPCMU + INHP + devise),
+    #   puis le titre du document SUR SA PROPRE LIGNE.
+    # ====================================================================
     from .branding import LOGO_ARMOIRIE, LOGO_INHP, LOGO_MSHPCMU
 
     def _img(path, w=20 * mm, h=20 * mm):
@@ -287,69 +298,86 @@ def render_official_form_pdf(traveler: Traveler) -> bytes:
         except Exception:
             return Paragraph("&nbsp;", BODY)
 
-    header_left = Table(
+    # Largeur utile de page (A4 - 2*16mm de marge = 178 mm)
+    PAGE_W = 178 * mm
+    LOGO_BOX = 22 * mm    # hauteur réservée pour chaque logo
+    COL_W = PAGE_W / 3.0  # 3 colonnes équi-largeur
+
+    H_LABEL = ParagraphStyle(
+        "HLabel", parent=styles["Normal"], fontSize=7.5, leading=9,
+        textColor=SLATE_500, alignment=1,  # centré
+    )
+
+    # Ligne 1 : les 3 logos sur la même rangée
+    logos_row = Table(
         [[
-            _img(LOGO_MSHPCMU, 20 * mm, 20 * mm),
-            Paragraph(
-                f"<b>{HEADER_TOP}</b><br/>"
-                f"<i>{HEADER_MOTTO}</i><br/>"
-                f"<font color='#064E3B'><b>{HEADER_MINISTRY}</b> — {HEADER_MINISTRY_FULL}</font><br/>"
-                f"<font color='#64748B'>{HEADER_INHP}</font><br/>"
-                f"<font color='#64748B' size=7>{INHP_CONTACT}</font>",
-                BODY,
-            ),
+            _img(LOGO_MSHPCMU, LOGO_BOX, LOGO_BOX),
+            _img(LOGO_INHP, LOGO_BOX, LOGO_BOX),
+            _img(LOGO_ARMOIRIE, LOGO_BOX, LOGO_BOX),
         ]],
-        colWidths=[22 * mm, 132 * mm],
+        colWidths=[COL_W, COL_W, COL_W],
         style=TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("ALIGN", (0, 0), (0, -1), "LEFT"),    # MSHPCMU collé à gauche
+            ("ALIGN", (1, 0), (1, -1), "CENTER"),  # INHP au centre
+            ("ALIGN", (2, 0), (2, -1), "RIGHT"),   # Armoirie collée à droite
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
         ]),
     )
 
-    header_right = _img(LOGO_INHP, 24 * mm, 22 * mm)
-
-    story.append(Table(
-        [[header_left, header_right]],
-        colWidths=[154 * mm, 24 * mm],
+    # Ligne 2 : libellés sous chaque logo (alignés avec leur colonne)
+    labels_row = Table(
+        [[
+            Paragraph(f"<b>{HEADER_MINISTRY}</b><br/>"
+                      f"<font size=6.5 color='#64748B'>{HEADER_MINISTRY_FULL}</font>", H_LABEL),
+            Paragraph(f"<b>INHP</b><br/>"
+                      f"<font size=6.5 color='#64748B'>Institut National d'Hygiène Publique</font>", H_LABEL),
+            Paragraph(f"<b>RÉPUBLIQUE DE CÔTE D'IVOIRE</b><br/>"
+                      f"<font size=6.5 color='#64748B'><i>{HEADER_MOTTO}</i></font>", H_LABEL),
+        ]],
+        colWidths=[COL_W, COL_W, COL_W],
         style=TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("BOX", (0, 0), (-1, -1), 0.5, CI_DARK),
-            ("LINEBELOW", (0, 0), (-1, -1), 0.5, CI_ORANGE),
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFFBEB")),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]),
+    )
+
+    # Assemblage en-tête : logos puis libellés, encadré ligne orange dessous.
+    story.append(Table(
+        [[logos_row], [labels_row]],
+        colWidths=[PAGE_W],
+        style=TableStyle([
+            ("LINEBELOW", (0, -1), (-1, -1), 0.7, CI_ORANGE),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ]),
     ))
+    story.append(Spacer(1, 8))
 
-    # Bandeau central avec armoiries (sous l'en-tête)
-    story.append(Spacer(1, 4))
-    story.append(Table(
-        [[_img(LOGO_ARMOIRIE, 14 * mm, 14 * mm),
-          Paragraph("<b><font size=9 color='#064E3B'>EMBLÈME DE LA RÉPUBLIQUE</font></b>", BODY)]],
-        colWidths=[16 * mm, 162 * mm],
-        style=TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ]),
-    ))
-    story.append(Spacer(1, 6))
-
-    # Titres
+    # ====================================================================
+    # TITRE DU DOCUMENT — sur sa propre ligne, centré
+    # ====================================================================
     story.append(Paragraph("SURVEILLANCE DE LA MALADIE À VIRUS ÉBOLA (MVE)", H_TITLE))
     story.append(Paragraph("FICHE DE RENSEIGNEMENT PASSAGER", H_TITLE))
     story.append(Paragraph(
         "(À remplir obligatoirement par tout passager à l'arrivée sur le territoire national)",
         H_SUB,
     ))
+    story.append(Spacer(1, 3))
     story.append(Paragraph(
         f"<i>Document généré le {timezone.now().strftime('%d/%m/%Y à %H:%M')} — "
         f"identifiant voyageur <b>{traveler.public_id}</b></i>", SMALL,
     ))
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 10))
 
     def kv_table(rows, col1=58 * mm, col2=120 * mm):
         wrapped = []

@@ -56,6 +56,9 @@ api_v1_patterns = [
 
     # --- Companion ADMIN (suivi voyageurs, itinéraire, carte) ---
     path("admin/companion/", include("apps.companion.admin_urls")),
+
+    # --- Centre de rapports (exports CSV / PDF) ---
+    path("reports/", include("apps.reports.urls")),
 ]
 
 urlpatterns = [
