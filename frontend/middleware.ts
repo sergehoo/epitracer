@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_PATHS = [
   '/',
-  '/voyageur',
+  '/voyageur',           // couvre /voyageur, /voyageur/suivi, /voyageur/confidentialite
   '/pass',
   '/assistance',
 ];
@@ -26,6 +26,8 @@ const PUBLIC_PATHS = [
 const ADMIN_PATHS = [
   '/dashboard',
   '/surveillance',
+  '/suivi-voyageurs',
+  '/voyageurs',      // détail voyageur côté admin (itinéraire, etc.)
   '/relations',
   '/verifier',       // scanner QR — réservé aux agents (INHP, points d'entrée).
   '/points-entree',

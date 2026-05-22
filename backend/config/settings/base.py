@@ -94,6 +94,7 @@ LOCAL_APPS = [
     "apps.notifications",
     "apps.realtime",
     "apps.analytics",
+    "apps.companion",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -233,6 +234,12 @@ REST_FRAMEWORK = {
         "anon": "60/min",
         "login": "10/min",
         "qr_verify": "300/min",
+        # Companion : limites généreuses pour la PWA, plus serrées
+        # sur les pings de localisation pour éviter le tracking abusif.
+        "companion_checkin": "12/hour",
+        "companion_location": "60/hour",
+        "companion_consent": "30/hour",
+        "companion_push": "30/hour",
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_RENDERER_CLASSES": (
@@ -412,6 +419,35 @@ NOTIFICATIONS = {
     "TWILIO_FROM_NUMBER": env("TWILIO_FROM_NUMBER", default=""),
     "WHATSAPP_FROM_NUMBER": env("WHATSAPP_FROM_NUMBER", default=""),
     "FCM_SERVER_KEY": env("FCM_SERVER_KEY", default=""),
+}
+
+# ---------------------------------------------------------------------------
+# Web Push (VAPID) — utilisé par apps.companion pour notifier la PWA voyageur
+# ---------------------------------------------------------------------------
+# Générer la paire de clés une fois via la commande :
+#   python manage.py generate_vapid_keys
+# Les fichiers sont stockés dans le volume `keys_data` (persistant).
+# URL publique racine utilisée pour construire les liens cliquables dans
+# les SMS de fallback (le SMS n'a pas de notion de domaine).
+PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", default="https://destinationci.com")
+
+WEBPUSH = {
+    "VAPID_PRIVATE_KEY_PATH": env(
+        "VAPID_PRIVATE_KEY_PATH",
+        default=str(BASE_DIR / "keys" / "vapid_private.pem"),
+    ),
+    "VAPID_PUBLIC_KEY_PATH": env(
+        "VAPID_PUBLIC_KEY_PATH",
+        default=str(BASE_DIR / "keys" / "vapid_public.pem"),
+    ),
+    # Champ "sub" du JWT VAPID — doit être un mailto: ou https: que le push
+    # service peut contacter en cas de problème (RFC 8292).
+    "VAPID_CLAIM_SUB": env(
+        "VAPID_CLAIM_SUB", default="mailto:info@destinationci.com",
+    ),
+    # Clé publique exposée à l'API publique (`/api/v1/public/push/public-key/`)
+    # pour que la PWA puisse appeler `pushManager.subscribe()` avec.
+    # Calculée automatiquement à partir du PEM par le service.
 }
 
 # ---------------------------------------------------------------------------

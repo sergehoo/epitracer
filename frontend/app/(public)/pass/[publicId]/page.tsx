@@ -221,6 +221,22 @@ export default function PassDetailPage() {
             surveillanceEnd={inv?.surveillance_end}
           />
 
+          {/* Accès rapide à l'espace de check-in quotidien */}
+          <a
+            href={`/voyageur/suivi?id=${t.public_id}`}
+            className="card p-5 block hover:shadow-lg transition bg-gradient-to-br from-emerald-50 to-orange-50 dark:from-emerald-950/30 dark:to-orange-950/20 border-emerald-200/60"
+          >
+            <div className="text-xs uppercase tracking-widest text-emerald-700 font-bold">
+              Espace de suivi
+            </div>
+            <div className="font-display font-black text-ciDark dark:text-emerald-100 mt-1">
+              Donner de mes nouvelles
+            </div>
+            <div className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+              Check-in quotidien · partage facultatif de ma position
+            </div>
+          </a>
+
           <PassportUploader
             publicId={t.public_id}
             hasPassport={t.has_passport}

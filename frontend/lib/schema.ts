@@ -62,10 +62,19 @@ export const confinementSchema = z.object({
   lot: z.string().optional().default(''),
   hotel: z.string().optional().default(''),
   room_number: z.string().optional().default(''),
-  emergency_phone_ci: z.string().regex(phoneRegex, 'Téléphone d\'urgence en CI obligatoire.'),
+  // Téléphone d'urgence en Côte d'Ivoire — désormais OPTIONNEL (le contact
+  // principal passe par WhatsApp). On accepte une chaîne vide ou un format
+  // téléphonique valide ; pas de regex sans permissive si vide.
+  emergency_phone_ci: z.string()
+    .optional()
+    .default('')
+    .refine(
+      (v) => !v || phoneRegex.test(v),
+      { message: 'Numéro de téléphone invalide.' },
+    ),
   // Numéro WhatsApp international (format E.164 : +XXXNNNNNNN). Doit
   // commencer par + et contenir au moins 8 chiffres au total. Obligatoire
-  // pour faciliter le contact en cas de besoin sanitaire.
+  // car c'est désormais le canal de contact principal.
   whatsapp_phone: z.string().regex(/^\+\d{8,15}$/, 'Numéro WhatsApp international obligatoire.'),
   latitude: z.number().optional(),
   longitude: z.number().optional(),

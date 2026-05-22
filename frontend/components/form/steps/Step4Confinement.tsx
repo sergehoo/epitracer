@@ -80,15 +80,6 @@ export function Step4Confinement({ onNext, onBack }: { onNext: () => void; onBac
       </FieldRow>
 
       <FieldRow>
-        <FieldGroup
-          label="Téléphone d'urgence en Côte d'Ivoire"
-          required
-          error={errors.emergency_phone_ci?.message}
-          help="Numéro joignable durant votre séjour (ligne fixe ou mobile)."
-        >
-          <input className="input" placeholder="+225 ..." {...register('emergency_phone_ci')} />
-        </FieldGroup>
-
         <Controller
           name="whatsapp_phone"
           control={control}
@@ -98,7 +89,7 @@ export function Step4Confinement({ onNext, onBack }: { onNext: () => void; onBac
               label="Numéro WhatsApp"
               required
               error={errors.whatsapp_phone?.message}
-              help="Sélectionnez votre pays puis saisissez votre numéro (sans le 0 initial)."
+              help="Canal de contact principal — sélectionnez votre pays puis saisissez votre numéro (sans le 0 initial)."
             >
               <IntlPhoneInput
                 value={field.value || ''}
@@ -108,6 +99,14 @@ export function Step4Confinement({ onNext, onBack }: { onNext: () => void; onBac
             </FieldGroup>
           )}
         />
+
+        <FieldGroup
+          label="Téléphone d'urgence en Côte d'Ivoire (optionnel)"
+          error={errors.emergency_phone_ci?.message}
+          help="Si vous avez un second numéro joignable durant votre séjour."
+        >
+          <input className="input" placeholder="+225 ..." {...register('emergency_phone_ci')} />
+        </FieldGroup>
       </FieldRow>
 
       <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex items-center justify-between gap-4">

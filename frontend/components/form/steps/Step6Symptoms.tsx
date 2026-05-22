@@ -6,13 +6,13 @@ import { FieldGroup, YesNo } from '@/components/form/Field';
 import type { SectionSymptoms } from '@/types/ebola';
 
 const SYMPTOMS: { key: keyof SectionSymptoms; label: string }[] = [
-  { key: 'fever', label: 'Fièvre (≥ 38°C) ou sensation de forte chaleur' },
-  { key: 'intense_fatigue', label: 'Fatigue intense, faiblesse généralisée inexpliquée' },
+  { key: 'fever', label: 'Fièvre (≥ 38°C) ou corps chaud' },
+  { key: 'intense_fatigue', label: 'Fatigue intense, faiblesse généralisée' },
   { key: 'muscle_joint_pain', label: 'Douleurs musculaires, articulaires ou courbatures' },
   { key: 'severe_headache', label: 'Maux de tête intenses (Céphalées)' },
-  { key: 'sore_throat_or_abdominal', label: 'Maux de gorge ou douleurs abdominales (estomac)' },
-  { key: 'diarrhea_nausea_vomiting', label: 'Diarrhée, nausées ou vomissements fréquents' },
-  { key: 'unexplained_bleeding', label: 'Saignements inexpliqués (nez, gencives, peau, urines, selles)' },
+  { key: 'sore_throat_or_abdominal', label: 'Maux de gorge (estomac)' },
+  { key: 'diarrhea_nausea_vomiting', label: 'Diarrhée, nausées ou vomissements ou abdominales' },
+  { key: 'unexplained_bleeding', label: 'Saignements (nez, gencives, peau, urines, selles)' },
 ];
 
 export function Step6Symptoms({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
@@ -37,7 +37,7 @@ export function Step6Symptoms({ onNext, onBack }: { onNext: () => void; onBack: 
       <div>
         <h2 className="font-display text-xl font-bold">6. Comment vous sentez-vous ?</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Indiquez si vous avez ressenti l'un des signes suivants au cours des <strong>48 dernières heures</strong>.
+         Avez vous ressenti l'un des signes suivants au cours des <strong>48 dernières heures</strong>.
           Vos réponses restent confidentielles.
         </p>
       </div>

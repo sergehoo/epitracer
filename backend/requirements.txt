@@ -56,6 +56,11 @@ uvicorn[standard]==0.32.0
 # --- HTTP client (notifications providers) ---
 httpx==0.27.2
 
+# --- Web Push (VAPID, RFC 8030) ---
+# Utilisé par apps.companion pour envoyer des notifications PWA aux
+# navigateurs Chrome/Firefox/Safari/Edge sans passer par FCM/APNS.
+pywebpush==2.0.0
+
 # --- Utilities ---
 python-slugify==8.0.4
 shortuuid==1.0.13

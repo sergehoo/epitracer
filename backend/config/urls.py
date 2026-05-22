@@ -50,6 +50,12 @@ api_v1_patterns = [
 
     # --- Audit ---
     path("audit/", include("apps.audit.urls")),
+
+    # --- Companion (PWA voyageur : check-in, géoloc, push, consentement) ---
+    path("public/", include("apps.companion.urls")),
+
+    # --- Companion ADMIN (suivi voyageurs, itinéraire, carte) ---
+    path("admin/companion/", include("apps.companion.admin_urls")),
 ]
 
 urlpatterns = [
