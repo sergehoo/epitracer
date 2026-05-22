@@ -45,13 +45,17 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
-      # Router HTTPS API — capture api.veillesanitaire.com.
-      # Le routage WebSocket est sur un sous-domaine dédié (WS_HOST,
-      # défaut ws.veillesanitaire.com) pour éviter le conflit Host
-      # observé avec PathPrefix sur certaines versions de Traefik.
+      # Router HTTPS API — capture api.veillesanitaire.com (priorité basse).
+      # Le router WebSocket (service `channels` ci-dessous) a une priorité
+      # plus haute et capture /ws/* avant ce router générique.
+      # Note : le cert pour api.veillesanitaire.com est déjà émis, donc on
+      # fait passer le WS via ce sous-domaine pour éviter d'attendre
+      # un nouveau cert Let's Encrypt (compte ACME actuellement rate-limited).
       - "traefik.http.routers.epitrace-api.rule=Host(`${API_HOST:-api.veillesanitaire.com}`)"
       - "traefik.http.routers.epitrace-api.entrypoints=websecure"
       - "traefik.http.routers.epitrace-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.routers.epitrace-api.priority=10"
+      - "traefik.http.routers.epitrace-api.service=epitrace-api"
       - "traefik.http.services.epitrace-api.loadbalancer.server.port=8000"
       # Middlewares sécurité + compression
       - "traefik.http.middlewares.epitrace-api-compress.compress=true"
@@ -63,10 +67,12 @@ services:
       - "traefik.http.routers.epitrace-api.middlewares=epitrace-api-compress,epitrace-api-sec"
 
   # --- WebSocket / Channels ----------------------------------------------
-  # SOUS-DOMAINE DÉDIÉ : ws.veillesanitaire.com → Daphne ASGI port 8001.
-  # Évite tout conflit avec api.veillesanitaire.com.
-  # PRÉ-REQUIS : créer un A record DNS pour ws.veillesanitaire.com
-  # qui pointe vers la même IP que api.veillesanitaire.com.
+  # Routage via api.veillesanitaire.com/ws/* (réutilise le cert existant).
+  # Priorité 100 > 10 du router epitrace-api → /ws/* va sur Daphne (8001),
+  # tout le reste va sur gunicorn (8000).
+  # Service explicite `epitrace-ws` + le router `epitrace-api` ci-dessus
+  # référence explicitement son propre service `epitrace-api` pour éviter
+  # toute ambiguïté de matching service↔router côté Traefik.
   channels:
     ports: []
     networks: [default, proxy]
@@ -74,9 +80,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
-      - "traefik.http.routers.epitrace-ws.rule=Host(`${WS_HOST:-ws.veillesanitaire.com}`)"
+      - "traefik.http.routers.epitrace-ws.rule=Host(`${API_HOST:-api.veillesanitaire.com}`) && PathPrefix(`/ws`)"
       - "traefik.http.routers.epitrace-ws.entrypoints=websecure"
       - "traefik.http.routers.epitrace-ws.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.routers.epitrace-ws.priority=100"
+      - "traefik.http.routers.epitrace-ws.service=epitrace-ws"
       - "traefik.http.services.epitrace-ws.loadbalancer.server.port=8001"
 
   # --- Frontend Next.js (deux hostnames : public + admin) ---------------
@@ -89,12 +97,12 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_URL: https://${API_HOST:-api.veillesanitaire.com}
-        NEXT_PUBLIC_WS_URL: wss://${WS_HOST:-ws.veillesanitaire.com}
+        NEXT_PUBLIC_WS_URL: wss://${API_HOST:-api.veillesanitaire.com}
         NEXT_PUBLIC_PUBLIC_HOST: ${PUBLIC_HOST:-destinationci.com}
         NEXT_PUBLIC_ADMIN_HOST: ${ADMIN_HOST:-admin.veillesanitaire.com}
     environment:
       NEXT_PUBLIC_API_URL: https://${API_HOST:-api.veillesanitaire.com}
-      NEXT_PUBLIC_WS_URL: wss://${WS_HOST:-ws.veillesanitaire.com}
+      NEXT_PUBLIC_WS_URL: wss://${API_HOST:-api.veillesanitaire.com}
       NEXT_PUBLIC_PUBLIC_HOST: ${PUBLIC_HOST:-destinationci.com}
       NEXT_PUBLIC_ADMIN_HOST: ${ADMIN_HOST:-admin.veillesanitaire.com}
       NODE_ENV: production
@@ -147,14 +155,12 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-    networks: [default, proxy]
+    # Grafana en INTERNE uniquement (réseau default).
+    # Accès depuis l'hôte via tunnel SSH : ssh -L 3000:grafana:3000 root@<host>
+    # Le router Traefik a été retiré tant que le compte Let's Encrypt est
+    # en pause pour échec ACME répétés (cf. docs/RUNBOOK_TRAEFIK.md).
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
-      - "traefik.http.routers.epitrace-grafana.rule=Host(`${GRAFANA_HOST:-grafana.veillesanitaire.com}`)"
-      - "traefik.http.routers.epitrace-grafana.entrypoints=websecure"
-      - "traefik.http.routers.epitrace-grafana.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
-      - "traefik.http.services.epitrace-grafana.loadbalancer.server.port=3000"
+      - "traefik.enable=false"
 
   loki:
     image: grafana/loki:3.2.0
