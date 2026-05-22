@@ -19,18 +19,28 @@
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-# ---- Découverte du repo + chargement du .env ----
-# Le script tente de trouver `.env` à la racine du repo (au-dessus de scripts/).
-# Cela permet de lire automatiquement POSTGRES_USER, POSTGRES_DB, etc. sans
-# que l'opérateur ait à les exporter à la main avec sudo.
+# ---- Découverte du repo + lecture sélective du .env ----
+# On ne fait PAS `source .env` car les .env de docker-compose contiennent
+# souvent des apostrophes / espaces / accents incompatibles avec bash
+# (ex: NATIONAL_ORG_NAME="Ministère de la Santé - Côte d'Ivoire").
+# On extrait uniquement les variables dont on a besoin via grep/awk.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 cd "$REPO_DIR"
+
+read_env_var() {
+  # Récupère une variable depuis .env sans le sourcer.
+  # Strip quotes simples/doubles autour de la valeur.
+  local key="$1"
+  local file="${2:-$REPO_DIR/.env}"
+  [ -f "$file" ] || return 0
+  grep -E "^${key}=" "$file" | head -n 1 | sed -E "s/^${key}=//; s/^['\"]//; s/['\"]\$//"
+}
+
 if [ -f "$REPO_DIR/.env" ]; then
-  # shellcheck disable=SC1091
-  set -o allexport
-  source "$REPO_DIR/.env"
-  set +o allexport
+  POSTGRES_USER=${POSTGRES_USER:-$(read_env_var POSTGRES_USER)}
+  POSTGRES_DB=${POSTGRES_DB:-$(read_env_var POSTGRES_DB)}
+  POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-$(read_env_var POSTGRES_PASSWORD)}
 fi
 
 # ---- Configuration (override via env) ----

@@ -19,14 +19,23 @@ FORCE=${2:-}
 [ -z "$DUMP_FILE" ] && { echo "Usage: $0 <dump.sql.gz> [--force]"; exit 64; }
 [ ! -r "$DUMP_FILE" ] && { echo "Fichier introuvable : $DUMP_FILE"; exit 66; }
 
-# ---- Découverte du repo + chargement du .env ----
+# ---- Découverte du repo + lecture sélective du .env ----
+# On ne source PAS .env (apostrophes/espaces dans certaines valeurs).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 cd "$REPO_DIR"
+
+read_env_var() {
+  local key="$1"
+  local file="${2:-$REPO_DIR/.env}"
+  [ -f "$file" ] || return 0
+  grep -E "^${key}=" "$file" | head -n 1 | sed -E "s/^${key}=//; s/^['\"]//; s/['\"]\$//"
+}
+
 if [ -f "$REPO_DIR/.env" ]; then
-  set -o allexport
-  source "$REPO_DIR/.env"
-  set +o allexport
+  POSTGRES_USER=${POSTGRES_USER:-$(read_env_var POSTGRES_USER)}
+  POSTGRES_DB=${POSTGRES_DB:-$(read_env_var POSTGRES_DB)}
+  POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-$(read_env_var POSTGRES_PASSWORD)}
 fi
 
 COMPOSE_FILE_BASE=${COMPOSE_FILE_BASE:-docker-compose.yml}
