@@ -2,11 +2,13 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Activity, Download, Filter, Layers, MapPin, RefreshCcw, Search, X,
+  ShieldAlert,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
-import type { HeatPoint } from '@/components/dashboard/MapView';
+import type { HeatPoint, ZoneCollection } from '@/components/dashboard/MapView';
 
 const MapView = dynamic(() => import('@/components/dashboard/MapView').then((m) => m.MapView), {
   ssr: false,
@@ -38,20 +40,42 @@ const RISK_OPTS = [
   { value: 'critical', label: 'Critique' },
 ];
 
+const ZONE_LEVELS = [
+  { value: '',         label: 'Tous niveaux' },
+  { value: 'region',   label: 'Régions sanitaires (33)' },
+  { value: 'district', label: 'Districts sanitaires' },
+  { value: 'commune',  label: 'Communes' },
+  { value: 'quartier', label: 'Quartiers' },
+];
+
 export default function CartoPage() {
+  const sp = useSearchParams();
+  const focusZone = sp.get('zone'); // permet le drill-down depuis /districts
+
   const [points, setPoints] = useState<HeatPoint[]>([]);
   const [entryPoints, setEntryPoints] = useState<EntryPoint[]>([]);
+  const [zones, setZones] = useState<ZoneCollection | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingZones, setLoadingZones] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Filtres
+  // Filtres voyageurs
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
   const [entryFilter, setEntryFilter] = useState('');
+
+  // Filtres zones
+  const [showZones, setShowZones] = useState(true);
+  const [zoneLevel, setZoneLevel] = useState<string>('region');
+  const [zonesColorBy, setZonesColorBy] = useState<'risk' | 'level'>('risk');
+
+  // Calques généraux
   const [showEntryPoints, setShowEntryPoints] = useState(true);
+  const [showTravelers, setShowTravelers] = useState(true);
   const [panelOpen, setPanelOpen] = useState(true);
 
+  // Charge voyageurs + entry points
   const load = () => {
     setLoading(true);
     setErr(null);
@@ -60,7 +84,7 @@ export default function CartoPage() {
     if (entryFilter)  params.set('entry_point', entryFilter);
     Promise.allSettled([
       api.get(`/analytics/heatmap/${params.toString() ? '?' + params.toString() : ''}`),
-      api.get('/geo/entry-points/?is_active=true'),
+      api.get('/geo/entry-points/?is_active=true&page_size=100'),
     ])
       .then(([h, e]) => {
         if (h.status === 'fulfilled') setPoints((h.value.data as HeatPoint[]) || []);
@@ -73,10 +97,28 @@ export default function CartoPage() {
       .finally(() => setLoading(false));
   };
 
+  // Charge les zones GeoJSON (seulement si le calque est activé)
+  const loadZones = (level: string) => {
+    if (!showZones) {
+      setZones(null);
+      return;
+    }
+    setLoadingZones(true);
+    const url = level
+      ? `/geo/zones/geojson/?level=${level}`
+      : '/geo/zones/geojson/';
+    api.get(url)
+      .then((r) => setZones(r.data as ZoneCollection))
+      .catch(() => setZones(null))
+      .finally(() => setLoadingZones(false));
+  };
+
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [statusFilter, entryFilter]);
+  useEffect(() => { loadZones(zoneLevel); /* eslint-disable-next-line */ }, [zoneLevel, showZones]);
 
   // Filtres côté client (search + risque)
   const filtered = useMemo(() => {
+    if (!showTravelers) return [];
     return points.filter((p) => {
       if (riskFilter && p.risk_level !== riskFilter) return false;
       if (search) {
@@ -87,18 +129,16 @@ export default function CartoPage() {
       }
       return true;
     });
-  }, [points, riskFilter, search]);
+  }, [points, riskFilter, search, showTravelers]);
 
-  // Statistiques de la carte
+  // Stats
   const stats = useMemo(() => {
     const byStatus: Record<string, number> = {};
-    const byRisk: Record<string, number> = {};
-    filtered.forEach((p) => {
-      byStatus[p.status] = (byStatus[p.status] || 0) + 1;
-      if (p.risk_level) byRisk[p.risk_level] = (byRisk[p.risk_level] || 0) + 1;
-    });
-    return { total: filtered.length, byStatus, byRisk };
-  }, [filtered]);
+    filtered.forEach((p) => { byStatus[p.status] = (byStatus[p.status] || 0) + 1; });
+    const zoneCount = zones?.features.length || 0;
+    const zoneRedCount = zones?.features.filter((f) => ['red', 'critical', 'high'].includes(f.properties.risk_level)).length || 0;
+    return { travelers: filtered.length, byStatus, zoneCount, zoneRedCount };
+  }, [filtered, zones]);
 
   const exportCsv = () => {
     const header = ['public_id', 'full_name', 'status', 'risk_level', 'risk_score',
@@ -115,27 +155,27 @@ export default function CartoPage() {
   };
 
   return (
-    /* Hauteur fixe pour étendre la carte sur tout l'espace disponible */
-    <div className="h-[calc(100vh-4rem-3rem)] flex flex-col gap-3 -m-6 lg:-m-8 p-6 lg:p-8">
+    <div className="h-[calc(100vh-4rem-3rem)] flex flex-col gap-3 -m-3 sm:-m-6 lg:-m-8 p-3 sm:p-6 lg:p-8">
       {/* En-tête compact */}
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <div className="text-[11px] uppercase tracking-widest text-ciOrange font-bold">
             Cartographie nationale
           </div>
-          <h1 className="font-display text-2xl md:text-3xl font-black leading-tight">
-            Répartition géographique des voyageurs
+          <h1 className="font-display text-xl md:text-3xl font-black leading-tight">
+            Répartition géographique
+            {focusZone && <span className="text-base font-bold text-emerald-600 ml-2">— Zone {focusZone}</span>}
           </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+          <div className="relative hidden md:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher nom, ID, ville…"
-              className="input pl-9 min-w-[260px]"
+              placeholder="Rechercher voyageur, ville…"
+              className="input pl-9 min-w-[240px]"
             />
           </div>
           <button onClick={load} className="btn-outline text-sm" title="Actualiser">
@@ -153,19 +193,24 @@ export default function CartoPage() {
         </div>
       )}
 
-      {/* Zone carte + panneau filtres */}
+      {/* Zone carte + panneau */}
       <div className="relative flex-1 min-h-[480px] rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 shadow-card">
         <div className="absolute inset-0">
-          <MapView points={filtered} showEntryPoints={showEntryPoints} />
+          <MapView
+            points={filtered}
+            showEntryPoints={showEntryPoints}
+            zones={zones}
+            zonesColorBy={zonesColorBy}
+            focusZoneCode={focusZone}
+          />
         </div>
 
-        {/* Panneau filtres flottant — z-[1100] pour passer au-dessus des panes Leaflet (max 1000).
-            max-h limite à 100% moins la hauteur réservée à la légende en bas-gauche. */}
+        {/* Panneau filtres flottant */}
         {panelOpen ? (
-          <aside className="absolute top-3 left-3 z-[1100] w-[280px] max-h-[calc(100%-7rem)] overflow-y-auto rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-slate-200 dark:border-slate-800 shadow-xl">
+          <aside className="absolute top-3 left-3 z-[1100] w-[300px] max-h-[calc(100%-7rem)] overflow-y-auto rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-slate-200 dark:border-slate-800 shadow-xl">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
               <div className="font-display text-sm font-black flex items-center gap-2">
-                <Filter className="h-4 w-4 text-ciOrange" /> Filtres
+                <Filter className="h-4 w-4 text-ciOrange" /> Filtres & calques
               </div>
               <button
                 onClick={() => setPanelOpen(false)}
@@ -177,76 +222,139 @@ export default function CartoPage() {
             </div>
 
             <div className="p-4 space-y-4">
-              {/* Statut */}
+              {/* ===== ZONES SANITAIRES ===== */}
               <div>
-                <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1.5">
-                  Statut sanitaire
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {STATUS_OPTS.map((s) => (
-                    <button
-                      key={s.value}
-                      onClick={() => setStatusFilter(s.value)}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold border transition ${
-                        statusFilter === s.value
-                          ? 'bg-ciDark text-white border-ciDark'
-                          : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-ciOrange/60'
-                      }`}
+                <label className="flex items-center justify-between text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1.5">
+                  <span className="flex items-center gap-1">
+                    <Layers className="inline h-3 w-3" /> Zones sanitaires
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="accent-ciOrange"
+                    checked={showZones}
+                    onChange={(e) => setShowZones(e.target.checked)}
+                  />
+                </label>
+                {showZones && (
+                  <div className="space-y-2">
+                    <select
+                      value={zoneLevel}
+                      onChange={(e) => setZoneLevel(e.target.value)}
+                      className="select text-sm"
                     >
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ background: s.color }}
-                      />
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
+                      {ZONE_LEVELS.map((l) => (
+                        <option key={l.value || 'all'} value={l.value}>{l.label}</option>
+                      ))}
+                    </select>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setZonesColorBy('risk')}
+                        className={`flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition ${
+                          zonesColorBy === 'risk'
+                            ? 'bg-ciOrange text-white border-ciOrange'
+                            : 'border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        Par risque
+                      </button>
+                      <button
+                        onClick={() => setZonesColorBy('level')}
+                        className={`flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition ${
+                          zonesColorBy === 'level'
+                            ? 'bg-ciOrange text-white border-ciOrange'
+                            : 'border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        Par niveau
+                      </button>
+                    </div>
+                    {loadingZones && (
+                      <div className="text-[10px] text-slate-400 italic">Chargement des zones...</div>
+                    )}
+                    {zones && (
+                      <div className="text-[10px] text-slate-500">
+                        {zones.features.length} polygone{zones.features.length > 1 ? 's' : ''} affiché{zones.features.length > 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Risque */}
+              <hr className="border-slate-100 dark:border-slate-800" />
+
+              {/* ===== VOYAGEURS ===== */}
               <div>
-                <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1.5">
-                  Niveau de risque
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {RISK_OPTS.map((r) => (
-                    <button
-                      key={r.value}
-                      onClick={() => setRiskFilter(r.value)}
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold border transition ${
-                        riskFilter === r.value
-                          ? 'bg-ciOrange text-white border-ciOrange'
-                          : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-ciOrange/60'
-                      }`}
+                <label className="flex items-center justify-between text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1.5">
+                  <span>Voyageurs</span>
+                  <input
+                    type="checkbox"
+                    className="accent-ciOrange"
+                    checked={showTravelers}
+                    onChange={(e) => setShowTravelers(e.target.checked)}
+                  />
+                </label>
+                {showTravelers && (
+                  <>
+                    <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mt-3 mb-1.5">
+                      Statut sanitaire
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {STATUS_OPTS.map((s) => (
+                        <button
+                          key={s.value}
+                          onClick={() => setStatusFilter(s.value)}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold border transition ${
+                            statusFilter === s.value
+                              ? 'bg-ciDark text-white border-ciDark'
+                              : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-ciOrange/60'
+                          }`}
+                        >
+                          <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mt-3 mb-1.5">
+                      Niveau de risque
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {RISK_OPTS.map((r) => (
+                        <button
+                          key={r.value}
+                          onClick={() => setRiskFilter(r.value)}
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold border transition ${
+                            riskFilter === r.value
+                              ? 'bg-ciOrange text-white border-ciOrange'
+                              : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-ciOrange/60'
+                          }`}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mt-3 mb-1.5">
+                      Point d'entrée
+                    </div>
+                    <select
+                      value={entryFilter}
+                      onChange={(e) => setEntryFilter(e.target.value)}
+                      className="select text-sm"
                     >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
+                      <option value="">Tous les points</option>
+                      {entryPoints.map((e) => (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </div>
 
-              {/* Point d'entrée */}
-              <div>
-                <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1.5">
-                  Point d'entrée
-                </div>
-                <select
-                  value={entryFilter}
-                  onChange={(e) => setEntryFilter(e.target.value)}
-                  className="select"
-                >
-                  <option value="">Tous les points</option>
-                  {entryPoints.map((e) => (
-                    <option key={e.id} value={e.id}>{e.name}</option>
-                  ))}
-                </select>
-              </div>
+              <hr className="border-slate-100 dark:border-slate-800" />
 
-              {/* Calques */}
+              {/* ===== AUTRES CALQUES ===== */}
               <div>
-                <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1.5">
-                  <Layers className="inline h-3 w-3 mr-1" /> Calques
-                </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -254,11 +362,10 @@ export default function CartoPage() {
                     checked={showEntryPoints}
                     onChange={(e) => setShowEntryPoints(e.target.checked)}
                   />
-                  Points d'entrée (aéroports, ports, frontières)
+                  📍 Points d'entrée
                 </label>
               </div>
 
-              {/* Reset */}
               {(statusFilter || riskFilter || entryFilter || search) && (
                 <button
                   onClick={() => {
@@ -269,7 +376,7 @@ export default function CartoPage() {
                   }}
                   className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
                 >
-                  <X className="h-3 w-3" /> Réinitialiser les filtres
+                  <X className="h-3 w-3" /> Réinitialiser
                 </button>
               )}
             </div>
@@ -284,51 +391,30 @@ export default function CartoPage() {
         )}
 
         {/* Stats overlay (bas-droite) */}
-        <div className="absolute bottom-3 right-3 z-[1100] max-w-[280px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-slate-200 dark:border-slate-800 shadow-xl px-4 py-3">
+        <div className="absolute bottom-3 right-3 z-[1100] max-w-[280px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-slate-200 dark:border-slate-800 shadow-xl px-4 py-3 space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500">
                 Voyageurs affichés
               </div>
               <div className="font-display text-2xl font-black text-ciDark dark:text-emerald-200 leading-none mt-0.5">
-                {stats.total.toLocaleString('fr-FR')}
+                {stats.travelers.toLocaleString('fr-FR')}
               </div>
             </div>
             <div className="h-10 w-10 rounded-xl bg-orange-50 dark:bg-orange-950/40 grid place-items-center text-ciOrange">
               <Activity className="h-5 w-5" />
             </div>
           </div>
-          {Object.keys(stats.byStatus).length > 0 && (
-            <ul className="mt-3 space-y-1 text-xs">
-              {Object.entries(stats.byStatus).map(([k, v]) => {
-                const opt = STATUS_OPTS.find((s) => s.value === k);
-                return (
-                  <li key={k} className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: opt?.color || '#94A3B8' }} />
-                      {opt?.label || k}
-                    </span>
-                    <span className="font-bold">{v}</span>
-                  </li>
-                );
-              })}
-            </ul>
+          {stats.zoneCount > 0 && (
+            <div className="text-[11px] text-slate-500 border-t border-slate-100 dark:border-slate-800 pt-2 flex items-center justify-between">
+              <span>🗺 {stats.zoneCount} zones</span>
+              {stats.zoneRedCount > 0 && (
+                <span className="text-rose-600 font-bold inline-flex items-center gap-1">
+                  <ShieldAlert className="h-3 w-3" /> {stats.zoneRedCount} à risque
+                </span>
+              )}
+            </div>
           )}
-        </div>
-
-        {/* Légende (bas-gauche) — compacte, max-w réduit pour ne pas mordre sous le panneau filtres */}
-        <div className="absolute bottom-3 left-3 z-[1100] max-w-[260px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-slate-200 dark:border-slate-800 shadow-xl px-2.5 py-1.5 text-[10.5px]">
-          <div className="font-bold text-slate-500 mb-1 flex items-center gap-1">
-            <MapPin className="h-3 w-3 text-ciGreen" /> Légende
-          </div>
-          <ul className="flex flex-wrap gap-x-2.5 gap-y-0.5">
-            {STATUS_OPTS.filter((s) => s.value).map((s) => (
-              <li key={s.value} className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
-                {s.label}
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
     </div>

@@ -3,8 +3,8 @@
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useMemo } from 'react';
 import {
-  CircleMarker, MapContainer, Marker, Popup, ScaleControl,
-  TileLayer, Tooltip, useMap,
+  CircleMarker, GeoJSON, LayersControl, MapContainer, Marker, Popup,
+  ScaleControl, TileLayer, Tooltip, useMap,
 } from 'react-leaflet';
 import L from 'leaflet';
 import Link from 'next/link';
@@ -21,6 +21,26 @@ export interface HeatPoint {
   risk_score?: number | null;
   city?: string | null;
   arrival_date?: string | null;
+}
+
+export interface ZoneFeature {
+  type: 'Feature';
+  id: string;
+  geometry: { type: 'MultiPolygon'; coordinates: number[][][][] };
+  properties: {
+    code: string;
+    name: string;
+    level: string;
+    level_display: string;
+    risk_level: string;
+    population?: number | null;
+    parent_name?: string | null;
+    parent_code?: string | null;
+  };
+}
+export interface ZoneCollection {
+  type: 'FeatureCollection';
+  features: ZoneFeature[];
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -44,7 +64,23 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const RISK_LABEL: Record<string, string> = {
-  low: 'Faible', moderate: 'Modéré', high: 'Élevé', critical: 'Critique',
+  low: 'Faible', moderate: 'Modéré', high: 'Élevé', critical: 'Critique', red: 'Zone rouge',
+};
+
+const RISK_COLOR: Record<string, string> = {
+  low: '#10B981',
+  moderate: '#F59E0B',
+  high: '#EF4444',
+  red: '#7F1D1D',
+  critical: '#7F1D1D',
+};
+
+const LEVEL_BORDER: Record<string, string> = {
+  pres: '#FF7F00',
+  region: '#009E60',
+  district: '#0EA5E9',
+  commune: '#7C3AED',
+  quartier: '#94A3B8',
 };
 
 const POINTS_ENTREE: { code: string; name: string; lat: number; lng: number }[] = [
@@ -55,22 +91,64 @@ const POINTS_ENTREE: { code: string; name: string; lat: number; lng: number }[] 
   { code: 'POG', name: 'Frontière Pôgô', lat: 10.108, lng: -5.819 },
 ];
 
-function FitToPoints({ points }: { points: HeatPoint[] }) {
+// =========================================================================
+// Helpers
+// =========================================================================
+
+function FitToPoints({ points, fallback }: { points: HeatPoint[]; fallback?: ZoneCollection | null }) {
   const map = useMap();
   useEffect(() => {
-    if (!points.length) return;
-    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
-    map.fitBounds(bounds.pad(0.15), { maxZoom: 11 });
-  }, [points, map]);
+    if (points.length) {
+      const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
+      map.fitBounds(bounds.pad(0.15), { maxZoom: 11 });
+      return;
+    }
+    // Fallback : fit sur les polygones de zones si dispo
+    if (fallback && fallback.features.length) {
+      try {
+        const layer = L.geoJSON(fallback as any);
+        const bounds = layer.getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds.pad(0.05), { maxZoom: 9 });
+      } catch {}
+    }
+  }, [points, fallback, map]);
   return null;
 }
+
+function FocusOnZone({ zones, focusCode }: { zones: ZoneCollection | null; focusCode?: string | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!focusCode || !zones) return;
+    const feat = zones.features.find((f) => f.properties.code === focusCode);
+    if (!feat) return;
+    try {
+      const layer = L.geoJSON(feat as any);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds.pad(0.1), { maxZoom: 12 });
+    } catch {}
+  }, [zones, focusCode, map]);
+  return null;
+}
+
+// =========================================================================
+// Composant principal
+// =========================================================================
 
 export function MapView({
   points,
   showEntryPoints = true,
+  zones = null,
+  zonesColorBy = 'risk',
+  focusZoneCode = null,
 }: {
   points: HeatPoint[];
   showEntryPoints?: boolean;
+  /** GeoJSON FeatureCollection des HealthZones à afficher */
+  zones?: ZoneCollection | null;
+  /** Choropleth : 'risk' = couleur selon risk_level, 'level' = couleur selon niveau */
+  zonesColorBy?: 'risk' | 'level';
+  /** Si défini, zoom automatique sur cette zone */
+  focusZoneCode?: string | null;
 }) {
   const center: [number, number] = useMemo(() => {
     if (points.length) return [points[0].lat, points[0].lng];
@@ -85,13 +163,97 @@ export function MapView({
       scrollWheelZoom
       zoomControl
     >
-      <TileLayer
-        attribution='&copy; OpenStreetMap'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <LayersControl position="topright">
+        <LayersControl.BaseLayer checked name="OpenStreetMap">
+          <TileLayer
+            attribution='&copy; OpenStreetMap'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+        </LayersControl.BaseLayer>
+        <LayersControl.BaseLayer name="Satellite (Esri)">
+          <TileLayer
+            attribution='&copy; Esri'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          />
+        </LayersControl.BaseLayer>
+        <LayersControl.BaseLayer name="Terrain (Stamen)">
+          <TileLayer
+            attribution='&copy; Stadia Maps &copy; OpenStreetMap'
+            url="https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png"
+          />
+        </LayersControl.BaseLayer>
+      </LayersControl>
+
       <ScaleControl position="bottomleft" />
 
-      {/* Points d'entrée (icônes statiques) */}
+      {/* ===== LAYER ZONES SANITAIRES (polygones choropleth) ===== */}
+      {zones && zones.features.length > 0 && (
+        <GeoJSON
+          key={`zones-${zones.count ?? zones.features.length}-${zonesColorBy}`}
+          data={zones as any}
+          style={(feature) => {
+            const p = feature?.properties;
+            const fill = zonesColorBy === 'level'
+              ? (LEVEL_BORDER[p?.level] || '#94A3B8')
+              : (RISK_COLOR[p?.risk_level] || '#94A3B8');
+            const border = LEVEL_BORDER[p?.level] || '#475569';
+            return {
+              color: border,
+              weight: p?.level === 'pres' ? 2.5 : p?.level === 'region' ? 2 : 1,
+              opacity: 0.85,
+              fillColor: fill,
+              fillOpacity: 0.25,
+            };
+          }}
+          onEachFeature={(feature, layer) => {
+            const p = feature.properties;
+            // Tooltip survol
+            layer.bindTooltip(
+              `<strong>${p.name}</strong><br/><span style="opacity:0.7">${p.level_display}</span>`,
+              { sticky: true, direction: 'top' },
+            );
+            // Popup au clic
+            const popup = `
+              <div style="min-width:200px">
+                <div style="text-transform:uppercase;letter-spacing:0.05em;font-size:10px;color:#64748B;font-weight:700;">
+                  ${p.level_display}
+                </div>
+                <div style="font-weight:700;font-size:15px;margin-top:2px;">${p.name}</div>
+                <div style="font-size:11px;color:#94A3B8;font-family:monospace;margin-top:2px;">${p.code}</div>
+                <hr style="margin:8px 0;border-color:#E2E8F0;"/>
+                <ul style="margin:0;padding:0;list-style:none;font-size:12px;line-height:1.5;">
+                  ${p.parent_name ? `<li><strong>Parent:</strong> ${p.parent_name}</li>` : ''}
+                  <li><strong>Risque:</strong> <span style="text-transform:capitalize">${p.risk_level}</span></li>
+                  ${p.population ? `<li><strong>Population:</strong> ${p.population.toLocaleString('fr-FR')}</li>` : ''}
+                </ul>
+                <a href="/districts/${p.code}"
+                   style="margin-top:8px;display:inline-block;font-weight:700;font-size:12px;color:#FF7F00;text-decoration:none;">
+                  Détail & statistiques →
+                </a>
+              </div>
+            `;
+            layer.bindPopup(popup, { maxWidth: 280 });
+
+            // Effet hover : épaissir le contour
+            layer.on({
+              mouseover: (e) => {
+                const l = e.target as L.Path;
+                l.setStyle({ weight: 4, fillOpacity: 0.45 });
+              },
+              mouseout: (e) => {
+                const l = e.target as L.Path;
+                const lvl = (feature.properties as any).level;
+                l.setStyle({
+                  weight: lvl === 'pres' ? 2.5 : lvl === 'region' ? 2 : 1,
+                  fillOpacity: 0.25,
+                });
+              },
+            });
+          }}
+        />
+      )}
+
+      {/* ===== POINTS D'ENTRÉE ===== */}
       {showEntryPoints &&
         POINTS_ENTREE.map((ep) => (
           <Marker
@@ -108,7 +270,7 @@ export function MapView({
           </Marker>
         ))}
 
-      {/* Voyageurs */}
+      {/* ===== VOYAGEURS (markers) ===== */}
       {points.map((p, i) => {
         const color = STATUS_COLOR[p.status] || '#6B7280';
         return (
@@ -136,18 +298,10 @@ export function MapView({
                 )}
                 <hr className="my-2 border-slate-200" />
                 <ul className="space-y-0.5 text-xs">
-                  {p.entry_point && (
-                    <li><b>Point d'entrée :</b> {p.entry_point}</li>
-                  )}
-                  {p.nationality && (
-                    <li><b>Nationalité :</b> {p.nationality}</li>
-                  )}
-                  {p.city && (
-                    <li><b>Confinement :</b> {p.city}</li>
-                  )}
-                  {p.arrival_date && (
-                    <li><b>Arrivée :</b> {new Date(p.arrival_date).toLocaleDateString('fr-FR')}</li>
-                  )}
+                  {p.entry_point && (<li><b>Point d'entrée :</b> {p.entry_point}</li>)}
+                  {p.nationality && (<li><b>Nationalité :</b> {p.nationality}</li>)}
+                  {p.city && (<li><b>Confinement :</b> {p.city}</li>)}
+                  {p.arrival_date && (<li><b>Arrivée :</b> {new Date(p.arrival_date).toLocaleDateString('fr-FR')}</li>)}
                   {p.risk_level && (
                     <li><b>Risque :</b> {RISK_LABEL[p.risk_level] || p.risk_level}
                       {typeof p.risk_score === 'number' ? ` (${p.risk_score}/100)` : ''}
@@ -168,7 +322,8 @@ export function MapView({
         );
       })}
 
-      <FitToPoints points={points} />
+      <FitToPoints points={points} fallback={zones} />
+      <FocusOnZone zones={zones} focusCode={focusZoneCode} />
     </MapContainer>
   );
 }
