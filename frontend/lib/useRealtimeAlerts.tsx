@@ -8,14 +8,10 @@
  * - URL : NEXT_PUBLIC_WS_URL (ex: wss://api.veillesanitaire.com) + /ws/alerts/
  * - Reconnexion automatique avec backoff exponentiel (1s → 30s max).
  * - Auth JWT envoyé en query string `?token=...` (lu depuis localStorage).
+ * - Arrêt des reconnexions après MAX_ATTEMPTS échecs consécutifs pour
+ *   éviter le spam de la console et la charge réseau.
+ * - Code 4401 (auth refusée) : arrêt immédiat sans backoff.
  * - Graceful fallback : si le WS échoue, l'app fonctionne normalement.
- *
- * Usage :
- *   import { useRealtimeAlerts } from '@/lib/useRealtimeAlerts';
- *   function DashboardLayout() {
- *     useRealtimeAlerts();
- *     return ...;
- *   }
  */
 
 import { useEffect, useRef } from 'react';
@@ -44,11 +40,16 @@ const SEV_ICON: Record<string, string> = {
   INFO: 'ℹ️',
 };
 
+// Arrêt définitif des reconnexions après ce nombre d'échecs consécutifs.
+// Évite le spam si Daphne est down ou Traefik mal configuré.
+const MAX_ATTEMPTS = 6;
+
 export function useRealtimeAlerts(options: { onAlert?: (a: AlertPayload) => void } = {}) {
   const wsRef = useRef<WebSocket | null>(null);
   const attemptRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
   const closedManuallyRef = useRef(false);
+  const givenUpRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -60,14 +61,34 @@ export function useRealtimeAlerts(options: { onAlert?: (a: AlertPayload) => void
     );
 
     const connect = () => {
+      if (givenUpRef.current || closedManuallyRef.current) return;
+      if (attemptRef.current >= MAX_ATTEMPTS) {
+        givenUpRef.current = true;
+        // Log unique pour informer le dev sans bruit
+        // eslint-disable-next-line no-console
+        console.info(
+          `[useRealtimeAlerts] Notifications temps réel désactivées après ${MAX_ATTEMPTS} tentatives. ` +
+          'Rechargez la page pour réessayer.',
+        );
+        return;
+      }
+
       const token = getAccess();
       if (!token) return; // pas d'auth → on n'essaie pas
+
       const url = `${wsBase}/ws/alerts/?token=${encodeURIComponent(token)}`;
-      const ws = new WebSocket(url);
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(url);
+      } catch {
+        scheduleReconnect();
+        return;
+      }
       wsRef.current = ws;
 
       ws.onopen = () => {
         attemptRef.current = 0;
+        givenUpRef.current = false;
       };
 
       ws.onmessage = (event) => {
@@ -99,17 +120,30 @@ export function useRealtimeAlerts(options: { onAlert?: (a: AlertPayload) => void
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (closedManuallyRef.current) return;
-        // Backoff exponentiel : 1s, 2s, 4s, 8s, 16s, capé à 30s
-        attemptRef.current += 1;
-        const delay = Math.min(30_000, 1000 * 2 ** Math.min(attemptRef.current, 5));
-        reconnectTimerRef.current = window.setTimeout(connect, delay);
+        // Code 4401 = auth refusée par JwtAuthMiddleware → inutile de réessayer
+        if (event.code === 4401) {
+          givenUpRef.current = true;
+          // eslint-disable-next-line no-console
+          console.info('[useRealtimeAlerts] Auth WebSocket refusée (token expiré ?). Notifications désactivées.');
+          return;
+        }
+        scheduleReconnect();
       };
 
       ws.onerror = () => {
-        ws.close();
+        // Pas de console.error ici — onclose se charge du backoff
+        try { ws.close(); } catch {}
       };
+    };
+
+    const scheduleReconnect = () => {
+      if (closedManuallyRef.current || givenUpRef.current) return;
+      attemptRef.current += 1;
+      // Backoff : 1s, 2s, 4s, 8s, 16s, 30s puis arrêt
+      const delay = Math.min(30_000, 1000 * 2 ** Math.min(attemptRef.current, 5));
+      reconnectTimerRef.current = window.setTimeout(connect, delay);
     };
 
     connect();
@@ -117,7 +151,7 @@ export function useRealtimeAlerts(options: { onAlert?: (a: AlertPayload) => void
     return () => {
       closedManuallyRef.current = true;
       if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
-      wsRef.current?.close();
+      try { wsRef.current?.close(); } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
