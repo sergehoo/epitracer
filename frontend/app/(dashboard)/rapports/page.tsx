@@ -249,7 +249,11 @@ function ReportParamsModal({ report, onClose }: { report: ReportDef; onClose: ()
     setBusy(fmt);
     try {
       const params: Record<string, string> = {
-        format: fmt,
+        // Renommé `output` pour éviter la collision avec le paramètre
+        // `format` de DRF (URL_FORMAT_OVERRIDE) qui essaie de matcher un
+        // renderer csv/pdf et provoque un 404 si aucun n'est déclaré.
+        // Le backend accepte aussi `format` en fallback pour la compat.
+        output: fmt,
         date_from: dateFrom,
         date_to: dateTo,
       };

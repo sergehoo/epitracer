@@ -108,6 +108,11 @@ class _BaseReportView(APIView):
         RoleCode.MINISTRY,
         RoleCode.INHP,
     ]
+    # `format_kwarg = None` empêche DRF d'utiliser `?format=` dans la
+    # content-negotiation (sinon il essaie de matcher un renderer csv/pdf
+    # qui n'existe pas → exception 404). Notre paramètre métier est lu
+    # manuellement via `_fmt()` (accepte `output`, `fmt`, ou `format`).
+    format_kwarg = None
 
     def _period(self, request):
         d_from = parse_date(request.query_params.get("date_from"))
@@ -119,7 +124,15 @@ class _BaseReportView(APIView):
         return d_from, d_to
 
     def _fmt(self, request) -> str:
-        return (request.query_params.get("format") or "csv").lower()
+        # On accepte `output` (nouveau) ou `fmt` (compat) — pas `format` car
+        # DRF intercepte ce param via URL_FORMAT_OVERRIDE et tente de matcher
+        # un renderer, ce qui provoque un 404 si aucun renderer csv/pdf n'est
+        # déclaré sur la view.
+        v = (request.query_params.get("output")
+             or request.query_params.get("fmt")
+             or request.query_params.get("format")
+             or "csv")
+        return v.lower()
 
     def _filename(self, key: str, fmt: str, d_from, d_to) -> str:
         ext = "pdf" if fmt == "pdf" else "csv"
