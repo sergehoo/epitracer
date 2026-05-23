@@ -143,7 +143,7 @@ export function Step3Historique({ onNext, onBack }: { onNext: () => void; onBack
                         placeholder="ex : Nord-Kivu"
                       />
                     </FieldGroup>
-                    <FieldGroup label="Adresse de résidence là-bas">
+                    <FieldGroup label="Adresse de résidence">
                       <input
                         className="input"
                         value={item.residence_address || ''}
