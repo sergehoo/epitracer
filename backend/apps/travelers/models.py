@@ -241,6 +241,9 @@ class TravelHistoryEntry(BaseModel):
         ordering = ["-arrival_date", "-id"]
         indexes = [models.Index(fields=["role", "country"])]
 
+    def __str__(self) -> str:
+        return f"{self.get_role_display()} — {self.country.name if self.country_id else '?'} ({self.city or '—'})"
+
 
 class CompanionLink(BaseModel):
     """Lien entre voyageurs voyageant ensemble (utile en contact-tracing)."""
@@ -255,3 +258,9 @@ class CompanionLink(BaseModel):
         constraints = [
             models.UniqueConstraint(fields=["traveler", "companion"], name="uniq_companion_link"),
         ]
+
+    def __str__(self) -> str:
+        rel = f" ({self.relationship})" if self.relationship else ""
+        a = self.traveler.public_id if self.traveler_id else "?"
+        b = self.companion.public_id if self.companion_id else "?"
+        return f"{a} ↔ {b}{rel}"

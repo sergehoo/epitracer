@@ -70,6 +70,13 @@ class HealthPass(BaseModel):
             return False
         return self.expires_at > timezone.now()
 
+    def __str__(self) -> str:
+        traveler_str = (
+            f"{self.traveler.last_name} {self.traveler.first_name}"
+            if self.traveler_id else "?"
+        )
+        return f"{self.pass_number} — {traveler_str}"
+
 
 class PassVerificationLog(BaseModel):
     """Trace de chaque vérification de QR (utile pour analyse de flux + audit)."""

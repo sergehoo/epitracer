@@ -73,6 +73,10 @@ class DailyCheck(BaseModel):
         ]
         ordering = ["quarantine", "day_index"]
 
+    def __str__(self) -> str:
+        tag = "⚠" if self.has_symptoms else "✓"
+        return f"{tag} J{self.day_index} {self.check_date} — {self.quarantine.traveler.public_id if self.quarantine_id else '?'}"
+
 
 class FollowUpVisit(BaseModel):
     """Visite d'un agent terrain au domicile / lieu de confinement."""
@@ -92,3 +96,6 @@ class FollowUpVisit(BaseModel):
         verbose_name = _("Visite de suivi")
         verbose_name_plural = _("Visites de suivi")
         ordering = ["-visit_datetime"]
+
+    def __str__(self) -> str:
+        return f"Visite {self.visit_datetime:%d/%m/%Y %H:%M} — {self.quarantine.traveler.public_id if self.quarantine_id else '?'}"

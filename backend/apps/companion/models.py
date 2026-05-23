@@ -249,6 +249,9 @@ class TravelerLocationPing(BaseModel):
             models.Index(fields=["event_type", "-captured_at"]),
         ]
 
+    def __str__(self) -> str:
+        return f"Ping {self.traveler.public_id if self.traveler_id else '?'} @ {self.captured_at:%d/%m %H:%M}"
+
 
 # ============================================================================
 #                          DATA ACCESS LOG (RGPD)
@@ -309,6 +312,9 @@ class DataPurgeLog(BaseModel):
         verbose_name = _("Journal de purge")
         verbose_name_plural = _("Journal de purges")
         ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Purge {self.traveler_public_id or '?'} le {self.created_at:%d/%m/%Y}"
 
 
 class DataAccessLog(BaseModel):

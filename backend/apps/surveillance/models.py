@@ -67,3 +67,7 @@ class HealthAlert(BaseModel):
             models.Index(fields=["severity", "status"]),
             models.Index(fields=["disease", "created_at"]),
         ]
+
+    def __str__(self) -> str:
+        sev = (self.severity or "?").upper()
+        return f"[{sev}] {self.title}"

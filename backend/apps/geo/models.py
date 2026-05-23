@@ -80,10 +80,12 @@ class HealthZone(BaseModel):
     level = models.CharField(
         max_length=20,
         choices=(
-            ("country", _("Pays")),
-            ("region", _("Région")),
-            ("district", _("District")),
+            ("country", _("National")),
+            ("pres", _("Pôle Régional Sanitaire (PRES)")),
+            ("region", _("Région Sanitaire")),
+            ("district", _("District Sanitaire")),
             ("commune", _("Commune")),
+            ("quartier", _("Quartier")),
             ("custom", _("Zone personnalisée")),
         ),
         default="district",
@@ -99,3 +101,12 @@ class HealthZone(BaseModel):
         verbose_name = _("Zone sanitaire")
         verbose_name_plural = _("Zones sanitaires")
         ordering = ["level", "name"]
+
+    def __str__(self) -> str:
+        # Préfixe par niveau pour les listes admin (PRES / RÉG / DIST / etc.)
+        level_short = {
+            "country": "🇨🇮", "pres": "PRES", "region": "Région",
+            "district": "District", "commune": "Commune", "quartier": "Quartier",
+            "custom": "Zone",
+        }.get(self.level, self.level)
+        return f"{level_short} · {self.name}"

@@ -36,6 +36,9 @@ class NotificationTemplate(BaseModel):
         verbose_name = _("Modèle de notification")
         verbose_name_plural = _("Modèles de notification")
 
+    def __str__(self) -> str:
+        return f"{self.code} — {self.name}"
+
 
 class Notification(BaseModel):
     channel = models.CharField(max_length=20, choices=Channel.choices, db_index=True)
@@ -61,3 +64,6 @@ class Notification(BaseModel):
         indexes = [
             models.Index(fields=["channel", "status"]),
         ]
+
+    def __str__(self) -> str:
+        return f"[{self.channel}] {self.recipient[:30]} · {self.status}"
