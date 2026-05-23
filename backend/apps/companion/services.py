@@ -226,20 +226,23 @@ def raise_alert_from_checkin(
     from apps.surveillance.models import HealthAlert
 
     if needs_assistance:
-        severity = "HIGH"
+        severity = "high"
         reasons = ["Le voyageur a explicitement demandé une assistance"]
         alert_type = "assistance_request"
     else:
-        severity, reasons = evaluate_checkin_severity(symptoms)
-        if severity == "INFO":
+        # `evaluate_checkin_severity` retourne historiquement des codes en
+        # majuscule ; on normalise immédiatement pour matcher AlertSeverity.
+        severity_raw, reasons = evaluate_checkin_severity(symptoms)
+        severity = (severity_raw or "info").lower()
+        if severity == "info":
             return None  # rien à signaler
         alert_type = "symptom_declared"
 
     title_by_sev = {
-        "CRITICAL": "🚨 Symptôme critique déclaré",
-        "HIGH": "Symptômes importants déclarés",
-        "MEDIUM": "Symptômes à surveiller",
-        "LOW": "Symptôme isolé",
+        "critical": "🚨 Symptôme critique déclaré",
+        "high": "Symptômes importants déclarés",
+        "medium": "Symptômes à surveiller",
+        "low": "Symptôme isolé",
     }
     summary = title_by_sev.get(severity, "Check-in à surveiller")
     trv_ct = ContentType.objects.get_for_model(traveler)
@@ -287,7 +290,7 @@ def raise_alert_from_checkin(
         title=f"{summary} — {traveler.public_id}",
         description="\n".join(reasons),
         severity=severity,
-        status="OPEN",
+        status="open",
         disease=disease,
         entry_point=entry_point,
         target_ct=trv_ct,

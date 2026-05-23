@@ -78,22 +78,24 @@ const SEV_BADGE: Record<string, string> = {
   info:     'bg-sky-100 text-sky-800 border-sky-300',
 };
 
+// Valeurs canoniques minuscules (AlertStatus.choices côté backend).
 const STATUS_LABEL: Record<string, string> = {
-  OPEN: 'Nouvelle', ACK: 'Reconnue', INVESTIGATING: 'En cours',
-  RESOLVED: 'Résolue', DISMISSED: 'Fausse alerte',
+  open: 'Nouvelle', ack: 'Reconnue', investigating: 'En cours',
+  resolved: 'Résolue', dismissed: 'Fausse alerte',
 };
 
 const TIMELINE_STEPS = [
-  { value: 'OPEN', label: 'Reçue', icon: <Bell className="h-4 w-4" /> },
-  { value: 'ACK', label: 'Reconnue', icon: <Clock className="h-4 w-4" /> },
-  { value: 'INVESTIGATING', label: 'Investigation', icon: <Siren className="h-4 w-4" /> },
-  { value: 'RESOLVED', label: 'Résolue', icon: <CheckCircle2 className="h-4 w-4" /> },
+  { value: 'open', label: 'Reçue', icon: <Bell className="h-4 w-4" /> },
+  { value: 'ack', label: 'Reconnue', icon: <Clock className="h-4 w-4" /> },
+  { value: 'investigating', label: 'Investigation', icon: <Siren className="h-4 w-4" /> },
+  { value: 'resolved', label: 'Résolue', icon: <CheckCircle2 className="h-4 w-4" /> },
 ];
 
 function statusIndex(s: string): number {
-  const ix = TIMELINE_STEPS.findIndex((t) => t.value === s.toUpperCase());
+  const sl = (s || '').toLowerCase();
+  const ix = TIMELINE_STEPS.findIndex((t) => t.value === sl);
   if (ix >= 0) return ix;
-  if (s.toUpperCase() === 'DISMISSED') return -2; // hors flux normal
+  if (sl === 'dismissed') return -2; // hors flux normal
   return 0;
 }
 
@@ -151,7 +153,8 @@ export default function AlertDetailPage() {
   if (!alert) return <div className="card p-6 text-slate-500">Alerte introuvable.</div>;
 
   const sev = (alert.severity || 'info').toLowerCase();
-  const isOpen = ['OPEN', 'ACK', 'INVESTIGATING'].includes(alert.status.toUpperCase());
+  const statusLower = (alert.status || '').toLowerCase();
+  const isOpen = ['open', 'ack', 'investigating'].includes(statusLower);
   const currentStep = statusIndex(alert.status);
   const duplicate = alert.metadata?.duplicate_count || 0;
   const repeats = alert.metadata?.repeat_reasons || [];
@@ -203,7 +206,7 @@ export default function AlertDetailPage() {
               {sev}
             </span>
             <span className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 font-semibold">
-              {STATUS_LABEL[alert.status.toUpperCase()] || alert.status}
+              {STATUS_LABEL[statusLower] || alert.status}
             </span>
           </div>
         </div>
@@ -355,39 +358,39 @@ export default function AlertDetailPage() {
                 Actions
               </div>
               <div className="space-y-2">
-                {alert.status.toUpperCase() === 'OPEN' && (
+                {statusLower === 'open' && (
                   <ActionBtn
                     label="Prendre en charge"
                     icon={<Clock className="h-3.5 w-3.5" />}
                     tone="amber"
-                    onClick={() => updateStatus('ACK')}
+                    onClick={() => updateStatus('ack')}
                     disabled={acting}
                   />
                 )}
-                {!['INVESTIGATING', 'RESOLVED', 'DISMISSED'].includes(alert.status.toUpperCase()) && (
+                {!['investigating', 'resolved', 'dismissed'].includes(statusLower) && (
                   <ActionBtn
                     label="Lancer investigation"
                     icon={<Siren className="h-3.5 w-3.5" />}
                     tone="sky"
-                    onClick={() => updateStatus('INVESTIGATING')}
+                    onClick={() => updateStatus('investigating')}
                     disabled={acting}
                   />
                 )}
-                {alert.status.toUpperCase() !== 'RESOLVED' && (
+                {statusLower !== 'resolved' && (
                   <ActionBtn
                     label="Marquer résolue"
                     icon={<CheckCircle2 className="h-3.5 w-3.5" />}
                     tone="emerald"
-                    onClick={() => updateStatus('RESOLVED')}
+                    onClick={() => updateStatus('resolved')}
                     disabled={acting}
                   />
                 )}
-                {alert.status.toUpperCase() !== 'DISMISSED' && (
+                {statusLower !== 'dismissed' && (
                   <ActionBtn
                     label="Fausse alerte"
                     icon={<XCircle className="h-3.5 w-3.5" />}
                     tone="slate"
-                    onClick={() => updateStatus('DISMISSED')}
+                    onClick={() => updateStatus('dismissed')}
                     disabled={acting}
                   />
                 )}
@@ -399,16 +402,16 @@ export default function AlertDetailPage() {
           {!isOpen && (
             <section className="card p-5 text-center">
               <div className={`mx-auto h-12 w-12 rounded-full grid place-items-center mb-2 ${
-                alert.status.toUpperCase() === 'RESOLVED' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
+                statusLower === 'resolved' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
               }`}>
-                {alert.status.toUpperCase() === 'RESOLVED' ? <CheckCircle2 className="h-6 w-6" /> : <XCircle className="h-6 w-6" />}
+                {statusLower === 'resolved' ? <CheckCircle2 className="h-6 w-6" /> : <XCircle className="h-6 w-6" />}
               </div>
-              <div className="font-bold text-sm">{STATUS_LABEL[alert.status.toUpperCase()] || alert.status}</div>
+              <div className="font-bold text-sm">{STATUS_LABEL[statusLower] || alert.status}</div>
               {alert.acknowledged_at && (
                 <div className="text-[10px] text-slate-500 mt-1">{formatDateTime(alert.acknowledged_at)}</div>
               )}
               <button
-                onClick={() => updateStatus('OPEN')}
+                onClick={() => updateStatus('open')}
                 disabled={acting}
                 className="mt-3 text-xs text-slate-500 hover:text-rose-600 hover:underline"
               >

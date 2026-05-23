@@ -40,13 +40,15 @@ const SEV_OPTS = [
   { value: 'info',     label: 'Info',     color: '#0EA5E9' },
 ];
 
+// Valeurs canoniques minuscules (cf AlertStatus.choices côté backend).
+// Le backend tolère les valeurs majuscule héritées dans ses filtres.
 const STATUS_OPTS = [
   { value: '',              label: 'Tous statuts',  icon: <AlertTriangle className="h-3 w-3" /> },
-  { value: 'OPEN',          label: 'Nouvelles',     icon: <Siren className="h-3 w-3" /> },
-  { value: 'ACK',           label: 'Reconnues',     icon: <Clock className="h-3 w-3" /> },
-  { value: 'INVESTIGATING', label: 'En cours',      icon: <Filter className="h-3 w-3" /> },
-  { value: 'RESOLVED',      label: 'Résolues',      icon: <CheckCircle2 className="h-3 w-3" /> },
-  { value: 'DISMISSED',     label: 'Fausses',       icon: <XCircle className="h-3 w-3" /> },
+  { value: 'open',          label: 'Nouvelles',     icon: <Siren className="h-3 w-3" /> },
+  { value: 'ack',           label: 'Reconnues',     icon: <Clock className="h-3 w-3" /> },
+  { value: 'investigating', label: 'En cours',      icon: <Filter className="h-3 w-3" /> },
+  { value: 'resolved',      label: 'Résolues',      icon: <CheckCircle2 className="h-3 w-3" /> },
+  { value: 'dismissed',     label: 'Fausses',       icon: <XCircle className="h-3 w-3" /> },
 ];
 
 const SEV_BADGE: Record<string, string> = {
@@ -58,11 +60,11 @@ const SEV_BADGE: Record<string, string> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  OPEN: 'bg-rose-50 text-rose-700',
-  ACK: 'bg-amber-50 text-amber-700',
-  INVESTIGATING: 'bg-sky-50 text-sky-700',
-  RESOLVED: 'bg-emerald-50 text-emerald-700',
-  DISMISSED: 'bg-slate-100 text-slate-500',
+  open: 'bg-rose-50 text-rose-700',
+  ack: 'bg-amber-50 text-amber-700',
+  investigating: 'bg-sky-50 text-sky-700',
+  resolved: 'bg-emerald-50 text-emerald-700',
+  dismissed: 'bg-slate-100 text-slate-500',
 };
 
 const PAGE_SIZE = 25;
@@ -317,8 +319,8 @@ export default function AlertesPage() {
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${SEV_BADGE[sev] || SEV_BADGE.info}`}>
                   {sev}
                 </span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${STATUS_BADGE[a.status] || 'bg-slate-100'}`}>
-                  {STATUS_OPTS.find((s) => s.value === a.status)?.label || a.status}
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${STATUS_BADGE[(a.status || '').toLowerCase()] || 'bg-slate-100'}`}>
+                  {STATUS_OPTS.find((s) => s.value === (a.status || '').toLowerCase())?.label || a.status}
                 </span>
               </div>
             </Link>
