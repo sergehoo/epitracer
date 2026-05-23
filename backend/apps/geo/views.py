@@ -67,15 +67,18 @@ class HealthZoneViewSet(viewsets.ModelViewSet):
         """Renvoie les indicateurs agrégés d'une zone sanitaire.
 
         Pour une zone parent (PRES, région, district) : agrège récursivement
-        sur tous les voyageurs / alertes / quarantines des descendants en
-        utilisant les liens géographiques disponibles (entry_point.region,
-        traveler.entry_point, etc.).
+        sur tous les voyageurs / alertes / quarantines des descendants.
 
-        Note pratique : la liaison entre HealthZone et les entités voyageur/
-        alerte n'est pas matérialisée par une FK directe — on fait du matching
-        par nom géographique (entry_point.region, traveler.address_region).
-        Si une vraie FK est ajoutée plus tard, remplacer le matching par
-        une jointure.
+        La liaison Traveler → HealthZone n'étant pas matérialisée par une
+        FK, on approxime par matching de noms géographiques sur les champs
+        existants du modèle Traveler :
+          - `entry_point.region` (CharField libre sur EntryPoint)
+          - `confinement_city`
+          - `confinement_commune`
+          - `confinement_neighborhood`
+
+        Les alertes sont matchées via `HealthAlert.zone` (FK directe) OU
+        via les voyageurs liés ci-dessus.
         """
         from apps.travelers.models import Traveler
         from apps.surveillance.models import HealthAlert
@@ -88,38 +91,47 @@ class HealthZoneViewSet(viewsets.ModelViewSet):
         zone_ids = [z.id for z in all_zones]
         zone_names = [z.name for z in all_zones]
 
-        # ── 2) Périmètre temporel (30 jours par défaut)
-        days = int(request.query_params.get("days", 30))
+        # ── 2) Périmètre temporel (30 jours par défaut, plafonné à 5 ans)
+        try:
+            days = max(1, min(1825, int(request.query_params.get("days", 30))))
+        except (TypeError, ValueError):
+            days = 30
         since = timezone.now() - timedelta(days=days)
 
-        # ── 3) Voyageurs liés (via entry_point.region OU via address contenant le nom)
-        #     Approximatif faute de FK directe Traveler→HealthZone
-        trav_qs = Traveler.objects.filter(
+        # ── 3) Voyageurs liés via matching sur les vrais champs Traveler
+        #     (entry_point.region OU confinement_city/commune/quartier)
+        trav_filter = (
             Q(entry_point__region__in=zone_names)
-            | Q(address_region__in=zone_names)
+            | Q(confinement_city__in=zone_names)
+            | Q(confinement_commune__in=zone_names)
+            | Q(confinement_neighborhood__in=zone_names)
         )
+        trav_qs = Traveler.objects.filter(trav_filter).distinct()
         n_travelers = trav_qs.count()
         n_travelers_recent = trav_qs.filter(arrival_date__gte=since.date()).count()
 
         # ── 4) Alertes : via zone FK directe OU via voyageurs ciblés
+        #     Note : target_id est CharField → on convertit les PK en str
+        trav_pks_str = [str(pk) for pk in trav_qs.values_list("pk", flat=True)[:5000]]
         alert_qs = HealthAlert.objects.filter(
-            Q(zone__id__in=zone_ids)
-            | Q(target_ct__model="traveler", target_id__in=trav_qs.values("id"))
-        )
+            Q(zone_id__in=zone_ids)
+            | Q(target_ct__model="traveler", target_id__in=trav_pks_str)
+        ).distinct()
         n_alerts_total = alert_qs.count()
-        n_alerts_open = alert_qs.filter(
-            status__in=["OPEN", "ACK", "INVESTIGATING", "open", "ack", "investigating"]
-        ).count()
+        OPEN_STATUSES = ["OPEN", "ACK", "INVESTIGATING", "open", "ack", "investigating"]
+        n_alerts_open = alert_qs.filter(status__in=OPEN_STATUSES).count()
         n_alerts_critical = alert_qs.filter(
-            status__in=["OPEN", "ACK", "INVESTIGATING", "open", "ack", "investigating"],
+            status__in=OPEN_STATUSES,
             severity__in=["critical", "CRITICAL", "high", "HIGH"],
         ).count()
 
-        # ── 5) Quarantaines : via traveler (rattaché à un voyageur de la zone)
+        # ── 5) Quarantaines : via voyageurs
         qr_qs = QuarantineRecord.objects.filter(traveler__in=trav_qs)
         n_quarantines_total = qr_qs.count()
         n_quarantines_active = qr_qs.filter(status__in=["active", "extended"]).count()
-        n_quarantines_completed = qr_qs.filter(status__in=["completed", "broken", "cancelled"]).count()
+        n_quarantines_completed = qr_qs.filter(
+            status__in=["completed", "broken", "cancelled"]
+        ).count()
 
         # ── 6) Check-ins quotidiens sur la période
         check_qs = DailyCheck.objects.filter(
@@ -128,12 +140,14 @@ class HealthZoneViewSet(viewsets.ModelViewSet):
         n_checkins = check_qs.count()
         n_checkins_symptomatic = check_qs.filter(has_symptoms=True).count()
 
-        # ── 7) Ventilation par sévérité d'alerte (pour graphique)
+        # ── 7) Ventilation par sévérité d'alerte
         by_severity = list(
             alert_qs.values("severity").annotate(n=Count("id")).order_by("-n")
         )
         # ── 8) Ventilation par status quarantaine
-        by_qr_status = list(qr_qs.values("status").annotate(n=Count("id")).order_by("-n"))
+        by_qr_status = list(
+            qr_qs.values("status").annotate(n=Count("id")).order_by("-n")
+        )
 
         # ── 9) Enfants directs (pour drill-down côté front)
         children = [
@@ -150,8 +164,14 @@ class HealthZoneViewSet(viewsets.ModelViewSet):
         # ── 10) Chemin (breadcrumb)
         breadcrumb = []
         cur = zone
-        while cur:
-            breadcrumb.insert(0, {"code": cur.code, "name": cur.name, "level": cur.level})
+        seen_ids = set()
+        while cur and cur.id not in seen_ids:
+            seen_ids.add(cur.id)
+            breadcrumb.insert(0, {
+                "code": cur.code,
+                "name": cur.name,
+                "level": cur.level,
+            })
             cur = cur.parent
 
         return Response({

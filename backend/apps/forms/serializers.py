@@ -29,8 +29,9 @@ class FormFieldSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FormField
+        # `section` est nécessaire en write pour créer un champ via l'admin.
         fields = [
-            "id", "code", "label", "help_text", "type", "is_required", "order",
+            "id", "section", "code", "label", "help_text", "type", "is_required", "order",
             "min_value", "max_value", "min_length", "max_length",
             "regex", "default_value", "placeholder", "risk_weight",
             "options", "conditions",
@@ -38,11 +39,14 @@ class FormFieldSerializer(serializers.ModelSerializer):
 
 
 class FormSectionSerializer(serializers.ModelSerializer):
-    fields = FormFieldSerializer(many=True, read_only=True)
+    # En lecture, on inclut les champs imbriqués (renommés `fields_list` pour
+    # ne pas entrer en conflit avec l'attribut DRF `Meta.fields`).
+    fields_list = FormFieldSerializer(source="fields", many=True, read_only=True)
 
     class Meta:
         model = FormSection
-        fields = ["id", "code", "title", "description", "order", "fields"]
+        # `form` exposé en write pour créer/déplacer une section.
+        fields = ["id", "form", "code", "title", "description", "order", "fields_list"]
 
 
 class DynamicFormSerializer(serializers.ModelSerializer):
