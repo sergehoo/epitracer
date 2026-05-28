@@ -34,7 +34,17 @@ _TOKEN_TTL_BUFFER = 60  # secondes de marge avant expiration
 
 
 def _get_settings() -> dict:
-    """Récupère les settings Orange CI avec défauts safe."""
+    """Récupère les settings Orange CI avec défauts safe.
+
+    IMPORTANT — Format Orange CI OneAPI :
+      - `senderAddress` doit être un MSISDN au format E.164 préfixé `tel:`
+        (typiquement le numéro du contrat Orange, ex: tel:+2250709862860).
+      - `senderName` (champ séparé !) reçoit le sender ID alphanumérique
+        ("INHP") tel qu'il sera affiché chez le destinataire.
+
+    Mettre le sender ID dans `senderAddress` (notre ancien bug) entraîne
+    HTTP 201 Created mais le SMS n'est jamais routé par l'opérateur.
+    """
     cfg = getattr(settings, "NOTIFICATIONS", {})
     return {
         "enabled": cfg.get("ORANGE_CI_SMS_ENABLED", False),
@@ -42,10 +52,14 @@ def _get_settings() -> dict:
         "token_url": cfg.get("ORANGE_CI_SMS_TOKEN_URL", "https://api.orange.com/oauth/v3/token"),
         "client_id": cfg.get("ORANGE_CI_SMS_CLIENT_ID", ""),
         "client_secret": cfg.get("ORANGE_CI_SMS_CLIENT_SECRET", ""),
+        # MSISDN émetteur (E.164, sans le préfixe "tel:") — sert pour le
+        # `senderAddress` ET pour le path URL.
+        "sender_msisdn": cfg.get("ORANGE_CI_SMS_SENDER_MSISDN", ""),
+        # Sender ID alphanumérique (texte affiché côté destinataire) — sert
+        # pour `senderName`. Doit être validé par Orange Business CI.
         "sender_name": cfg.get("ORANGE_CI_SMS_SENDER_NAME", "INHP"),
         "timeout": int(cfg.get("ORANGE_CI_SMS_TIMEOUT", 15)),
         # URL publique du webhook qu'Orange CI appellera avec le delivery report.
-        # ex: https://api.veillesanitaire.com/api/v1/notifications/webhooks/orange-ci/sms/status/
         "callback_url": cfg.get("ORANGE_CI_SMS_CALLBACK_URL", ""),
     }
 
@@ -131,25 +145,47 @@ def send_sms(
         logger.error("Orange CI : token KO — %s", exc)
         return OrangeSendResult(ok=False, error=str(exc))
 
-    sender = f"tel:{cfg['sender_name']}" if cfg["sender_name"] else "tel:+225"
+    # ── Construction du senderAddress (MSISDN) ──
+    # senderAddress DOIT être un numéro de téléphone E.164 préfixé "tel:".
+    # Le sender ID alphanumérique ("INHP") va dans le champ senderName, PAS
+    # dans senderAddress. Mettre "tel:INHP" entraîne HTTP 201 sans routage
+    # réel du SMS chez l'opérateur (bug constaté en mai 2026).
+    msisdn = (cfg.get("sender_msisdn") or "").strip()
+    if not msisdn:
+        return OrangeSendResult(
+            ok=False,
+            error=(
+                "Orange CI : ORANGE_CI_SMS_SENDER_MSISDN non configuré. "
+                "Renseigner le numéro Orange du contrat (ex: +2250709862860)."
+            ),
+        )
+    if not msisdn.startswith("+"):
+        msisdn = "+" + msisdn.lstrip("0")
+
+    sender_address = f"tel:{msisdn}"
+
     # Endpoint Orange CI standard : outbound/{senderAddress}/requests
-    # Compatibilité base_url avec ou sans suffixe "/outbound/" :
     base = cfg["base_url"].rstrip("/")
     if base.endswith("/outbound"):
         prefix = base
     else:
         prefix = f"{base}/outbound"
-    # `senderAddress` doit être URL-encodé (contient ":") selon la spec
-    # OneAPI Orange — sinon le path est invalide.
-    url = f"{prefix}/{quote(sender, safe='')}/requests"
+
+    # Le path accepte `tel:+225...` quasi tel-quel ; on garde `:` et `+`
+    # non-encodés (Orange retourne ses propres resourceURL avec ces caractères
+    # en clair dans le path : .../outbound/tel:+2250709862860/requests/<uuid>).
+    url = f"{prefix}/{quote(sender_address, safe=':+')}/requests"
 
     payload = {
         "outboundSMSMessageRequest": {
             "address": [f"tel:{to}"],
-            "senderAddress": sender,
+            "senderAddress": sender_address,
             "outboundSMSTextMessage": {"message": body[:1530]},  # 10 segments max
         }
     }
+    # senderName : sender ID alphanumérique (5-11 chars), à valider chez Orange.
+    if cfg.get("sender_name"):
+        payload["outboundSMSMessageRequest"]["senderName"] = cfg["sender_name"][:11]
 
     # ── receiptRequest : indispensable pour qu'Orange nous renvoie le
     # delivery report. Sans cette section, le statut reste figé à `sent`
@@ -157,8 +193,6 @@ def send_sms(
     if cfg.get("callback_url"):
         payload["outboundSMSMessageRequest"]["receiptRequest"] = {
             "notifyURL": cfg["callback_url"],
-            # callbackData : opaque pour Orange, on y met l'ID de notification
-            # pour que le webhook puisse retrouver la ligne en DB.
             "callbackData": str(callback_data or ""),
         }
 

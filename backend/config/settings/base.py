@@ -433,6 +433,11 @@ NOTIFICATIONS = {
                                     default="https://api.orange.com/oauth/v3/token"),
     "ORANGE_CI_SMS_CLIENT_ID": env("ORANGE_CI_SMS_CLIENT_ID", default=""),
     "ORANGE_CI_SMS_CLIENT_SECRET": env("ORANGE_CI_SMS_CLIENT_SECRET", default=""),
+    # MSISDN émetteur du contrat Orange CI — Format E.164 (ex: +2250709862860).
+    # OBLIGATOIRE : sert pour senderAddress dans le payload + path URL.
+    "ORANGE_CI_SMS_SENDER_MSISDN": env("ORANGE_CI_SMS_SENDER_MSISDN", default=""),
+    # Sender ID alphanumérique affiché chez le destinataire (5-11 chars).
+    # À valider auprès d'Orange Business CI ; va dans le champ senderName.
     "ORANGE_CI_SMS_SENDER_NAME": env("ORANGE_CI_SMS_SENDER_NAME", default="EpiTrace"),
     "ORANGE_CI_SMS_TIMEOUT": env.int("ORANGE_CI_SMS_TIMEOUT", default=15),
     "ORANGE_CI_WEBHOOK_TOKEN": env("ORANGE_CI_WEBHOOK_TOKEN", default=""),
