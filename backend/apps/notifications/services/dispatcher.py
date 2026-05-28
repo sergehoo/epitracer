@@ -39,13 +39,44 @@ class SendResult:
 # ---------------------------------------------------------------------------
 # Rendu de template avec variables {var}
 # ---------------------------------------------------------------------------
+class _SafeDict(dict):
+    """dict qui retourne `{key}` au lieu de raise KeyError → format_map robuste."""
+    def __missing__(self, key):
+        return "{" + key + "}"
+
+
+def _enrich_context(context: Optional[dict], traveler=None) -> dict:
+    """Ajoute automatiquement les attributs utiles du voyageur au context.
+
+    Évite que les placeholders standards comme `{traveler_id}`, `{full_name}`
+    restent non-substitués quand l'appelant a oublié de les passer.
+    """
+    enriched = dict(context or {})
+    if traveler is not None:
+        # Toujours fournir traveler_id, nom, prénom, etc. si pas déjà fournis.
+        enriched.setdefault("traveler_id", getattr(traveler, "public_id", "") or "")
+        first = (getattr(traveler, "first_name", "") or "").strip()
+        last = (getattr(traveler, "last_name", "") or "").strip()
+        enriched.setdefault("first_name", first)
+        enriched.setdefault("last_name", last)
+        enriched.setdefault("full_name", f"{first} {last}".strip() or enriched["traveler_id"])
+        enriched.setdefault("phone", getattr(traveler, "phone_mobile", "") or "")
+    return enriched
+
+
 def _render(template_body: str, context: dict) -> str:
-    if not context:
+    """Rend un body en substituant les `{var}` par les valeurs du context.
+
+    - Utilise `format_map` + `_SafeDict` → ne plante PAS si une variable manque,
+      laisse simplement `{var}` brut.
+    - Si le body ne contient pas de `{`, retourne tel quel sans frais.
+    """
+    if not template_body or "{" not in template_body:
         return template_body
     try:
-        return template_body.format(**context)
-    except (KeyError, IndexError) as exc:
-        logger.warning("Template rendering failed (missing var %s) — falling back to raw", exc)
+        return template_body.format_map(_SafeDict(context or {}))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Template rendering failed (%s) — falling back to raw", exc)
         return template_body
 
 
@@ -107,13 +138,18 @@ def enqueue_notification(
             )
         final_provider = force_provider
 
-    # 3) Rendu body si template + context fournis (body laissé vide)
-    final_body = body
-    if not final_body and template and context:
-        final_body = _render(template.body, context)
-    elif template and context:
-        # On considère que body fourni est prioritaire (édition libre)
-        pass
+    # 3) Construction du body final + rendu des placeholders.
+    # Le body est TOUJOURS passé au moteur de rendu pour substituer les `{var}`
+    # qui pourraient s'y trouver (ex: un agent qui colle un template avec
+    # `{traveler_id}` dans la modale d'envoi manuel). Le context est aussi
+    # auto-enrichi avec les attributs du traveler associé.
+    enriched_context = _enrich_context(context, traveler)
+    if not body and template:
+        # Pas de body fourni → on part du body du template
+        raw_body = template.body or ""
+    else:
+        raw_body = body or ""
+    final_body = _render(raw_body, enriched_context)
 
     if not final_body or not final_body.strip():
         return SendResult(ok=False, error="Le corps du message est vide.")
@@ -132,7 +168,7 @@ def enqueue_notification(
         normalized_phone=decision.normalized,
         body=final_body,
         subject=subject,
-        context=context or {},
+        context=enriched_context,
         direction=Direction.OUTBOUND,
         message_type=message_type,
         status=NotificationStatus.QUEUED,
@@ -228,12 +264,12 @@ def send_template_message(
     if not template:
         return SendResult(ok=False, error=f"Template introuvable : {template_code}")
 
-    body = _render(template.body, context or {})
-
+    # On passe le body BRUT du template + le context : enqueue_notification
+    # se charge du rendu (avec auto-enrichissement traveler).
     return enqueue_notification(
         channel=channel,
         recipient=recipient,
-        body=body,
+        body=template.body,
         subject=template.subject,
         traveler=traveler,
         template=template,
