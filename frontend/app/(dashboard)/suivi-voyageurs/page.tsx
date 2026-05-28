@@ -11,9 +11,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Activity, AlertTriangle, Bell, MapPin, Search, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, MapPin, Search, Send, Users } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
+import { SendMessageModal, SendMessageTarget } from '@/components/notifications/SendMessageModal';
 
 interface FollowupRow {
   public_id: string;
@@ -53,6 +54,7 @@ export default function SuiviVoyageursPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [onlyMissed, setOnlyMissed] = useState(false);
+  const [msgTarget, setMsgTarget] = useState<SendMessageTarget | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -189,12 +191,27 @@ export default function SuiviVoyageursPage() {
                     {r.last_location_at ? formatDateTime(r.last_location_at) : '—'}
                   </Td>
                   <Td>
-                    <Link
-                      href={`/voyageurs/${r.public_id}/itineraire`}
-                      className="text-xs text-ciOrange hover:underline font-semibold"
-                    >
-                      Itinéraire
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/voyageurs/${r.public_id}/itineraire`}
+                        className="text-xs text-ciOrange hover:underline font-semibold"
+                      >
+                        Itinéraire
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setMsgTarget({
+                          traveler_public_id: r.public_id,
+                          traveler_name: r.full_name,
+                          phone: r.phone,
+                          first_name: r.full_name?.split(' ')[0],
+                        })}
+                        title="Envoyer un message"
+                        className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline font-semibold"
+                      >
+                        <Send className="h-3 w-3" /> Message
+                      </button>
+                    </div>
                   </Td>
                 </tr>
               ))}
@@ -202,6 +219,15 @@ export default function SuiviVoyageursPage() {
           </table>
         </div>
       </div>
+
+      {/* Modal envoi message */}
+      {msgTarget && (
+        <SendMessageModal
+          open={!!msgTarget}
+          target={msgTarget}
+          onClose={() => setMsgTarget(null)}
+        />
+      )}
     </div>
   );
 }

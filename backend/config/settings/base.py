@@ -239,6 +239,10 @@ REST_FRAMEWORK = {
         # l'énumération brute (30/min par IP est largement suffisant pour
         # un usage légitime, et bloque un scanner massif).
         "qr_verify_public": "30/min",
+        # Envoi manuel de notifications (SMS/WhatsApp) par un agent.
+        # Anti-spam pour éviter qu'un compte compromis ou un agent
+        # malveillant envoie en masse aux voyageurs.
+        "notifications_send": "30/hour",
         # Companion : limites généreuses pour la PWA, plus serrées
         # sur les pings de localisation pour éviter le tracking abusif.
         "companion_checkin": "12/hour",
@@ -417,13 +421,47 @@ HEALTHPASS = {
 # Notifications providers
 # ---------------------------------------------------------------------------
 NOTIFICATIONS = {
-    "SMS_PROVIDER": env("SMS_PROVIDER", default="stub"),
-    "WHATSAPP_PROVIDER": env("WHATSAPP_PROVIDER", default="stub"),
+    # Legacy keys (compat ascendante)
+    "SMS_PROVIDER": env("SMS_PROVIDER", default="auto"),  # "auto" = routage par numéro
+    "FCM_SERVER_KEY": env("FCM_SERVER_KEY", default=""),
+
+    # ── Orange Côte d'Ivoire (numéros +225) ──────────────────────────
+    "ORANGE_CI_SMS_ENABLED": env.bool("ORANGE_CI_SMS_ENABLED", default=False),
+    "ORANGE_CI_SMS_BASE_URL": env("ORANGE_CI_SMS_BASE_URL",
+                                   default="https://api.orange.com/smsmessaging/v1"),
+    "ORANGE_CI_SMS_TOKEN_URL": env("ORANGE_CI_SMS_TOKEN_URL",
+                                    default="https://api.orange.com/oauth/v3/token"),
+    "ORANGE_CI_SMS_CLIENT_ID": env("ORANGE_CI_SMS_CLIENT_ID", default=""),
+    "ORANGE_CI_SMS_CLIENT_SECRET": env("ORANGE_CI_SMS_CLIENT_SECRET", default=""),
+    "ORANGE_CI_SMS_SENDER_NAME": env("ORANGE_CI_SMS_SENDER_NAME", default="EpiTrace"),
+    "ORANGE_CI_SMS_TIMEOUT": env.int("ORANGE_CI_SMS_TIMEOUT", default=15),
+    "ORANGE_CI_WEBHOOK_TOKEN": env("ORANGE_CI_WEBHOOK_TOKEN", default=""),
+
+    # ── Twilio (SMS international + WhatsApp) ────────────────────────
+    "TWILIO_SMS_ENABLED": env.bool("TWILIO_SMS_ENABLED",
+                                    default=bool(env("TWILIO_ACCOUNT_SID", default=""))),
     "TWILIO_ACCOUNT_SID": env("TWILIO_ACCOUNT_SID", default=""),
     "TWILIO_AUTH_TOKEN": env("TWILIO_AUTH_TOKEN", default=""),
     "TWILIO_FROM_NUMBER": env("TWILIO_FROM_NUMBER", default=""),
-    "WHATSAPP_FROM_NUMBER": env("WHATSAPP_FROM_NUMBER", default=""),
-    "FCM_SERVER_KEY": env("FCM_SERVER_KEY", default=""),
+    "TWILIO_TIMEOUT": env.int("TWILIO_TIMEOUT", default=15),
+    "TWILIO_STATUS_CALLBACK_BASE": env(
+        "TWILIO_STATUS_CALLBACK_BASE",
+        default="https://api.veillesanitaire.com",
+    ),
+
+    # ── WhatsApp (Phase C — Twilio ou Meta) ──────────────────────────
+    "WHATSAPP_ENABLED": env.bool("WHATSAPP_ENABLED", default=False),
+    "WHATSAPP_PROVIDER": env("WHATSAPP_PROVIDER", default="twilio"),  # "twilio" | "meta"
+    "TWILIO_WHATSAPP_FROM": env("TWILIO_WHATSAPP_FROM", default=""),
+    "WHATSAPP_FROM_NUMBER": env("WHATSAPP_FROM_NUMBER", default=""),  # legacy alias
+    "META_WHATSAPP_TOKEN": env("META_WHATSAPP_TOKEN", default=""),
+    "META_WHATSAPP_PHONE_NUMBER_ID": env("META_WHATSAPP_PHONE_NUMBER_ID", default=""),
+    "META_WHATSAPP_BUSINESS_ACCOUNT_ID": env("META_WHATSAPP_BUSINESS_ACCOUNT_ID", default=""),
+    # Tokens spécifiques webhooks Meta
+    "META_WHATSAPP_VERIFY_TOKEN": env("META_WHATSAPP_VERIFY_TOKEN", default=""),
+    "META_WHATSAPP_APP_SECRET": env("META_WHATSAPP_APP_SECRET", default=""),
+    "META_WHATSAPP_API_VERSION": env("META_WHATSAPP_API_VERSION", default="v19.0"),
+    "WHATSAPP_TIMEOUT": env.int("WHATSAPP_TIMEOUT", default=15),
 }
 
 # ---------------------------------------------------------------------------

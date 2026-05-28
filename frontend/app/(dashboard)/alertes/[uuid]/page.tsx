@@ -18,10 +18,11 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, CheckCircle2, Clock, ExternalLink, FileText,
   ShieldAlert, Siren, XCircle, User, MapPin, Calendar,
-  RefreshCw, AlertTriangle, History, Bell,
+  RefreshCw, AlertTriangle, History, Bell, Send,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
+import { SendMessageModal, SendMessageTarget } from '@/components/notifications/SendMessageModal';
 
 interface AlertDetail {
   id: number;
@@ -107,6 +108,7 @@ export default function AlertDetailPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [msgTarget, setMsgTarget] = useState<SendMessageTarget | null>(null);
 
   const load = useCallback(async () => {
     if (!uuid) return;
@@ -288,12 +290,26 @@ export default function AlertDetailPage() {
                     )}
                   </div>
                 </div>
-                <Link
-                  href={`/surveillance/${traveler.public_id}`}
-                  className="inline-flex items-center gap-1 bg-emerald-600 text-white rounded-lg px-3 py-2 text-xs font-semibold hover:bg-emerald-700"
-                >
-                  Fiche complète <ExternalLink className="h-3 w-3" />
-                </Link>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <Link
+                    href={`/surveillance/${traveler.public_id}`}
+                    className="inline-flex items-center gap-1 bg-emerald-600 text-white rounded-lg px-3 py-2 text-xs font-semibold hover:bg-emerald-700"
+                  >
+                    Fiche complète <ExternalLink className="h-3 w-3" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setMsgTarget({
+                      traveler_public_id: traveler.public_id,
+                      traveler_name: `${traveler.last_name} ${traveler.first_name}`,
+                      phone: traveler.phone_mobile,
+                      first_name: traveler.first_name,
+                    })}
+                    className="inline-flex items-center gap-1 bg-ciOrange text-white rounded-lg px-3 py-2 text-xs font-semibold hover:bg-orange-600"
+                  >
+                    <Send className="h-3 w-3" /> Envoyer un message
+                  </button>
+                </div>
               </div>
             </section>
           ) : alert.target_id ? (
@@ -421,6 +437,15 @@ export default function AlertDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Modal envoi message */}
+      {msgTarget && (
+        <SendMessageModal
+          open={!!msgTarget}
+          target={msgTarget}
+          onClose={() => setMsgTarget(null)}
+        />
+      )}
     </div>
   );
 }

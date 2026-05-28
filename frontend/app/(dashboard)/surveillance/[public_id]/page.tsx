@@ -6,13 +6,15 @@ import { useEffect, useState } from 'react';
 import {
   AlertTriangle, ArrowLeft, Briefcase, Calendar, CheckCircle2, Clock,
   Download, ExternalLink, FileText, Globe2, Hash, Hospital, IdCard, Mail,
-  MapPin, Phone, Plane, QrCode, RefreshCcw, ShieldCheck, Stethoscope,
-  Thermometer, User, X,
+  MapPin, MessageSquare, Phone, Plane, QrCode, RefreshCcw, Send,
+  ShieldCheck, Stethoscope, Thermometer, User, X,
 } from 'lucide-react';
 import { API_URL, api, extractApiError } from '@/lib/api';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { formatDate, formatDateTime, STATUS_LABELS } from '@/lib/utils';
 import type { RiskLevel } from '@/types/ebola';
+import { SendMessageModal, SendMessageTarget } from '@/components/notifications/SendMessageModal';
+import { NotificationHistory } from '@/components/notifications/NotificationHistory';
 
 /* ============================================================
    Types (depuis /ebola/public/pass/<public_id>/ — endpoint AllowAny)
@@ -70,6 +72,7 @@ export default function TravelerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [msgTarget, setMsgTarget] = useState<SendMessageTarget | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -486,6 +489,39 @@ export default function TravelerDetailPage() {
           </div>
         </aside>
       </div>
+
+      {/* ============================================================
+          Messages & notifications — historique + envoi rapide
+          ============================================================ */}
+      <section className="space-y-3 pt-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="font-display text-lg font-bold inline-flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-ciOrange" />
+            Messages &amp; notifications
+          </h2>
+          <button
+            type="button"
+            onClick={() => setMsgTarget({
+              traveler_public_id: t.public_id,
+              traveler_name: `${t.last_name} ${t.first_name}`,
+              phone: t.phone_mobile || (t as any).whatsapp_phone || '',
+              first_name: t.first_name,
+            })}
+            className="inline-flex items-center gap-2 rounded-xl bg-ciOrange text-white px-4 py-2 text-sm font-semibold shadow hover:bg-orange-600 transition"
+          >
+            <Send className="h-4 w-4" /> Envoyer un message
+          </button>
+        </div>
+        <NotificationHistory publicId={t.public_id} pageSize={50} />
+      </section>
+
+      {msgTarget && (
+        <SendMessageModal
+          open={!!msgTarget}
+          target={msgTarget}
+          onClose={() => setMsgTarget(null)}
+        />
+      )}
     </div>
   );
 }

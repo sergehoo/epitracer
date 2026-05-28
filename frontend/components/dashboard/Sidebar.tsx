@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity, Building2, BarChart3, Bell, ChevronLeft, FileText, FormInput,
-  HeartPulse, LayoutDashboard, Map, MapPin, Network, QrCode, Settings,
-  ShieldAlert, Siren, Stethoscope, Users, X,
+  HeartPulse, LayoutDashboard, Map, MapPin, MessageSquare, Network, QrCode,
+  Settings, ShieldAlert, Siren, Stethoscope, Users, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/lib/sidebarStore';
@@ -20,6 +20,7 @@ const NAV = [
   { href: '/points-entree',     label: "Points d'entrée",   icon: MapPin },
   { href: '/districts',         label: 'Districts',         icon: Building2 },
   { href: '/alertes',           label: 'Alertes',           icon: Siren },
+  { href: '/notifications',     label: 'Notifications',     icon: MessageSquare },
   { href: '/cartographie',      label: 'Cartographie',      icon: Map },
   { href: '/maladies',          label: 'Maladies',          icon: Stethoscope },
   { href: '/formulaires',       label: 'Formulaires',       icon: FormInput },
