@@ -5,8 +5,21 @@ global:
 scrape_configs:
   - job_name: epidemitracker-api
     metrics_path: /metrics
+    # Django redirige /metrics vers HTTPS si X-Forwarded-Proto != https.
+    # On envoie le header pour éviter le 301 (cf. SECURE_PROXY_SSL_HEADER
+    # dans backend/config/settings/base.py).
+    scheme: http
+    follow_redirects: false
     static_configs:
       - targets: ["web:8000"]
+    relabel_configs: []
+    # Ce header passe via le pseudo-mécanisme `params` n'existe pas ;
+    # Prometheus permet d'injecter des headers HTTP via `authorization` /
+    # `basic_auth`. Pour un header arbitraire on doit utiliser la stanza
+    # `http_headers` (Prometheus ≥ 2.49).
+    http_headers:
+      X-Forwarded-Proto:
+        values: ["https"]
 
   - job_name: traefik
     metrics_path: /metrics
