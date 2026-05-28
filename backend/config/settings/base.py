@@ -436,6 +436,9 @@ NOTIFICATIONS = {
     "ORANGE_CI_SMS_SENDER_NAME": env("ORANGE_CI_SMS_SENDER_NAME", default="EpiTrace"),
     "ORANGE_CI_SMS_TIMEOUT": env.int("ORANGE_CI_SMS_TIMEOUT", default=15),
     "ORANGE_CI_WEBHOOK_TOKEN": env("ORANGE_CI_WEBHOOK_TOKEN", default=""),
+    # URL publique du delivery webhook — quand renseignée, on envoie un
+    # `receiptRequest` dans le payload SMS pour qu'Orange CI nous notifie.
+    "ORANGE_CI_SMS_CALLBACK_URL": env("ORANGE_CI_SMS_CALLBACK_URL", default=""),
 
     # ── Twilio (SMS international + WhatsApp) ────────────────────────
     "TWILIO_SMS_ENABLED": env.bool("TWILIO_SMS_ENABLED",

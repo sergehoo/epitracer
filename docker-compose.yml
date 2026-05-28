@@ -31,6 +31,10 @@ x-django-env: &django-env
   ORANGE_CI_SMS_TOKEN_URL: ${ORANGE_CI_SMS_TOKEN_URL:-https://api.orange.com/oauth/v3/token}
   ORANGE_CI_SMS_TIMEOUT: ${ORANGE_CI_SMS_TIMEOUT:-15}
   ORANGE_CI_WEBHOOK_TOKEN: ${ORANGE_CI_WEBHOOK_TOKEN:-}
+  # URL publique du webhook delivery report — Orange CI appelle cette URL
+  # pour chaque SMS avec deliveryInfoNotification. Doit être HTTPS et
+  # accessible publiquement. Ex: https://api.veillesanitaire.com/api/v1/notifications/webhooks/orange-ci/sms/status/
+  ORANGE_CI_SMS_CALLBACK_URL: ${ORANGE_CI_SMS_CALLBACK_URL:-}
   # Twilio (SMS international + WhatsApp Twilio)
   TWILIO_SMS_ENABLED: ${TWILIO_SMS_ENABLED:-false}
   TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}

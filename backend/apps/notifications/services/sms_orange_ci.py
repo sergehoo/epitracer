@@ -44,6 +44,9 @@ def _get_settings() -> dict:
         "client_secret": cfg.get("ORANGE_CI_SMS_CLIENT_SECRET", ""),
         "sender_name": cfg.get("ORANGE_CI_SMS_SENDER_NAME", "INHP"),
         "timeout": int(cfg.get("ORANGE_CI_SMS_TIMEOUT", 15)),
+        # URL publique du webhook qu'Orange CI appellera avec le delivery report.
+        # ex: https://api.veillesanitaire.com/api/v1/notifications/webhooks/orange-ci/sms/status/
+        "callback_url": cfg.get("ORANGE_CI_SMS_CALLBACK_URL", ""),
     }
 
 
@@ -88,13 +91,22 @@ def _get_access_token(force_refresh: bool = False) -> str:
 # ---------------------------------------------------------------------------
 # Envoi SMS
 # ---------------------------------------------------------------------------
-def send_sms(to: str, body: str, metadata: Optional[dict] = None) -> OrangeSendResult:
+def send_sms(
+    to: str,
+    body: str,
+    metadata: Optional[dict] = None,
+    callback_data: Optional[str] = None,
+) -> OrangeSendResult:
     """Envoie un SMS via Orange CI.
 
     Args:
         to: numéro destinataire au format E.164 (+225XXXXXXXXXX)
         body: contenu du message (max 160 caractères pour rester en 1 SMS)
         metadata: champs additionnels facultatifs (transaction_id, etc.)
+        callback_data: identifiant opaque (typiquement notif.id) renvoyé tel
+            quel par Orange dans le delivery report. Permet à notre webhook
+            de retrouver la Notification cible. Ignoré si pas de callback_url
+            configurée.
 
     Returns:
         OrangeSendResult avec ok/provider_message_id/error.
@@ -138,6 +150,18 @@ def send_sms(to: str, body: str, metadata: Optional[dict] = None) -> OrangeSendR
             "outboundSMSTextMessage": {"message": body[:1530]},  # 10 segments max
         }
     }
+
+    # ── receiptRequest : indispensable pour qu'Orange nous renvoie le
+    # delivery report. Sans cette section, le statut reste figé à `sent`
+    # côté backend même si l'opérateur acquitte / rejette le message.
+    if cfg.get("callback_url"):
+        payload["outboundSMSMessageRequest"]["receiptRequest"] = {
+            "notifyURL": cfg["callback_url"],
+            # callbackData : opaque pour Orange, on y met l'ID de notification
+            # pour que le webhook puisse retrouver la ligne en DB.
+            "callbackData": str(callback_data or ""),
+        }
+
     # Log au niveau DEBUG pour pouvoir tracer en cas d'incident (sans secrets)
     logger.debug("Orange CI POST %s payload=%s", url, payload)
 

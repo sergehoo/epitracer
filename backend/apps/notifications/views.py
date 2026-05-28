@@ -27,7 +27,7 @@ class SendNotificationThrottle(UserRateThrottle):
 from apps.travelers.models import Traveler
 
 from .models import (
-    Notification, NotificationStatus, NotificationTemplate,
+    Notification, NotificationStatus, NotificationTemplate, Provider,
 )
 from .permissions import (
     CanRetryNotification, CanSendNotification, CanViewNotifications,
@@ -291,8 +291,51 @@ class OrangeCiSmsStatusWebhookView(APIView):
             "deliveryuncertain": NotificationStatus.SENT,
         }.get(delivery_status)
 
-        if mapped and callback_data:
-            _update_notification_status(callback_data, mapped)
+        if not mapped:
+            logger.info(
+                "Orange CI webhook : status %r non mappé, callback=%s",
+                delivery_status, callback_data,
+            )
+            return Response({"ok": True, "ignored": True})
+
+        # callbackData = notif.id (envoyé dans le receiptRequest côté send_sms).
+        # Lookup par PK puis fallback provider_message_id (compat) puis adresse.
+        notif = None
+        if callback_data and str(callback_data).isdigit():
+            notif = Notification.objects.filter(pk=int(callback_data)).first()
+        if notif is None and callback_data:
+            notif = Notification.objects.filter(
+                provider_message_id=callback_data
+            ).first()
+        if notif is None:
+            addr = (delivery_info.get("address") or "").lstrip("tel:").strip()
+            if addr:
+                notif = (
+                    Notification.objects
+                    .filter(normalized_phone=addr, provider=Provider.ORANGE_CI)
+                    .order_by("-created_at")
+                    .first()
+                )
+
+        if notif is None:
+            logger.warning(
+                "Orange CI webhook : notif introuvable (callback=%s status=%s)",
+                callback_data, delivery_status,
+            )
+            return Response({"ok": True, "not_found": True})
+
+        if notif.provider_message_id:
+            _update_notification_status(notif.provider_message_id, mapped)
+        else:
+            notif.status = mapped
+            updates = ["status", "updated_at"]
+            if mapped == NotificationStatus.DELIVERED:
+                notif.delivered_at = timezone.now()
+                updates.append("delivered_at")
+            elif mapped == NotificationStatus.FAILED:
+                notif.failed_at = timezone.now()
+                updates.append("failed_at")
+            notif.save(update_fields=updates)
         return Response({"ok": True})
 
 

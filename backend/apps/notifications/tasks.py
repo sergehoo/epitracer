@@ -43,7 +43,13 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
         if notif.channel == Channel.SMS:
             if notif.provider == Provider.ORANGE_CI:
                 from .services.sms_orange_ci import send_sms as send_orange
-                res = send_orange(notif.normalized_phone, notif.body)
+                # callback_data = notif.id → permet au webhook Orange CI de
+                # mapper le delivery report sur la bonne notification.
+                res = send_orange(
+                    notif.normalized_phone,
+                    notif.body,
+                    callback_data=str(notif.id),
+                )
                 ok, msg_id, err = res.ok, res.provider_message_id, res.error
             elif notif.provider == Provider.TWILIO:
                 from .services.sms_twilio import send_sms as send_tw
