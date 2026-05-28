@@ -45,22 +45,57 @@ class _SafeDict(dict):
         return "{" + key + "}"
 
 
-def _enrich_context(context: Optional[dict], traveler=None) -> dict:
+def _enrich_context(context: Optional[dict], traveler=None, body: str = "") -> dict:
     """Ajoute automatiquement les attributs utiles du voyageur au context.
 
-    Évite que les placeholders standards comme `{traveler_id}`, `{full_name}`
-    restent non-substitués quand l'appelant a oublié de les passer.
+    Évite que les placeholders standards comme `{traveler_id}`, `{full_name}`,
+    `{traveler_name}`, `{pass_number}`, `{expires_at}` restent non-substitués
+    quand l'appelant a oublié de les passer.
+
+    Les lookups DB (pass actif) ne sont effectués QUE si le body référence la
+    variable correspondante — économie de requêtes en envoi de masse.
     """
     enriched = dict(context or {})
-    if traveler is not None:
-        # Toujours fournir traveler_id, nom, prénom, etc. si pas déjà fournis.
-        enriched.setdefault("traveler_id", getattr(traveler, "public_id", "") or "")
-        first = (getattr(traveler, "first_name", "") or "").strip()
-        last = (getattr(traveler, "last_name", "") or "").strip()
-        enriched.setdefault("first_name", first)
-        enriched.setdefault("last_name", last)
-        enriched.setdefault("full_name", f"{first} {last}".strip() or enriched["traveler_id"])
-        enriched.setdefault("phone", getattr(traveler, "phone_mobile", "") or "")
+    if traveler is None:
+        return enriched
+
+    # ── Attributs gratuits (déjà chargés) ───────────────────────────────
+    first = (getattr(traveler, "first_name", "") or "").strip()
+    last = (getattr(traveler, "last_name", "") or "").strip()
+    full_name = f"{first} {last}".strip()
+
+    enriched.setdefault("traveler_id", getattr(traveler, "public_id", "") or "")
+    enriched.setdefault("first_name", first)
+    enriched.setdefault("last_name", last)
+    enriched.setdefault("full_name", full_name or enriched["traveler_id"])
+    # Alias utilisé par certains templates seedés
+    enriched.setdefault("traveler_name", enriched["full_name"])
+    enriched.setdefault("phone", getattr(traveler, "phone_mobile", "") or "")
+    enriched.setdefault("email", getattr(traveler, "email", "") or "")
+
+    # ── Lookup pass actif uniquement si le body en a besoin ─────────────
+    needs_pass = body and ("{pass_number}" in body or "{expires_at}" in body)
+    if needs_pass and "pass_number" not in enriched:
+        try:
+            # Import local pour éviter cycle d'imports notifications ↔ health_pass
+            from apps.health_pass.models import HealthPass, HealthPassStatus
+            pass_obj = (
+                HealthPass.objects
+                .filter(traveler=traveler, status=HealthPassStatus.ACTIVE)
+                .order_by("-expires_at")
+                .first()
+            )
+            if pass_obj:
+                enriched["pass_number"] = pass_obj.pass_number
+                enriched.setdefault(
+                    "expires_at",
+                    pass_obj.expires_at.strftime("%d/%m/%Y à %Hh%M")
+                    if pass_obj.expires_at else "",
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Enrich pass lookup failed for traveler=%s : %s",
+                           getattr(traveler, "pk", "?"), exc)
+
     return enriched
 
 
@@ -143,12 +178,12 @@ def enqueue_notification(
     # qui pourraient s'y trouver (ex: un agent qui colle un template avec
     # `{traveler_id}` dans la modale d'envoi manuel). Le context est aussi
     # auto-enrichi avec les attributs du traveler associé.
-    enriched_context = _enrich_context(context, traveler)
     if not body and template:
         # Pas de body fourni → on part du body du template
         raw_body = template.body or ""
     else:
         raw_body = body or ""
+    enriched_context = _enrich_context(context, traveler, body=raw_body)
     final_body = _render(raw_body, enriched_context)
 
     if not final_body or not final_body.strip():
