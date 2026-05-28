@@ -37,11 +37,11 @@ def _get_settings() -> dict:
     cfg = getattr(settings, "NOTIFICATIONS", {})
     return {
         "enabled": cfg.get("ORANGE_CI_SMS_ENABLED", False),
-        "base_url": cfg.get("ORANGE_CI_SMS_BASE_URL", "https://api.orange.com/smsmessaging/v1"),
+        "base_url": cfg.get("ORANGE_CI_SMS_BASE_URL", "https://api.orange.com/smsmessaging/v1/outbound/"),
         "token_url": cfg.get("ORANGE_CI_SMS_TOKEN_URL", "https://api.orange.com/oauth/v3/token"),
         "client_id": cfg.get("ORANGE_CI_SMS_CLIENT_ID", ""),
         "client_secret": cfg.get("ORANGE_CI_SMS_CLIENT_SECRET", ""),
-        "sender_name": cfg.get("ORANGE_CI_SMS_SENDER_NAME", "EpiTrace"),
+        "sender_name": cfg.get("ORANGE_CI_SMS_SENDER_NAME", "INHP"),
         "timeout": int(cfg.get("ORANGE_CI_SMS_TIMEOUT", 15)),
     }
 
