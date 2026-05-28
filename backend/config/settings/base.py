@@ -372,6 +372,19 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_RESULT_EXTENDED = True
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TASK_ROUTES = {
+    # IMPORTANT : nos tâches ont des noms CUSTOM via @shared_task(name="...")
+    # — par ex. "notifications.send_notification_task" et NON
+    # "apps.notifications.tasks.send_notification_task". Il faut donc router
+    # sur le NOM ENREGISTRÉ, sinon Celery tombe sur la queue par défaut
+    # "celery" que personne ne consomme (-Q default,notifications,...).
+    "notifications.*": {"queue": "notifications"},
+    "quarantine.*": {"queue": "quarantine"},
+    "passes.*": {"queue": "passes"},
+    "surveillance.*": {"queue": "surveillance"},
+    "companion.*": {"queue": "notifications"},  # purge/cleanup → queue notifications
+    "core.*": {"queue": "default"},
+    # Patterns module path conservés en filet de sécurité si une tâche n'a
+    # pas de `name=` explicite.
     "apps.notifications.tasks.*": {"queue": "notifications"},
     "apps.quarantine.tasks.*": {"queue": "quarantine"},
     "apps.health_pass.tasks.*": {"queue": "passes"},
