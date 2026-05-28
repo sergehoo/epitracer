@@ -10,6 +10,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 from django.conf import settings
@@ -120,7 +121,15 @@ def send_sms(to: str, body: str, metadata: Optional[dict] = None) -> OrangeSendR
 
     sender = f"tel:{cfg['sender_name']}" if cfg["sender_name"] else "tel:+225"
     # Endpoint Orange CI standard : outbound/{senderAddress}/requests
-    url = f"{cfg['base_url']}/outbound/{sender}/requests"
+    # Compatibilité base_url avec ou sans suffixe "/outbound/" :
+    base = cfg["base_url"].rstrip("/")
+    if base.endswith("/outbound"):
+        prefix = base
+    else:
+        prefix = f"{base}/outbound"
+    # `senderAddress` doit être URL-encodé (contient ":") selon la spec
+    # OneAPI Orange — sinon le path est invalide.
+    url = f"{prefix}/{quote(sender, safe='')}/requests"
 
     payload = {
         "outboundSMSMessageRequest": {
@@ -129,6 +138,8 @@ def send_sms(to: str, body: str, metadata: Optional[dict] = None) -> OrangeSendR
             "outboundSMSTextMessage": {"message": body[:1530]},  # 10 segments max
         }
     }
+    # Log au niveau DEBUG pour pouvoir tracer en cas d'incident (sans secrets)
+    logger.debug("Orange CI POST %s payload=%s", url, payload)
 
     try:
         r = httpx.post(
