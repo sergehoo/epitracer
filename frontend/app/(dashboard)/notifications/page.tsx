@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Bell, CheckCircle2, Send, Smartphone, XCircle, Clock,
-  MessageCircle, Filter, Search, RefreshCcw,
+  MessageCircle, Filter, Search, RefreshCcw, AlertTriangle,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
 import { NotificationHistory } from '@/components/notifications/NotificationHistory';
@@ -55,17 +55,26 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <span className="text-xs uppercase tracking-widest text-ciOrange font-bold">
-          Communication voyageurs
-        </span>
-        <h1 className="font-display text-2xl md:text-3xl font-black text-ciDark dark:text-emerald-100 mt-1">
-          Notifications & messages
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-3xl mt-1">
-          Historique complet des SMS / WhatsApp / emails envoyés aux voyageurs.
-          Numéros ivoiriens → Orange CI, autres → Twilio (règle automatique).
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <span className="text-xs uppercase tracking-widest text-ciOrange font-bold">
+            Communication voyageurs
+          </span>
+          <h1 className="font-display text-2xl md:text-3xl font-black text-ciDark dark:text-emerald-100 mt-1">
+            Notifications & messages
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-3xl mt-1">
+            Historique complet des SMS / WhatsApp / emails envoyés aux voyageurs.
+            Numéros ivoiriens → Orange CI, autres → Twilio (règle automatique).
+          </p>
+        </div>
+        <Link
+          href="/notifications/echecs"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-2 text-xs font-bold transition"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Gérer les échecs ({kpis.failed ?? 0})
+        </Link>
       </header>
 
       {/* KPIs */}
@@ -74,7 +83,9 @@ export default function NotificationsPage() {
         <Kpi label="Envoyés" value={kpis.sent ?? 0} icon={<Send className="h-4 w-4" />} tone="sky" />
         <Kpi label="En file" value={kpis.queued ?? 0} icon={<Clock className="h-4 w-4" />} tone="amber" />
         <Kpi label="En attente" value={kpis.pending ?? 0} icon={<Clock className="h-4 w-4" />} tone="slate" />
-        <Kpi label="Échec" value={kpis.failed ?? 0} icon={<XCircle className="h-4 w-4" />} tone="rose" />
+        <Link href="/notifications/echecs" className="block">
+          <Kpi label="Échec" value={kpis.failed ?? 0} icon={<XCircle className="h-4 w-4" />} tone="rose" />
+        </Link>
         <Kpi label="Annulés" value={kpis.cancelled ?? 0} icon={<XCircle className="h-4 w-4" />} tone="slate" />
       </div>
 

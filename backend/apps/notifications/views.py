@@ -174,6 +174,65 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         send_notification_task.delay(notif.id)
         return Response(NotificationSerializer(notif).data)
 
+    @action(
+        detail=False, methods=["post"], url_path="bulk-retry",
+        permission_classes=[CanRetryNotification],
+    )
+    def bulk_retry(self, request):
+        """POST /api/v1/notifications/bulk-retry/ — relance en lot.
+
+        Body : {"ids": [1, 2, 3]} ou {"all_failed": true} pour relancer
+        toutes les notifications FAILED des dernières 24h.
+        Retourne le nombre de notifs effectivement re-queuées + détails.
+        """
+        ids = request.data.get("ids") or []
+        all_failed = bool(request.data.get("all_failed"))
+        max_age_hours = int(request.data.get("max_age_hours") or 24)
+
+        if not ids and not all_failed:
+            return Response(
+                {"detail": "Fournir 'ids' (liste) ou 'all_failed': true."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Build queryset : par IDs explicites OU tous les FAILED récents.
+        qs = Notification.objects.filter(
+            status__in=(NotificationStatus.FAILED, NotificationStatus.CANCELLED),
+        )
+        if ids:
+            try:
+                ids_int = [int(i) for i in ids][:500]  # cap de sécurité
+            except (ValueError, TypeError):
+                return Response({"detail": "IDs invalides."}, status=400)
+            qs = qs.filter(pk__in=ids_int)
+        elif all_failed:
+            from datetime import timedelta
+            cutoff = timezone.now() - timedelta(hours=max_age_hours)
+            qs = qs.filter(failed_at__gte=cutoff)[:500]
+
+        requeued = 0
+        results = []
+        from .tasks import send_notification_task
+        for notif in qs:
+            notif.status = NotificationStatus.QUEUED
+            notif.error_message = ""
+            notif.queued_at = timezone.now()
+            notif.save(update_fields=["status", "error_message", "queued_at", "updated_at"])
+            log_action(
+                notification=notif, action=Actions.RETRY,
+                actor=request.user, request=request,
+                metadata={"manual_retry": True, "bulk": True},
+            )
+            send_notification_task.delay(notif.id)
+            requeued += 1
+            results.append({"id": notif.id, "recipient": notif.masked_recipient})
+
+        return Response({
+            "ok": True,
+            "requeued": requeued,
+            "results": results,
+        })
+
     @action(detail=True, methods=["post"], permission_classes=[CanRetryNotification])
     def cancel(self, request, pk=None):
         """Annule une notification en attente."""

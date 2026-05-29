@@ -327,11 +327,40 @@ function Parcours() {
 /* ------------------------ FONCTIONNEMENT ----------------------- */
 function Fonctionnement() {
   const steps = [
-    { n: '01', t: 'Je renseigne', d: 'Quelques informations utiles pour mieux vous orienter.' },
-    { n: '02', t: 'Je reçois', d: 'Une fiche avec QR code simple à présenter.' },
-    { n: '03', t: 'Je suis orienté', d: 'Les agents sanitaires facilitent votre parcours.' },
-    { n: '04', t: 'Je reste informé', d: 'Des conseils simples vous accompagnent si nécessaire.' },
+    {
+      n: '01',
+      icon: <FileBadge2 className="h-6 w-6" />,
+      title: 'Je remplis ma fiche en ligne',
+      duration: '≈ 5 minutes',
+      desc: "Avant ou pendant votre voyage, renseignez vos informations d'identité, votre itinéraire, votre hébergement en Côte d'Ivoire et votre contact d'urgence. Aucun document papier à imprimer.",
+      action: 'Identité · Voyage · Hébergement · Contact urgence',
+    },
+    {
+      n: '02',
+      icon: <QrCode className="h-6 w-6" />,
+      title: 'Je reçois mon pass sanitaire',
+      duration: 'Immédiat',
+      desc: "Un QR code signé cryptographiquement et une fiche officielle PDF vous sont délivrés instantanément. Téléchargeables, valables sur smartphone hors-ligne, sécurisés par signature Ed25519.",
+      action: 'QR code + PDF officiel INHP',
+    },
+    {
+      n: '03',
+      icon: <ShieldCheck className="h-6 w-6" />,
+      title: 'Je passe le contrôle sanitaire',
+      duration: '< 30 secondes',
+      desc: "À l'arrivée au point d'entrée (aéroport FHB, ports, frontières terrestres), un agent INHP scanne votre QR. Vérification d'authenticité instantanée, orientation rapide vers le poste sanitaire si nécessaire.",
+      action: 'Scan QR · Vérification signature · Orientation',
+    },
+    {
+      n: '04',
+      icon: <HeartPulse className="h-6 w-6" />,
+      title: 'Je suis accompagné 21 jours',
+      duration: 'Suivi quotidien',
+      desc: "Vous recevez chaque jour un rappel WhatsApp / SMS pour confirmer votre état de santé. En cas de symptômes ou de doute, accédez immédiatement à l'assistance via le 143 (gratuit) ou la messagerie sécurisée.",
+      action: 'Check-in quotidien · Ligne 143 · Conseils personnalisés',
+    },
   ];
+
   return (
     <section id="fonctionnement" className="py-24 bg-ciDark text-white relative overflow-hidden">
       <div className="absolute inset-0 pattern-dots opacity-10" />
@@ -341,25 +370,65 @@ function Fonctionnement() {
       <div className="relative max-w-7xl mx-auto px-6">
         <div className="text-center max-w-2xl mx-auto mb-14">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2 text-xs font-black uppercase tracking-wide text-ciOrange">
-            <Sparkles className="h-3.5 w-3.5" /> Étape par étape
+            <Sparkles className="h-3.5 w-3.5" /> Comment ça fonctionne
           </span>
-          <h2 className="mt-4 font-display text-4xl font-black">Comment ça marche ?</h2>
+          <h2 className="mt-4 font-display text-4xl font-black">
+            Votre parcours en <span className="text-ciOrange">4 étapes</span>
+          </h2>
           <p className="mt-4 text-emerald-100/80 leading-7">
-            Un parcours numérique fluide, conçu avec les équipes de l'INHP.
+            Un dispositif numérique simple et sécurisé, conçu avec l'INHP pour vous
+            accompagner avant, pendant et après votre arrivée en Côte d'Ivoire.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-4 gap-6">
-          {steps.map((s) => (
-            <article key={s.n} className="p-6 rounded-3xl bg-white/10 border border-white/10 hover:bg-white/15 transition">
-              <span className="font-display text-ciOrange font-black text-sm">{s.n}</span>
-              <h3 className="font-black text-xl mt-4">{s.t}</h3>
-              <p className="mt-3 text-emerald-100/80 leading-6">{s.d}</p>
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {steps.map((s, idx) => (
+            <article
+              key={s.n}
+              className="relative p-6 rounded-3xl bg-white/10 border border-white/10 hover:bg-white/15 hover:-translate-y-1 transition flex flex-col"
+            >
+              {/* En-tête : numéro + icône */}
+              <div className="flex items-center justify-between">
+                <span className="font-display text-ciOrange font-black text-2xl">{s.n}</span>
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-ciOrange/20 text-ciOrange">
+                  {s.icon}
+                </span>
+              </div>
+
+              {/* Durée / délai */}
+              <span className="mt-4 inline-flex items-center self-start gap-1.5 rounded-full bg-ciGreen/20 px-3 py-1 text-[11px] font-bold text-emerald-200 uppercase tracking-wide">
+                {s.duration}
+              </span>
+
+              {/* Titre + description */}
+              <h3 className="font-black text-xl mt-3 leading-snug">{s.title}</h3>
+              <p className="mt-3 text-sm text-emerald-100/80 leading-6 flex-1">
+                {s.desc}
+              </p>
+
+              {/* Détail / mots-clés */}
+              <div className="mt-5 pt-4 border-t border-white/10">
+                <p className="text-[11px] font-semibold text-ciOrange/90 leading-relaxed">
+                  {s.action}
+                </p>
+              </div>
+
+              {/* Flèche de progression entre cartes (desktop) */}
+              {idx < steps.length - 1 && (
+                <ArrowRight className="hidden lg:block absolute top-1/2 -right-4 h-5 w-5 text-ciOrange/50 -translate-y-1/2" />
+              )}
             </article>
           ))}
         </div>
 
-        <div className="mt-12 grid md:grid-cols-3 gap-4">
+        {/* CTA + points d'entrée */}
+        <div className="mt-12 text-center">
+          <Link href="/voyageur" className="btn-orange inline-flex">
+            Commencer ma fiche maintenant <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        <div className="mt-10 grid md:grid-cols-3 gap-4">
           {['Aéroport FHB Abidjan', "Port Autonome d'Abidjan", 'Port de San-Pédro',
             'Frontière de Pôgô', 'Frontière de Niablé', 'Aéroport de Yamoussoukro',
           ].map((name) => (
