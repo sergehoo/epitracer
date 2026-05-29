@@ -111,30 +111,101 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, validators=[validate_password])
+    """Création d'un utilisateur depuis l'admin.
+
+    - `password` est OPTIONNEL : s'il n'est pas fourni, on génère un mot de
+      passe temporaire fort qui est renvoyé une seule fois dans la réponse
+      sous le champ `temporary_password`. L'admin doit le copier/le
+      transmettre à l'utilisateur final.
+    - `role_codes` reçoit la liste des codes de rôles à affecter directement
+      (raccourci pour ne pas appeler /role-assignments/ après).
+    """
+    # write_only=True + required=False → password optionnel à la création.
+    password = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, validators=[validate_password],
+    )
     role_codes = serializers.ListField(
         child=serializers.CharField(), write_only=True, required=False, default=list
     )
+    # Champ exposé dans la réponse uniquement quand on a généré un mot de passe.
+    temporary_password = serializers.CharField(read_only=True, required=False)
 
     class Meta:
         model = User
         fields = [
             "id", "uuid", "email", "username", "first_name", "last_name",
-            "phone", "job_title", "is_active", "password", "role_codes",
+            "phone", "job_title", "is_active", "mfa_enforced",
+            "password", "role_codes", "temporary_password",
         ]
-        read_only_fields = ["id", "uuid"]
+        read_only_fields = ["id", "uuid", "temporary_password"]
+
+    @staticmethod
+    def _generate_temporary_password(length: int = 14) -> str:
+        """Mot de passe fort : majuscules + minuscules + chiffres + symboles."""
+        import secrets
+        import string
+        # On évite les caractères ambigus (0/O, 1/l/I) côté humain.
+        alphabet = (
+            "ABCDEFGHJKLMNPQRSTUVWXYZ"      # majuscules sans I, O
+            "abcdefghijkmnopqrstuvwxyz"     # minuscules sans l
+            "23456789"                       # chiffres sans 0, 1
+            "!@#$%&*+-=?"                    # symboles safe URL
+        )
+        # Au moins 1 de chaque catégorie pour passer validate_password.
+        groups = [
+            "ABCDEFGHJKLMNPQRSTUVWXYZ",
+            "abcdefghijkmnopqrstuvwxyz",
+            "23456789",
+            "!@#$%&*+-=?",
+        ]
+        pw = [secrets.choice(g) for g in groups]
+        pw += [secrets.choice(alphabet) for _ in range(length - len(groups))]
+        secrets.SystemRandom().shuffle(pw)
+        return "".join(pw)
 
     def create(self, validated):
         role_codes = validated.pop("role_codes", [])
-        password = validated.pop("password")
+        password = validated.pop("password", "") or ""
+        generated = False
+        if not password:
+            password = self._generate_temporary_password()
+            generated = True
+            # Sécurité : ré-applique la validation Django sur le password généré.
+            try:
+                validate_password(password)
+            except Exception:
+                # Si la politique est très stricte, on regénère 3x max.
+                for _ in range(3):
+                    password = self._generate_temporary_password(length=18)
+                    try:
+                        validate_password(password)
+                        break
+                    except Exception:
+                        continue
+
         validated.setdefault("username", validated["email"])
         user = User(**validated)
         user.set_password(password)
         user.save()
+
         roles = Role.objects.filter(code__in=role_codes)
         for r in roles:
             RoleAssignment.objects.create(user=user, role=r, is_active=True)
+
+        # Expose le mot de passe temporaire à l'admin qui crée le compte (une
+        # seule fois — pas stocké en clair). Le frontend le copie et l'efface.
+        if generated:
+            user.temporary_password = password  # attribut volatile, lu par to_representation
         return user
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Le `temporary_password` est exposé UNIQUEMENT si le serializer
+        # vient de le générer dans `create()` (jamais à la lecture normale).
+        tmp = getattr(instance, "temporary_password", None)
+        if tmp:
+            data["temporary_password"] = tmp
+        return data
 
 
 class ChangePasswordSerializer(serializers.Serializer):
