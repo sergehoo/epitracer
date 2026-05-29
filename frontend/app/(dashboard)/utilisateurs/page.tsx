@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import {
+  Pencil, ShieldCheck, KeyRound, Lock, Unlock, Trash2, RotateCcw,
+} from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 
@@ -336,21 +339,21 @@ export default function UtilisateursPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <ActionButton title="Éditer" onClick={() => setEditingUser(u)}>
-                          ✏️
+                          <Pencil className="h-4 w-4" />
                         </ActionButton>
                         <ActionButton title="Rôles & permissions" onClick={() => setManagingRoles(u)}>
-                          🛡️
+                          <ShieldCheck className="h-4 w-4" />
                         </ActionButton>
                         <ActionButton title="Réinitialiser mot de passe" onClick={() => doResetPassword(u)}>
-                          🔑
+                          <KeyRound className="h-4 w-4" />
                         </ActionButton>
                         {u.is_locked ? (
                           <ActionButton title="Déverrouiller" onClick={() => doUnlock(u)}>
-                            🔓
+                            <Unlock className="h-4 w-4" />
                           </ActionButton>
                         ) : (
                           <ActionButton title="Verrouiller" onClick={() => doLock(u)}>
-                            🔒
+                            <Lock className="h-4 w-4" />
                           </ActionButton>
                         )}
                         <ActionButton
@@ -358,7 +361,7 @@ export default function UtilisateursPage() {
                           danger={u.is_active}
                           onClick={() => doDelete(u)}
                         >
-                          {u.is_active ? '🗑️' : '♻️'}
+                          {u.is_active ? <Trash2 className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
                         </ActionButton>
                       </div>
                     </td>
