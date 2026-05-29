@@ -136,22 +136,81 @@ export async function apiPostWithRetry<T = unknown>(
   throw lastError;
 }
 
-/** Helper pour formater proprement les erreurs DRF. */
+/** Helper pour formater proprement les erreurs DRF.
+ *
+ * Gère :
+ *  - chaînes brutes (HTML d'erreur serveur)
+ *  - `{ "detail": "..." }` (erreur standard DRF)
+ *  - `{ "error": { "message": "...", "details": {...} } }` (wrapper custom)
+ *  - `{ "field1": ["err1"], "field2": ["err2"] }` (validation DRF par champ)
+ *  - non_field_errors
+ *  - fallback : message Axios
+ */
 export function extractApiError(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    const data: any = err.response?.data;
-    if (typeof data === 'string') return data;
-    if (data?.error?.message) return data.error.message;
-    if (data?.detail) return String(data.detail);
-    if (data?.error?.details) {
-      const det = data.error.details;
-      const first = Object.entries(det).find(([k]) => k !== 'detail');
-      if (first) {
-        const [k, v] = first;
-        return Array.isArray(v) ? `${k}: ${v.join(' ')}` : `${k}: ${String(v)}`;
+  if (!axios.isAxiosError(err)) {
+    return (err as Error)?.message || 'Erreur inconnue.';
+  }
+  const data: any = err.response?.data;
+
+  // String brute (HTML 500, etc.)
+  if (typeof data === 'string') return data.slice(0, 500);
+
+  // Wrapper { error: { message, details } }
+  if (data?.error?.message) return data.error.message;
+
+  // Erreur standard DRF { detail: "..." }
+  if (data?.detail) return String(data.detail);
+
+  // non_field_errors (validation globale)
+  if (Array.isArray(data?.non_field_errors) && data.non_field_errors.length > 0) {
+    return data.non_field_errors.join(' · ');
+  }
+
+  // Validation DRF par champ — format : { field: ["error1", "error2"], ... }
+  if (data && typeof data === 'object') {
+    const parts: string[] = [];
+    for (const [key, value] of Object.entries(data)) {
+      if (key === 'error' || key === 'detail') continue;
+      const label = FIELD_LABELS[key] || key;
+      if (Array.isArray(value)) {
+        parts.push(`${label} : ${value.join(' · ')}`);
+      } else if (typeof value === 'string') {
+        parts.push(`${label} : ${value}`);
+      } else if (value && typeof value === 'object') {
+        // Erreurs imbriquées (rare)
+        parts.push(`${label} : ${JSON.stringify(value)}`);
       }
     }
-    return err.message;
+    if (parts.length > 0) return parts.join(' · ');
   }
-  return (err as Error)?.message || 'Erreur inconnue.';
+
+  // Wrapper { error: { details: { ... } } } legacy
+  if (data?.error?.details) {
+    const det = data.error.details;
+    const first = Object.entries(det).find(([k]) => k !== 'detail');
+    if (first) {
+      const [k, v] = first;
+      return Array.isArray(v) ? `${k}: ${v.join(' ')}` : `${k}: ${String(v)}`;
+    }
+  }
+
+  return err.message || 'Erreur HTTP inconnue.';
 }
+
+// Libellés français pour les champs courants — utilisés dans les messages d'erreur.
+const FIELD_LABELS: Record<string, string> = {
+  email: 'E-mail',
+  username: "Nom d'utilisateur",
+  password: 'Mot de passe',
+  phone: 'Téléphone',
+  first_name: 'Prénom',
+  last_name: 'Nom',
+  job_title: 'Fonction',
+  role_codes: 'Rôles',
+  is_active: 'Statut',
+  recipient: 'Destinataire',
+  body: 'Message',
+  channel: 'Canal',
+  template: 'Modèle',
+  traveler: 'Voyageur',
+};

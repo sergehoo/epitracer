@@ -501,6 +501,8 @@ function UserFormModal({
   const [mfaEnforced, setMfaEnforced] = useState(user?.mfa_enforced ?? false);
   const [selectedRoles, setSelectedRoles] = useState<string[]>(user?.roles?.map((r) => r.code) || []);
   const [submitting, setSubmitting] = useState(false);
+  // Erreurs détaillées par champ retournées par le backend (DRF format)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   const toggleRole = (code: string) => {
     setSelectedRoles((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]));
@@ -509,19 +511,23 @@ function UserFormModal({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setFieldErrors({});
     try {
+      // Nettoyage défensif : on évite d'envoyer des champs vides qui pourraient
+      // déclencher la validation côté serveur (ex: phone "" rejeté par regex).
       const payload: any = {
-        email,
-        first_name: firstName,
-        last_name: lastName,
-        phone,
-        job_title: jobTitle,
+        email: email.trim(),
         is_active: isActive,
-        mfa_enforced: mfaEnforced,
       };
+      if (firstName.trim()) payload.first_name = firstName.trim();
+      if (lastName.trim()) payload.last_name = lastName.trim();
+      if (phone.trim()) payload.phone = phone.trim();
+      if (jobTitle.trim()) payload.job_title = jobTitle.trim();
+      if (mfaEnforced) payload.mfa_enforced = true;
       if (!isEdit) {
         payload.role_codes = selectedRoles;
       }
+
       if (isEdit) {
         await api.patch(`/auth/users/${user!.id}/`, payload);
         toast.success('Utilisateur mis à jour');
@@ -530,13 +536,22 @@ function UserFormModal({
         const tmp = r.data?.temporary_password || r.data?.password;
         if (tmp) {
           await navigator.clipboard.writeText(tmp).catch(() => {});
-          toast.success(`Compte créé. Mot de passe temporaire copié : ${tmp}`, { duration: 10000 });
+          toast.success(`Compte créé. Mot de passe temporaire copié : ${tmp}`, { duration: 12000 });
         } else {
           toast.success('Utilisateur créé');
         }
       }
       onSaved();
     } catch (e: any) {
+      // Récupération des erreurs DRF par champ pour les afficher en place.
+      const raw = e?.response?.data;
+      if (raw && typeof raw === 'object' && !raw.detail && !raw.error) {
+        const errs: Record<string, string[]> = {};
+        for (const [k, v] of Object.entries(raw)) {
+          errs[k] = Array.isArray(v) ? (v as any[]).map(String) : [String(v)];
+        }
+        setFieldErrors(errs);
+      }
       toast.error(extractApiError(e));
     } finally {
       setSubmitting(false);
@@ -546,6 +561,21 @@ function UserFormModal({
   return (
     <ModalShell title={isEdit ? `Éditer : ${user!.email}` : 'Créer un utilisateur'} onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-4">
+        {/* Bloc d'erreurs serveur (validation DRF par champ) */}
+        {Object.keys(fieldErrors).length > 0 && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-900/20 dark:border-rose-800/40 p-3 text-xs">
+            <div className="font-bold text-rose-700 dark:text-rose-300 mb-1">
+              Le serveur a refusé la création :
+            </div>
+            <ul className="list-disc list-inside space-y-0.5 text-rose-700 dark:text-rose-300">
+              {Object.entries(fieldErrors).map(([k, msgs]) => (
+                <li key={k}>
+                  <strong>{k}</strong> : {msgs.join(' · ')}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Email *">
             <input
@@ -554,8 +584,11 @@ function UserFormModal({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={isEdit}
-              className="input-base"
+              className={`input-base ${fieldErrors.email ? 'border-rose-400 ring-rose-200' : ''}`}
             />
+            {fieldErrors.email && (
+              <p className="text-[11px] text-rose-600 mt-1">{fieldErrors.email.join(' · ')}</p>
+            )}
           </Field>
           <Field label="Téléphone">
             <input
@@ -563,8 +596,11 @@ function UserFormModal({
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+225..."
-              className="input-base"
+              className={`input-base ${fieldErrors.phone ? 'border-rose-400 ring-rose-200' : ''}`}
             />
+            {fieldErrors.phone && (
+              <p className="text-[11px] text-rose-600 mt-1">{fieldErrors.phone.join(' · ')}</p>
+            )}
           </Field>
           <Field label="Prénom">
             <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className="input-base" />

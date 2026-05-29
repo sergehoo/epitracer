@@ -124,6 +124,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True, required=False, allow_blank=True, validators=[validate_password],
     )
+    # `username` est calculé depuis l'email si absent dans le payload.
+    # Sans `required=False` explicite, DRF reprend le champ du modèle qui
+    # est NOT NULL → 400 « Ce champ est obligatoire » avant create().
+    username = serializers.CharField(required=False, allow_blank=True)
     role_codes = serializers.ListField(
         child=serializers.CharField(), write_only=True, required=False, default=list
     )
@@ -183,7 +187,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
                     except Exception:
                         continue
 
-        validated.setdefault("username", validated["email"])
+        # `username` : si vide ou absent → on prend l'email (compatible avec
+        # AbstractUser qui exige USERNAME_FIELD non-null).
+        if not validated.get("username"):
+            validated["username"] = validated["email"]
         user = User(**validated)
         user.set_password(password)
         user.save()
