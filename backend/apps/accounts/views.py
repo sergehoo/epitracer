@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -434,14 +435,26 @@ class PasswordResetConfirmView(APIView):
             token_obj.save(update_fields=["used_at", "updated_at"])
 
             user.set_password(new_password)
-            user.must_change_password = False
-            user.failed_login_attempts = 0
-            user.locked_until = None
-            user.last_password_change = timezone.now()
-            user.save(update_fields=[
-                "password", "must_change_password", "failed_login_attempts",
-                "locked_until", "last_password_change",
-            ])
+            # Reset défensif des champs sécurité : on ne met à jour que ceux
+            # qui existent réellement (au cas où la migration 0003 n'aurait
+            # pas encore été appliquée).
+            updated = ["password"]
+            for field, value in [
+                ("must_change_password", False),
+                ("failed_login_attempts", 0),
+                ("locked_until", None),
+                ("last_password_change", timezone.now()),
+            ]:
+                if hasattr(user, field):
+                    try:
+                        # Vérifie que c'est bien un champ DB (pas juste un attribut)
+                        user._meta.get_field(field)
+                        setattr(user, field, value)
+                        updated.append(field)
+                    except Exception:
+                        pass
+            user.save(update_fields=updated)
+            log.info("Reset password OK pour user=%s (fields=%s)", user.pk, updated)
             return Response({"ok": True, "detail": "Mot de passe réinitialisé."})
 
         except Exception as exc:  # noqa: BLE001
