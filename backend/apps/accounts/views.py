@@ -378,15 +378,25 @@ class PasswordResetRequestView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
-    """POST /auth/password-reset/confirm/ — soumission du nouveau password via token."""
+    """POST /auth/password-reset/confirm/ — soumission du nouveau password via token.
+
+    Flow correct (validation AVANT consommation) :
+      1. Trouve le token (lecture seule) → 400 si introuvable/expiré
+      2. Valide le nouveau mot de passe → 400 si rejeté
+      3. Trouve OK + validation OK → consomme le token + applique le mdp
+    """
     permission_classes = []
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "password_reset"
 
     def post(self, request):
+        import hashlib
+        import logging
         from django.contrib.auth.password_validation import validate_password
         from django.core.exceptions import ValidationError as DjValidationError
-        from apps.notifications.services.email_router import consume_password_reset_token
+        from apps.notifications.email_models import PasswordResetToken
+
+        log = logging.getLogger("epidemitracker.accounts.reset")
 
         raw_token = (request.data.get("token") or "").strip()
         new_password = (request.data.get("new_password") or "").strip()
@@ -394,23 +404,50 @@ class PasswordResetConfirmView(APIView):
         if not raw_token or not new_password:
             return Response({"detail": "Token et nouveau mot de passe requis."}, status=400)
 
-        user = consume_password_reset_token(raw_token)
-        if not user:
-            return Response({"detail": "Token invalide ou expiré."}, status=400)
-
         try:
-            validate_password(new_password, user=user)
-        except DjValidationError as exc:
-            return Response({"detail": " ".join(exc.messages)}, status=400)
+            # 1) LOOKUP du token (lecture seule — pas encore consommé)
+            token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+            token_obj = (
+                PasswordResetToken.objects
+                .filter(token_hash=token_hash)
+                .select_related("user")
+                .first()
+            )
+            if not token_obj or not token_obj.is_valid:
+                return Response(
+                    {"detail": "Token invalide ou expiré. Demandez un nouveau lien."},
+                    status=400,
+                )
+            user = token_obj.user
 
-        user.set_password(new_password)
-        # Reset les compteurs sécurité
-        user.must_change_password = False
-        user.failed_login_attempts = 0
-        user.locked_until = None
-        user.last_password_change = timezone.now()
-        user.save(update_fields=[
-            "password", "must_change_password", "failed_login_attempts",
-            "locked_until", "last_password_change",
-        ])
-        return Response({"ok": True, "detail": "Mot de passe réinitialisé."})
+            # 2) VALIDATION du mot de passe (avant toute écriture)
+            try:
+                validate_password(new_password, user=user)
+            except DjValidationError as exc:
+                return Response(
+                    {"detail": " ".join(exc.messages)},
+                    status=400,
+                )
+
+            # 3) Tout est OK → on consomme le token + applique le mdp
+            token_obj.used_at = timezone.now()
+            token_obj.save(update_fields=["used_at", "updated_at"])
+
+            user.set_password(new_password)
+            user.must_change_password = False
+            user.failed_login_attempts = 0
+            user.locked_until = None
+            user.last_password_change = timezone.now()
+            user.save(update_fields=[
+                "password", "must_change_password", "failed_login_attempts",
+                "locked_until", "last_password_change",
+            ])
+            return Response({"ok": True, "detail": "Mot de passe réinitialisé."})
+
+        except Exception as exc:  # noqa: BLE001
+            # Catch-all pour éviter le 500 silencieux + log pour debug
+            log.exception("PasswordResetConfirm crash: %s", exc)
+            return Response(
+                {"detail": "Erreur serveur lors de la réinitialisation. Réessayez."},
+                status=500,
+            )
