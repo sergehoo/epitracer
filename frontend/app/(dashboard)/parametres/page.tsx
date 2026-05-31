@@ -12,6 +12,7 @@
  */
 
 import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Bell, CheckCircle2, Eye, EyeOff, Globe2, Info, KeyRound, Lock,
   Mail, Moon, Palette, Phone, Server, Shield, ShieldCheck, Sun,

@@ -184,9 +184,10 @@ class SenderProfileAdmin(admin.ModelAdmin):
 @admin.register(EmailTemplate)
 class EmailTemplateAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "email_type", "sender_profile", "is_active", "updated_at")
-    list_filter = ("email_type", "is_active", "sender_profile")
+    list_filter = ("email_type", "is_active")
     search_fields = ("code", "name", "subject")
-    autocomplete_fields = ("sender_profile",)
+    raw_id_fields = ("sender_profile",)  # safer qu'autocomplete : pas de dépendance circulaire
+    readonly_fields = ("uuid", "created_at", "updated_at")
 
 
 @admin.register(EmailLog)
