@@ -203,6 +203,19 @@ class UserCreateSerializer(serializers.ModelSerializer):
         # seule fois — pas stocké en clair). Le frontend le copie et l'efface.
         if generated:
             user.temporary_password = password  # attribut volatile, lu par to_representation
+
+        # ── Envoi auto de l'email d'activation (depuis inhp@veillesanitaire.com).
+        # On enqueue Celery pour ne pas bloquer la requête HTTP, et on
+        # avale les exceptions : si l'email part pas, le compte est quand
+        # même créé (l'admin a déjà le password temporaire en main).
+        try:
+            from apps.notifications.tasks_email import send_admin_account_created_email
+            send_admin_account_created_email.delay(user.pk, password)
+        except Exception:  # noqa: BLE001
+            import logging
+            logging.getLogger("epidemitracker.accounts").warning(
+                "Envoi email création compte échoué (user_id=%s)", user.pk, exc_info=True,
+            )
         return user
 
     def to_representation(self, instance):

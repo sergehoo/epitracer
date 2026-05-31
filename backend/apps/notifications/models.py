@@ -271,3 +271,22 @@ class NotificationAuditLog(BaseModel):
     def __str__(self) -> str:
         actor = self.actor.email if self.actor_id else "system"
         return f"[{self.action}] notif#{self.notification_id} by {actor}"
+
+
+# ---------------------------------------------------------------------------
+# Modèles email multi-expéditeur — importés depuis email_models.py pour que
+# Django les détecte automatiquement et applique les migrations.
+# ---------------------------------------------------------------------------
+from .email_models import (  # noqa: E402, F401
+    EmailLog,
+    EmailStatus,
+    EmailTemplate,
+    EmailType,
+    INTERNAL_EMAIL_TYPES,
+    PUBLIC_EMAIL_TYPES,
+    PasswordResetToken,
+    SenderProfile,
+    SenderProfileCode,
+    UsageScope,
+    get_sender_profile_code_for_type,
+)

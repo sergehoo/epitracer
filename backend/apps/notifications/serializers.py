@@ -95,3 +95,67 @@ class SendNotificationSerializer(serializers.Serializer):
                 "Fournir au moins un recipient OU un traveler."
             )
         return data
+
+
+# ===========================================================================
+# Email multi-expéditeur — serializers
+# ===========================================================================
+from .email_models import (  # noqa: E402
+    EmailLog, EmailTemplate, SenderProfile,
+)
+
+
+class SenderProfileSerializer(serializers.ModelSerializer):
+    formatted_from = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = SenderProfile
+        fields = [
+            "id", "uuid", "code", "name", "from_address", "from_name",
+            "reply_to", "usage_scope", "is_active", "formatted_from",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "uuid", "code", "formatted_from", "created_at", "updated_at"]
+
+
+class EmailTemplateSerializer(serializers.ModelSerializer):
+    sender_profile_code = serializers.CharField(
+        source="sender_profile.code", read_only=True, default=None,
+    )
+
+    class Meta:
+        model = EmailTemplate
+        fields = [
+            "id", "uuid", "code", "name", "email_type",
+            "subject", "body_html", "body_text",
+            "sender_profile", "sender_profile_code",
+            "variables_schema", "is_active",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "uuid", "created_at", "updated_at"]
+
+
+class EmailLogSerializer(serializers.ModelSerializer):
+    masked_recipient = serializers.CharField(read_only=True)
+    template_code = serializers.CharField(source="template.code", read_only=True, default=None)
+    sent_by_email = serializers.CharField(source="sent_by.email", read_only=True, default=None)
+    related_user_email = serializers.CharField(source="related_user.email", read_only=True, default=None)
+    related_traveler_public_id = serializers.CharField(
+        source="related_traveler.public_id", read_only=True, default=None,
+    )
+
+    class Meta:
+        model = EmailLog
+        fields = [
+            "id", "uuid", "recipient", "masked_recipient",
+            "email_type", "sender_address", "subject",
+            "status", "provider_message_id", "error_message",
+            "retry_count", "max_retries",
+            "template", "template_code", "context",
+            "related_user", "related_user_email",
+            "related_traveler", "related_traveler_public_id",
+            "sent_by", "sent_by_email",
+            "sent_at", "delivered_at", "failed_at",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = fields  # lecture seule depuis l'API

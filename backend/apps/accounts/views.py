@@ -144,11 +144,36 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def reset_password(self, request, pk=None):
+        """Réinit admin : génère un mot de passe temporaire ET un lien tokenisé.
+
+        - Le mot de passe temporaire est renvoyé immédiatement (compat
+          historique : l'admin peut le copier et le donner à l'agent en main
+          propre s'il ne peut pas attendre l'email).
+        - En parallèle, un email avec lien sécurisé tokenisé est envoyé
+          depuis inhp@veillesanitaire.com via Celery.
+        """
         u = self.get_object()
         new_pwd = secrets.token_urlsafe(12)
         u.set_password(new_pwd)
         u.save(update_fields=["password"])
-        return Response({"detail": "Mot de passe réinitialisé.", "temporary_password": new_pwd})
+
+        # Génère + envoie l'email tokenisé (best-effort, ne bloque pas la réponse)
+        try:
+            from apps.notifications.services.email_router import generate_password_reset_token
+            from apps.notifications.tasks_email import send_password_reset_email
+            raw_token, _ = generate_password_reset_token(u, request=request)
+            send_password_reset_email.delay(u.pk, raw_token)
+        except Exception:  # noqa: BLE001
+            import logging
+            logging.getLogger("epidemitracker.accounts").warning(
+                "Envoi email reset password échoué (user_id=%s)", u.pk, exc_info=True,
+            )
+
+        return Response({
+            "detail": "Mot de passe réinitialisé. Un email avec lien sécurisé "
+                      "a également été envoyé à l'utilisateur.",
+            "temporary_password": new_pwd,
+        })
 
 
 class RoleViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):

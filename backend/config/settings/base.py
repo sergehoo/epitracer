@@ -394,11 +394,58 @@ CELERY_TASK_ROUTES = {
 # ---------------------------------------------------------------------------
 # Email
 # ---------------------------------------------------------------------------
+# Backend Django par défaut — utilisé seulement par les usages legacy de
+# `send_mail()`. La chaîne email métier passe TOUJOURS par EmailRouter qui
+# choisit lui-même la connexion SMTP (PUBLIC ou INTERNAL) selon email_type.
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@epidemitracker.local")
 ANYMAIL = {
     "SENDGRID_API_KEY": env("ANYMAIL_SENDGRID_API_KEY", default=""),
 }
+
+# ---------------------------------------------------------------------------
+# Email multi-expéditeur — DUAL SMTP
+#
+# PUBLIC  (voyageurs, grand public)  → Amazon SES SMTP via destinationci.com
+# INTERNAL (admin, agents, système)  → SMTP serveur via veillesanitaire.com
+#
+# La séparation est imposée côté backend par apps.notifications.services.email_router.
+# Le frontend ne choisit JAMAIS l'expéditeur. Voir docs/EMAIL_MULTI_SENDER_SETUP.md
+# ---------------------------------------------------------------------------
+EMAIL_PROFILES = {
+    "public": {
+        # Amazon SES SMTP — voyageurs / public
+        "host": env("PUBLIC_EMAIL_HOST", default="email-smtp.eu-west-1.amazonaws.com"),
+        "port": env.int("PUBLIC_EMAIL_PORT", default=587),
+        "use_tls": env.bool("PUBLIC_EMAIL_USE_TLS", default=True),
+        "use_ssl": env.bool("PUBLIC_EMAIL_USE_SSL", default=False),
+        "username": env("PUBLIC_EMAIL_HOST_USER", default=""),
+        "password": env("PUBLIC_EMAIL_HOST_PASSWORD", default=""),
+        "from_name": env("PUBLIC_EMAIL_FROM_NAME", default="Destination CI - Accompagnement Voyageur"),
+        "from_address": env("PUBLIC_EMAIL_FROM_ADDRESS", default="infos@destinationci.com"),
+        "reply_to": env("DEFAULT_REPLY_TO_PUBLIC", default="infos@destinationci.com"),
+        "timeout": env.int("PUBLIC_EMAIL_TIMEOUT", default=20),
+    },
+    "internal": {
+        # SMTP serveur (sortant local) — admin / agents
+        "host": env("INTERNAL_EMAIL_HOST", default="localhost"),
+        "port": env.int("INTERNAL_EMAIL_PORT", default=587),
+        "use_tls": env.bool("INTERNAL_EMAIL_USE_TLS", default=True),
+        "use_ssl": env.bool("INTERNAL_EMAIL_USE_SSL", default=False),
+        "username": env("INTERNAL_EMAIL_HOST_USER", default=""),
+        "password": env("INTERNAL_EMAIL_HOST_PASSWORD", default=""),
+        "from_name": env("INTERNAL_EMAIL_FROM_NAME", default="INHP - Veille Sanitaire"),
+        "from_address": env("INTERNAL_EMAIL_FROM_ADDRESS", default="inhp@veillesanitaire.com"),
+        "reply_to": env("DEFAULT_REPLY_TO_INTERNAL", default="inhp@veillesanitaire.com"),
+        "timeout": env.int("INTERNAL_EMAIL_TIMEOUT", default=20),
+    },
+}
+
+# URL du dashboard admin (utilisée dans les emails de création de compte)
+ADMIN_LOGIN_URL = env("ADMIN_LOGIN_URL", default="https://admin.veillesanitaire.com/login")
+
+# Durée de validité des tokens de reset password (heures)
+PASSWORD_RESET_TOKEN_TTL_HOURS = env.int("PASSWORD_RESET_TOKEN_TTL_HOURS", default=24)
 
 # ---------------------------------------------------------------------------
 # Sécurité (durcie en prod.py)

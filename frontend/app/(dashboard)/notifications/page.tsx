@@ -68,13 +68,22 @@ export default function NotificationsPage() {
             Numéros ivoiriens → Orange CI, autres → Twilio (règle automatique).
           </p>
         </div>
-        <Link
-          href="/notifications/echecs"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-2 text-xs font-bold transition"
-        >
-          <AlertTriangle className="h-3.5 w-3.5" />
-          Gérer les échecs ({kpis.failed ?? 0})
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/notifications/emails"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-sky-100 hover:bg-sky-200 text-sky-700 px-3 py-2 text-xs font-bold transition"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Historique emails
+          </Link>
+          <Link
+            href="/notifications/echecs"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-2 text-xs font-bold transition"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Gérer les échecs ({kpis.failed ?? 0})
+          </Link>
+        </div>
       </header>
 
       {/* KPIs */}

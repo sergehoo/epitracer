@@ -18,14 +18,20 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    MetaWhatsAppWebhookView, NotificationTemplateViewSet,
-    NotificationViewSet, OrangeCiSmsStatusWebhookView,
+    AwsSesEventWebhookView, EmailLogViewSet, EmailSmtpTestView,
+    EmailTemplateViewSet, MetaWhatsAppWebhookView,
+    NotificationTemplateViewSet, NotificationViewSet,
+    OrangeCiSmsStatusWebhookView, SenderProfileViewSet,
     TravelerNotificationsView, TwilioSmsStatusWebhookView,
     TwilioWhatsAppStatusWebhookView,
 )
 
 router = DefaultRouter()
 router.register("templates", NotificationTemplateViewSet, basename="notification-template")
+# ── Email multi-expéditeur ──────────────────────────────────────────────
+router.register("emails", EmailLogViewSet, basename="email-log")
+router.register("email-templates", EmailTemplateViewSet, basename="email-template")
+router.register("email-senders", SenderProfileViewSet, basename="email-sender")
 
 urlpatterns = [
     # Webhooks AVANT le router (sinon le router intercepte)
@@ -49,6 +55,18 @@ urlpatterns = [
         "webhooks/meta/whatsapp/",
         MetaWhatsAppWebhookView.as_view(),
         name="meta-whatsapp-webhook",
+    ),
+    # AWS SES delivery events (via SNS)
+    path(
+        "webhooks/ses/events/",
+        AwsSesEventWebhookView.as_view(),
+        name="ses-events-webhook",
+    ),
+    # Test SMTP par profil (super admin frontend)
+    path(
+        "email-test/",
+        EmailSmtpTestView.as_view(),
+        name="email-smtp-test",
     ),
     # Historique par voyageur
     path(

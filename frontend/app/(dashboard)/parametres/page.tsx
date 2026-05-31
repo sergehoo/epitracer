@@ -214,9 +214,17 @@ export default function ParametresPage() {
       <Section icon={<Bell className="h-5 w-5" />} title="Notifications">
         <p className="text-sm text-slate-600 dark:text-slate-300">
           Les agents reçoivent les alertes critiques en temps réel dans l'interface admin
-          (WebSocket) et par email pour les événements majeurs. Configuration centrale
-          assurée par l'administrateur national.
+          (WebSocket) et par email pour les événements majeurs.
         </p>
+        <div className="mt-3">
+          <Link
+            href="/settings/email"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-ciDark text-white px-3 py-2 text-xs font-bold hover:bg-emerald-900 transition"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            Configurer les emails (Super Admin)
+          </Link>
+        </div>
       </Section>
 
       {/* ============ Système & API ============ */}

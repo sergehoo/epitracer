@@ -163,3 +163,83 @@ class NotificationAuditLogAdmin(admin.ModelAdmin):
     search_fields = ("actor__email", "notification__recipient")
     readonly_fields = ("created_at", "metadata")
     date_hierarchy = "created_at"
+
+
+# ===========================================================================
+# Email multi-expéditeur — Django admin
+# ===========================================================================
+from .email_models import (  # noqa: E402
+    EmailLog, EmailStatus, EmailTemplate, PasswordResetToken, SenderProfile,
+)
+
+
+@admin.register(SenderProfile)
+class SenderProfileAdmin(admin.ModelAdmin):
+    list_display = ("code", "from_name", "from_address", "usage_scope", "is_active")
+    list_filter = ("usage_scope", "is_active")
+    search_fields = ("from_address", "from_name", "code")
+    list_editable = ("is_active",)
+
+
+@admin.register(EmailTemplate)
+class EmailTemplateAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "email_type", "sender_profile", "is_active", "updated_at")
+    list_filter = ("email_type", "is_active", "sender_profile")
+    search_fields = ("code", "name", "subject")
+    autocomplete_fields = ("sender_profile",)
+
+
+@admin.register(EmailLog)
+class EmailLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "created_at", "email_type", "masked_recipient", "sender_address",
+        "status_badge", "retry_count", "sent_by",
+    )
+    list_filter = ("status", "email_type", "sender_address")
+    search_fields = ("recipient", "subject", "error_message", "provider_message_id")
+    autocomplete_fields = ("template", "related_user", "related_traveler", "sent_by")
+    date_hierarchy = "created_at"
+    readonly_fields = (
+        "uuid", "provider_message_id", "retry_count",
+        "sent_at", "delivered_at", "failed_at", "context",
+    )
+    actions = ["action_retry_failed"]
+
+    @admin.display(description="Statut")
+    def status_badge(self, obj):
+        color = {
+            "sent": "#10b981", "delivered": "#059669",
+            "failed": "#ef4444", "bounced": "#dc2626",
+            "queued": "#3b82f6", "pending": "#6b7280",
+            "cancelled": "#9ca3af",
+            "opened": "#0ea5e9", "clicked": "#7c3aed",
+        }.get(obj.status, "#6b7280")
+        return format_html(
+            '<span style="display:inline-block;padding:2px 8px;border-radius:9999px;'
+            'background:{};color:white;font-size:11px;font-weight:600;">{}</span>',
+            color, obj.get_status_display(),
+        )
+
+    @admin.action(description="🔁 Relancer les emails FAILED sélectionnés")
+    def action_retry_failed(self, request, queryset):
+        from .tasks_email import send_email_task
+        eligible = queryset.filter(
+            status__in=(EmailStatus.FAILED, EmailStatus.CANCELLED, EmailStatus.BOUNCED),
+        )
+        n = 0
+        for log in eligible:
+            log.status = EmailStatus.QUEUED
+            log.error_message = ""
+            log.save(update_fields=["status", "error_message", "updated_at"])
+            send_email_task.delay(log.id)
+            n += 1
+        self.message_user(request, f"✅ {n} email(s) re-queué(s).", level=messages.SUCCESS)
+
+
+@admin.register(PasswordResetToken)
+class PasswordResetTokenAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "user", "expires_at", "used_at", "ip_address")
+    list_filter = ("used_at",)
+    search_fields = ("user__email",)
+    readonly_fields = ("token_hash", "user_agent", "ip_address")
+    date_hierarchy = "created_at"

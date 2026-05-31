@@ -492,3 +492,249 @@ class TravelerNotificationsView(APIView):
             "count": qs.count(),
             "results": NotificationSerializer(qs, many=True).data,
         })
+
+
+# ===========================================================================
+# EMAIL — ViewSet + webhook AWS SES
+# ===========================================================================
+import json  # noqa: E402
+
+from .email_models import (  # noqa: E402
+    EmailLog, EmailStatus, EmailTemplate, SenderProfile,
+)
+from .serializers import (  # noqa: E402
+    EmailLogSerializer, EmailTemplateSerializer, SenderProfileSerializer,
+)
+
+
+class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """GET /api/v1/notifications/emails/ — historique des emails envoyés."""
+    queryset = (
+        EmailLog.objects
+        .select_related("template", "related_user", "related_traveler", "sent_by")
+        .order_by("-created_at")
+    )
+    serializer_class = EmailLogSerializer
+    permission_classes = [CanViewNotifications]
+    filterset_fields = ["status", "email_type", "sender_address", "related_user", "related_traveler"]
+    search_fields = ["recipient", "subject", "error_message"]
+
+    @action(detail=True, methods=["post"], permission_classes=[CanRetryNotification])
+    def retry(self, request, pk=None):
+        """Relance manuellement un email FAILED."""
+        log = self.get_object()
+        if log.status not in (EmailStatus.FAILED, EmailStatus.CANCELLED, EmailStatus.BOUNCED):
+            return Response(
+                {"detail": "Seuls les emails FAILED / CANCELLED / BOUNCED peuvent être relancés."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        log.status = EmailStatus.QUEUED
+        log.error_message = ""
+        log.save(update_fields=["status", "error_message", "updated_at"])
+
+        from .tasks_email import send_email_task
+        send_email_task.delay(log.id)
+        return Response(EmailLogSerializer(log).data)
+
+    @action(
+        detail=False, methods=["post"], url_path="bulk-retry",
+        permission_classes=[CanRetryNotification],
+    )
+    def bulk_retry(self, request):
+        """Relance en lot. Body: {"ids":[1,2]} OU {"all_failed": true, "max_age_hours": 24}."""
+        ids = request.data.get("ids") or []
+        all_failed = bool(request.data.get("all_failed"))
+        max_age_hours = int(request.data.get("max_age_hours") or 24)
+
+        if not ids and not all_failed:
+            return Response(
+                {"detail": "Fournir 'ids' (liste) ou 'all_failed': true."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = EmailLog.objects.filter(status__in=(
+            EmailStatus.FAILED, EmailStatus.CANCELLED, EmailStatus.BOUNCED,
+        ))
+        if ids:
+            try:
+                ids_int = [int(i) for i in ids][:500]
+            except (ValueError, TypeError):
+                return Response({"detail": "IDs invalides."}, status=400)
+            qs = qs.filter(pk__in=ids_int)
+        elif all_failed:
+            from datetime import timedelta
+            cutoff = timezone.now() - timedelta(hours=max_age_hours)
+            qs = qs.filter(failed_at__gte=cutoff)[:500]
+
+        from .tasks_email import send_email_task
+        requeued = 0
+        results = []
+        for log in qs:
+            log.status = EmailStatus.QUEUED
+            log.error_message = ""
+            log.save(update_fields=["status", "error_message", "updated_at"])
+            send_email_task.delay(log.id)
+            requeued += 1
+            results.append({"id": log.id, "recipient": log.masked_recipient})
+        return Response({"ok": True, "requeued": requeued, "results": results})
+
+
+class EmailTemplateViewSet(viewsets.ModelViewSet):
+    """CRUD des templates email — réservé aux admins (HasRole côté router)."""
+    queryset = EmailTemplate.objects.all().order_by("email_type", "code")
+    serializer_class = EmailTemplateSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ["email_type", "is_active", "sender_profile"]
+    search_fields = ["code", "name", "subject"]
+
+
+class SenderProfileViewSet(viewsets.ReadOnlyModelViewSet):
+    """Lecture seule des profils — l'édition se fait via Django admin uniquement."""
+    queryset = SenderProfile.objects.all().order_by("code")
+    serializer_class = SenderProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+
+# ---------------------------------------------------------------------------
+# Webhook AWS SES — événements SNS (delivered / bounced / complained)
+# ---------------------------------------------------------------------------
+class AwsSesEventWebhookView(APIView):
+    """POST /api/v1/notifications/webhooks/ses/events/
+
+    SES envoie ses événements via SNS. Format attendu :
+        {
+          "Type": "Notification",
+          "Message": "{...JSON SES event...}"
+        }
+    Le `Message` contient `eventType` (Delivery / Bounce / Complaint / Open)
+    et `mail.messageId` qu'on retrouve dans `EmailLog.provider_message_id`.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    SES_TO_STATUS = {
+        "Delivery": EmailStatus.DELIVERED,
+        "Bounce": EmailStatus.BOUNCED,
+        "Complaint": EmailStatus.BOUNCED,  # plainte → traité comme bounce
+        "Open": EmailStatus.OPENED,
+        "Click": EmailStatus.CLICKED,
+    }
+
+    def post(self, request):
+        payload = request.data
+        msg_type = payload.get("Type")
+
+        # SNS subscription confirmation : on log + accepte
+        if msg_type == "SubscriptionConfirmation":
+            logger.info("SES SNS SubscriptionConfirmation reçue — URL: %s",
+                        payload.get("SubscribeURL", "")[:200])
+            return Response({"ok": True, "subscription": "pending"})
+
+        if msg_type != "Notification":
+            return Response({"ok": True, "ignored": "type=" + str(msg_type)})
+
+        # Le message SNS est une string JSON imbriquée
+        raw = payload.get("Message", "")
+        try:
+            event = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:
+            return Response({"detail": "Invalid Message JSON"}, status=400)
+
+        event_type = event.get("eventType") or event.get("notificationType")
+        mapped_status = self.SES_TO_STATUS.get(event_type)
+        if not mapped_status:
+            return Response({"ok": True, "ignored": event_type})
+
+        # Lookup par provider_message_id (SES messageId)
+        message_id = (event.get("mail") or {}).get("messageId", "")
+        if not message_id:
+            return Response({"ok": True, "skipped": "no messageId"})
+
+        log = EmailLog.objects.filter(provider_message_id=message_id).first()
+        if not log:
+            logger.info("SES webhook : EmailLog introuvable pour messageId=%s", message_id)
+            return Response({"ok": True, "not_found": True})
+
+        # Extraire erreur si bounce/complaint
+        error = ""
+        if event_type == "Bounce":
+            recips = event.get("bounce", {}).get("bouncedRecipients", [])
+            if recips:
+                error = recips[0].get("diagnosticCode", "")
+        elif event_type == "Complaint":
+            error = "Plainte spam destinataire"
+
+        log.status = mapped_status
+        if mapped_status == EmailStatus.DELIVERED:
+            log.delivered_at = timezone.now()
+        elif mapped_status == EmailStatus.BOUNCED:
+            log.failed_at = timezone.now()
+            log.error_message = error[:1000]
+        log.save()
+        logger.info("SES event %s → EmailLog #%s (%s)", event_type, log.id, mapped_status)
+        return Response({"ok": True, "log_id": log.id, "status": mapped_status})
+
+
+class EmailSmtpTestView(APIView):
+    """POST /api/v1/notifications/email-test/
+
+    Body : {"profile": "public"|"internal", "recipient": "email@x.com"}
+    Envoie un email de test direct via la connexion SMTP du profil pour
+    valider la config sans passer par les templates.
+    Réservé authenticated (front filtre côté nav pour Super Admin).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .services.email_router import _build_connection
+        from django.core.mail import EmailMultiAlternatives
+
+        profile_code = (request.data.get("profile") or "").lower()
+        recipient = (request.data.get("recipient") or "").strip()
+
+        if profile_code not in ("public", "internal"):
+            return Response(
+                {"detail": "profile doit être 'public' ou 'internal'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not recipient or "@" not in recipient:
+            return Response({"detail": "Email destinataire invalide."}, status=400)
+
+        profiles = getattr(settings, "EMAIL_PROFILES", {})
+        cfg = profiles.get(profile_code) or {}
+        from_addr = cfg.get("from_address", "")
+        from_name = cfg.get("from_name", "")
+
+        try:
+            connection = _build_connection(profile_code)
+            from_header = f"{from_name} <{from_addr}>" if from_name else from_addr
+            msg = EmailMultiAlternatives(
+                subject=f"[Test EpiTrace] Profil {profile_code.upper()}",
+                body=(
+                    f"Bonjour,\n\nCeci est un email de test envoyé via le profil "
+                    f"{profile_code.upper()} d'EpiTrace ({from_addr}).\n\n"
+                    f"Hôte SMTP : {cfg.get('host')}:{cfg.get('port')}\n\n"
+                    f"Si vous recevez ce message, la configuration SMTP est OK.\n\n"
+                    "— EpiTrace / INHP"
+                ),
+                from_email=from_header,
+                to=[recipient],
+                connection=connection,
+            )
+            sent = msg.send(fail_silently=False)
+            return Response({
+                "ok": True,
+                "sent": sent,
+                "profile": profile_code,
+                "host": cfg.get("host"),
+                "port": cfg.get("port"),
+                "from": from_header,
+            })
+        except Exception as exc:  # noqa: BLE001
+            return Response({
+                "ok": False,
+                "error": str(exc),
+                "profile": profile_code,
+                "host": cfg.get("host"),
+                "port": cfg.get("port"),
+            }, status=200)  # 200 pour pouvoir lire l'erreur côté front
