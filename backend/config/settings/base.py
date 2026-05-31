@@ -249,6 +249,10 @@ REST_FRAMEWORK = {
         "companion_location": "60/hour",
         "companion_consent": "30/hour",
         "companion_push": "30/hour",
+        # MFA email — renvoi de code OTP (cooldown anti-spam)
+        "mfa_resend": "6/min",
+        # Password reset public — anti-énumération + anti-spam
+        "password_reset": "5/hour",
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_RENDERER_CLASSES": (

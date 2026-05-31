@@ -40,6 +40,54 @@ class EpidemiTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "login"
 
+    def post(self, request, *args, **kwargs):
+        """Override pour :
+          - Tracer les échecs login (compteur + lock auto après 5 essais)
+          - Auto-envoyer le code OTP email à la 1ère étape (password OK mais
+            mfa_code manquant → on génère et envoie le code immédiatement)
+        """
+        from django.contrib.auth import get_user_model
+        from django.utils import timezone
+        from datetime import timedelta
+
+        User = get_user_model()
+        email = (request.data.get("email") or "").strip().lower()
+
+        try:
+            response = super().post(request, *args, **kwargs)
+        except Exception as exc:
+            # Vérifie si l'erreur indique "MFA requise" → envoyer auto le code
+            from rest_framework.exceptions import ValidationError
+            if isinstance(exc, ValidationError) and isinstance(exc.detail, dict):
+                if exc.detail.get("mfa_required"):
+                    user = User.objects.filter(email=email).first()
+                    if user and user.mfa_enabled:
+                        # Génère + envoie le code OTP — best-effort
+                        from apps.accounts.services.email_otp import send_otp_email
+                        try:
+                            send_otp_email(user, request=request)
+                        except Exception:
+                            pass
+                    # Re-lever l'erreur pour que le frontend voit mfa_required
+                    raise exc
+
+                # Échec password → incrémente compteur + lock après 5
+                if "detail" in exc.detail or "non_field_errors" in exc.detail:
+                    user = User.objects.filter(email=email).first()
+                    if user and not user.is_locked:
+                        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+                        if user.failed_login_attempts >= 5:
+                            user.locked_until = timezone.now() + timedelta(minutes=15)
+                            user.failed_login_attempts = 0
+                            user.save(update_fields=[
+                                "failed_login_attempts", "locked_until", "updated_at",
+                            ])
+                        else:
+                            user.save(update_fields=["failed_login_attempts", "updated_at"])
+            raise
+
+        return response
+
 
 # ---------------------------------------------------------------------------
 # Me
@@ -219,3 +267,135 @@ class LoginEventListView(APIView):
             }
             for e in qs
         ])
+
+
+# ===========================================================================
+# MFA EMAIL — endpoints
+# ===========================================================================
+
+class MfaEmailEnableView(APIView):
+    """POST /auth/mfa/email/enable/ — active la MFA email pour soi-même."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        request.user.mfa_enabled = True
+        request.user.save(update_fields=["mfa_enabled"])
+        return Response({
+            "ok": True,
+            "mfa_enabled": True,
+            "detail": "MFA email activée. Vous recevrez un code à chaque connexion.",
+        })
+
+
+class MfaEmailDisableView(APIView):
+    """POST /auth/mfa/email/disable/ — désactive la MFA email pour soi-même."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.mfa_enforced:
+            return Response(
+                {"detail": "MFA imposée par l'administrateur — désactivation refusée."},
+                status=403,
+            )
+        request.user.mfa_enabled = False
+        request.user.save(update_fields=["mfa_enabled"])
+        return Response({"ok": True, "mfa_enabled": False})
+
+
+class MfaEmailResendView(APIView):
+    """POST /auth/mfa/email/resend/ — renvoie un nouveau code OTP.
+
+    Public (pas auth). Body: {"email": "user@..."}. Pas de leak si email inexistant.
+    Rate limit pour éviter le spam.
+    """
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "mfa_resend"  # à configurer côté settings : 6/min/IP par ex.
+
+    def post(self, request):
+        from django.contrib.auth import get_user_model
+        from apps.accounts.services.email_otp import send_otp_email
+
+        email = (request.data.get("email") or "").strip().lower()
+        if not email:
+            return Response({"detail": "Email requis."}, status=400)
+
+        User = get_user_model()
+        user = User.objects.filter(email=email, is_active=True).first()
+        if user and user.mfa_enabled:
+            send_otp_email(user, request=request)
+        # Réponse identique pour éviter de leaker l'existence de l'email
+        return Response({"ok": True, "detail": "Si un compte avec MFA existe, un code a été envoyé."})
+
+
+# ===========================================================================
+# PASSWORD RESET PUBLIC — request + confirm
+# ===========================================================================
+
+class PasswordResetRequestView(APIView):
+    """POST /auth/password-reset/request/ — demande publique de reset par email."""
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    def post(self, request):
+        from django.contrib.auth import get_user_model
+        from apps.notifications.services.email_router import generate_password_reset_token
+        from apps.notifications.tasks_email import send_password_reset_email
+
+        email = (request.data.get("email") or "").strip().lower()
+        if not email:
+            return Response({"detail": "Email requis."}, status=400)
+
+        User = get_user_model()
+        user = User.objects.filter(email=email, is_active=True).first()
+        if user:
+            try:
+                raw_token, _ = generate_password_reset_token(user, request=request)
+                send_password_reset_email.delay(user.pk, raw_token)
+            except Exception:
+                pass
+        # Réponse identique dans tous les cas (anti-énumération)
+        return Response({
+            "ok": True,
+            "detail": "Si un compte existe avec cet email, un lien a été envoyé.",
+        })
+
+
+class PasswordResetConfirmView(APIView):
+    """POST /auth/password-reset/confirm/ — soumission du nouveau password via token."""
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    def post(self, request):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjValidationError
+        from apps.notifications.services.email_router import consume_password_reset_token
+
+        raw_token = (request.data.get("token") or "").strip()
+        new_password = (request.data.get("new_password") or "").strip()
+
+        if not raw_token or not new_password:
+            return Response({"detail": "Token et nouveau mot de passe requis."}, status=400)
+
+        user = consume_password_reset_token(raw_token)
+        if not user:
+            return Response({"detail": "Token invalide ou expiré."}, status=400)
+
+        try:
+            validate_password(new_password, user=user)
+        except DjValidationError as exc:
+            return Response({"detail": " ".join(exc.messages)}, status=400)
+
+        user.set_password(new_password)
+        # Reset les compteurs sécurité
+        user.must_change_password = False
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        user.last_password_change = timezone.now()
+        user.save(update_fields=[
+            "password", "must_change_password", "failed_login_attempts",
+            "locked_until", "last_password_change",
+        ])
+        return Response({"ok": True, "detail": "Mot de passe réinitialisé."})

@@ -101,6 +101,13 @@ class User(AbstractUser):
 
     # Statut
     is_locked = models.BooleanField(default=False, help_text=_("Verrouillé pour raison de sécurité."))
+    locked_at = models.DateTimeField(null=True, blank=True)
+    locked_until = models.DateTimeField(null=True, blank=True, help_text=_("Verrouillage temporaire automatique."))
+    failed_login_attempts = models.PositiveSmallIntegerField(default=0)
+    must_change_password = models.BooleanField(
+        default=False,
+        help_text=_("Force le changement de mot de passe à la prochaine connexion."),
+    )
     last_password_change = models.DateTimeField(null=True, blank=True)
     password_expires_at = models.DateTimeField(null=True, blank=True)
 
@@ -252,3 +259,9 @@ class TrustedDevice(TimestampedModel):
     class Meta:
         verbose_name = _("Appareil de confiance")
         verbose_name_plural = _("Appareils de confiance")
+
+
+# ---------------------------------------------------------------------------
+# MFA email — importé depuis mfa_models.py pour que Django le détecte
+# ---------------------------------------------------------------------------
+from .mfa_models import EmailOtpCode  # noqa: E402, F401

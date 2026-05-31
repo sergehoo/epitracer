@@ -29,30 +29,65 @@ class EpidemiTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
+        from django.utils import timezone
+        from apps.accounts.services.email_otp import verify_otp
+
         mfa_code = attrs.pop("mfa_code", "") or ""
         data = super().validate(attrs)
 
         user = self.user
-        if user.is_locked:
-            raise serializers.ValidationError({"detail": "Compte verrouillé."})
 
-        # Vérification MFA si activée pour l'utilisateur
+        # ── Vérouillage compte (manuel ou temporaire automatique) ─────
+        if user.is_locked:
+            raise serializers.ValidationError({"detail": "Compte verrouillé. Contactez l'administrateur."})
+        if user.locked_until and user.locked_until > timezone.now():
+            remaining_min = int((user.locked_until - timezone.now()).total_seconds() / 60) + 1
+            raise serializers.ValidationError({
+                "detail": f"Compte verrouillé temporairement. Réessayer dans {remaining_min} minute(s).",
+            })
+
+        # ── Vérification MFA email si activée pour l'utilisateur ──────
         if user.mfa_enabled:
-            confirmed_devices = TOTPDevice.objects.filter(user=user, confirmed=True)
-            if not confirmed_devices.exists():
-                # MFA déclaré actif mais pas d'appareil confirmé → on bloque pour cohérence
-                raise serializers.ValidationError(
-                    {"mfa": "MFA activée mais aucun appareil TOTP confirmé."}
-                )
             if not mfa_code:
-                raise serializers.ValidationError(
-                    {"mfa": "Code MFA requis.", "mfa_required": True}
-                )
-            if not any(d.verify_token(mfa_code) for d in confirmed_devices):
-                raise serializers.ValidationError({"mfa": "Code MFA invalide."})
+                # 1ère étape : email/password OK → backend va envoyer le code OTP
+                raise serializers.ValidationError({
+                    "mfa": "Code MFA requis.",
+                    "mfa_required": True,
+                    "mfa_method": "email",
+                    "email_masked": _mask_email(user.email),
+                })
+            # 2ème étape : vérification du code OTP saisi
+            result = verify_otp(user, mfa_code)
+            if not result.ok:
+                raise serializers.ValidationError({
+                    "mfa": result.error,
+                    "mfa_required": True,
+                    "mfa_method": "email",
+                    "attempts_remaining": result.attempts_remaining,
+                })
+
+        # ── Reset compteur d'échecs sur connexion réussie ─────────────
+        if user.failed_login_attempts > 0:
+            user.failed_login_attempts = 0
+            user.locked_until = None
+            user.save(update_fields=["failed_login_attempts", "locked_until"])
 
         data["user"] = UserSerializer(user).data
+        # Le client sait s'il doit forcer le changement de mot de passe
+        data["must_change_password"] = bool(user.must_change_password)
         return data
+
+
+def _mask_email(email: str) -> str:
+    """Masque l'email pour l'affichage UI : `j*****h@domain.com`."""
+    if not email or "@" not in email:
+        return email or ""
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        masked = local[0] + "*"
+    else:
+        masked = local[0] + "*" * (len(local) - 2) + local[-1]
+    return f"{masked}@{domain}"
 
 
 # ---------------------------------------------------------------------------
@@ -94,10 +129,21 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "uuid", "email", "username", "first_name", "last_name", "full_name",
-            "phone", "job_title", "is_active", "is_locked", "mfa_enabled",
+            "phone", "job_title", "is_active", "is_locked",
+            "mfa_enabled", "mfa_enforced", "must_change_password",
             "date_joined", "last_login", "roles",
         ]
         read_only_fields = ["id", "uuid", "date_joined", "last_login", "is_locked"]
+
+    def update(self, instance, validated_data):
+        """Si l'admin force MFA → active aussi mfa_enabled automatiquement
+        (sinon on aurait un état incohérent : 'imposé mais pas activé').
+        """
+        if validated_data.get("mfa_enforced") is True and not instance.mfa_enabled:
+            validated_data["mfa_enabled"] = True
+        # Inversement : si on dé-force, on laisse mfa_enabled tel quel
+        # (l'utilisateur peut maintenant le désactiver via son profil).
+        return super().update(instance, validated_data)
 
     def get_roles(self, obj) -> list[dict]:
         return [

@@ -656,9 +656,22 @@ function UserFormModal({
             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
             <span>Compte actif</span>
           </label>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={mfaEnforced} onChange={(e) => setMfaEnforced(e.target.checked)} />
-            <span>Forcer la MFA à la prochaine connexion</span>
+          <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={mfaEnforced}
+              onChange={(e) => setMfaEnforced(e.target.checked)}
+            />
+            <span className="flex flex-col">
+              <span>
+                <strong>Imposer la MFA email</strong>
+              </span>
+              <span className="text-xs text-slate-500">
+                Active automatiquement la double authentification et empêche
+                l'utilisateur de la désactiver. Un code 6 chiffres lui sera
+                envoyé par email à chaque connexion.
+              </span>
+            </span>
           </label>
         </div>
 
