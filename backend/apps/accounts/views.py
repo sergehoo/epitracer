@@ -62,12 +62,27 @@ class EpidemiTokenObtainPairView(TokenObtainPairView):
                 if exc.detail.get("mfa_required"):
                     user = User.objects.filter(email=email).first()
                     if user and user.mfa_enabled:
-                        # Génère + envoie le code OTP — best-effort
+                        # Génère + envoie le code OTP via Celery
                         from apps.accounts.services.email_otp import send_otp_email
+                        import logging
+                        log = logging.getLogger("epidemitracker.accounts.login")
                         try:
-                            send_otp_email(user, request=request)
-                        except Exception:
-                            pass
+                            result = send_otp_email(user, request=request)
+                            if not result.ok:
+                                log.error(
+                                    "OTP envoi KO pour %s : %s",
+                                    user.email, result.error,
+                                )
+                            else:
+                                log.info(
+                                    "OTP envoyé pour %s (code_id=%s)",
+                                    user.email, result.code_id,
+                                )
+                        except Exception as send_exc:  # noqa: BLE001
+                            log.exception(
+                                "OTP envoi crash pour %s : %s",
+                                user.email, send_exc,
+                            )
                     # Re-lever l'erreur pour que le frontend voit mfa_required
                     raise exc
 

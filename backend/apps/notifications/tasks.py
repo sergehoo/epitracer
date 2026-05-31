@@ -263,3 +263,18 @@ def send_notification(
         message_type=MessageType.AUTOMATIC_REMINDER,
     )
     return {"ok": result.ok, "notification_id": result.notification_id, "error": result.error}
+
+
+# ---------------------------------------------------------------------------
+# Auto-discovery Celery : Celery scanne `tasks.py` uniquement par défaut.
+# On importe les tâches email pour qu'elles soient enregistrées au worker.
+# Sans ça, `notifications.send_email_task` est postée dans Redis mais
+# jamais consommée → tous les emails restent en status QUEUED.
+# ---------------------------------------------------------------------------
+from .tasks_email import (  # noqa: E402, F401
+    retry_failed_emails,
+    send_admin_account_created_email,
+    send_campaign_email_batch,
+    send_email_task,
+    send_password_reset_email,
+)
