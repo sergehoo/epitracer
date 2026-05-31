@@ -193,6 +193,11 @@ export default function ParametresPage() {
         )}
       </Section>
 
+      {/* ============ Sécurité : MFA email ============ */}
+      <Section icon={<ShieldCheck className="h-5 w-5" />} title="Double authentification (MFA)">
+        <MfaToggle initialEnabled={me?.mfa_enabled ?? false} enforced={false} />
+      </Section>
+
       {/* ============ Sécurité : mot de passe ============ */}
       <Section icon={<KeyRound className="h-5 w-5" />} title="Changer mon mot de passe">
         <PasswordChangeForm />
@@ -517,5 +522,75 @@ function StatusPill({
       {icon}
       {ok ? okLabel : koLabel}
     </span>
+  );
+}
+
+/* ============================================================ */
+/*                       MFA EMAIL TOGGLE                        */
+/* ============================================================ */
+
+function MfaToggle({ initialEnabled, enforced }: { initialEnabled: boolean; enforced: boolean }) {
+  const [enabled, setEnabled] = useState(initialEnabled);
+  const [busy, setBusy] = useState(false);
+
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      if (enabled) {
+        if (enforced) {
+          toast.error("La MFA est imposée par l'administrateur, désactivation refusée.");
+          return;
+        }
+        await api.post('/auth/mfa/email/disable/');
+        setEnabled(false);
+        toast.success('MFA email désactivée');
+      } else {
+        await api.post('/auth/mfa/email/enable/');
+        setEnabled(true);
+        toast.success('MFA email activée — un code vous sera envoyé à chaque connexion');
+      }
+    } catch (e) {
+      toast.error(extractApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start gap-4 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className={`h-10 w-10 rounded-xl grid place-items-center ${
+          enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+        }`}>
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+        <div className="flex-1">
+          <div className="font-bold text-ciDark dark:text-emerald-100">
+            Code de vérification par email
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            À chaque connexion, un code à 6 chiffres vous sera envoyé à votre email
+            professionnel. Vous devrez le saisir après votre mot de passe pour finaliser
+            l'accès à la console.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={busy || enforced}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition disabled:opacity-50 ${
+            enabled ? 'bg-emerald-600' : 'bg-slate-300'
+          }`}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+            enabled ? 'translate-x-6' : 'translate-x-1'
+          }`} />
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400 italic">
+        🔒 Recommandé pour tous les comptes ayant accès à des données sanitaires sensibles.
+        {enforced && ' La MFA est imposée par l\'administrateur pour votre rôle.'}
+      </p>
+    </div>
   );
 }
