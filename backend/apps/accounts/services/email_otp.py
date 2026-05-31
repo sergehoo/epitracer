@@ -71,15 +71,26 @@ def generate_otp_for_user(user, *, request=None) -> tuple[str, EmailOtpCode]:
     return code, obj
 
 
-def send_otp_email(user, *, request=None) -> OtpResult:
+def send_otp_email(user, *, request=None, sync: bool = True) -> OtpResult:
     """Génère un code et l'envoie par email via le profil INTERNAL.
+
+    Args:
+        user : utilisateur destinataire
+        request : HttpRequest (pour tracer IP/UA dans l'OTP)
+        sync : si True (défaut), envoie l'email en SYNCHRONE (skip Celery).
+            Latence < 3s pour un SMTP fonctionnel. C'est le mode recommandé
+            pour le login car l'utilisateur attend activement le code.
+            Si False, passe par la queue Celery (peut prendre du temps si
+            le worker est chargé ou si greylisting Gmail).
 
     Utilisé en deux endroits :
       - Après validation email/password si l'utilisateur a activé MFA
       - Sur demande explicite (renvoi du code après cooldown)
     """
-    from apps.notifications.email_models import EmailType
-    from apps.notifications.services.email_router import send_email_by_type
+    from apps.notifications.email_models import EmailLog, EmailStatus, EmailType
+    from apps.notifications.services.email_router import (
+        _execute_email_send, send_email_by_type,
+    )
 
     code, obj = generate_otp_for_user(user, request=request)
 
@@ -157,6 +168,9 @@ def send_otp_email(user, *, request=None) -> OtpResult:
         f"— INHP Veille Sanitaire"
     )
 
+    # send_email_by_type crée l'EmailLog en QUEUED puis enqueue Celery.
+    # En mode SYNC on récupère le log et on appelle _execute_email_send
+    # juste après pour court-circuiter la queue.
     result = send_email_by_type(
         email_type=EmailType.MFA_NOTIFICATION,
         recipient=user.email,
@@ -169,6 +183,25 @@ def send_otp_email(user, *, request=None) -> OtpResult:
     if not result.ok:
         logger.error("Envoi OTP email échoué pour user=%s : %s", user.pk, result.error)
         return OtpResult(ok=False, error=result.error)
+
+    if sync and result.log_id:
+        # Force l'envoi SMTP immédiat (skip Celery) — UX login instantanée.
+        # Le worker peut quand même picker plus tard, _execute_email_send
+        # marquera déjà status=SENT donc le worker la skip.
+        try:
+            email_log = EmailLog.objects.get(pk=result.log_id)
+            if email_log.status == EmailStatus.QUEUED:
+                ok = _execute_email_send(email_log)
+                if not ok:
+                    logger.warning(
+                        "Envoi OTP sync KO pour user=%s : %s",
+                        user.pk, email_log.error_message,
+                    )
+                    return OtpResult(ok=False, error=email_log.error_message)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("OTP sync send crash : %s", exc)
+            # On considère que c'est OK quand même car Celery va prendre le relai
+            # (la tâche reste en queue et sera consommée plus tard)
 
     return OtpResult(ok=True, code_id=obj.id, attempts_remaining=obj.max_attempts)
 

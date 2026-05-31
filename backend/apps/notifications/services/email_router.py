@@ -110,13 +110,22 @@ def _build_connection(profile_code: str):
 # ===========================================================================
 
 def _render(text: str, context: dict) -> str:
+    """Substitue `{nom_variable}` par sa valeur dans `context`.
+
+    Utilise une regex stricte sur `\\{(\\w+)\\}` pour ne pas interférer
+    avec les `{` présents dans le CSS HTML (ex: `style="color:#fff"`).
+    Si la variable n'est pas dans le context, on laisse `{nom}` brut
+    (jamais d'exception).
+    """
     if not text or "{" not in text:
         return text or ""
-    try:
-        return text.format_map(_SafeFormatDict(context or {}))
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Email template render failed: %s — falling back to raw", exc)
-        return text
+    ctx = context or {}
+    import re
+    return re.sub(
+        r"\{(\w+)\}",
+        lambda m: str(ctx.get(m.group(1), m.group(0))),
+        text,
+    )
 
 
 def render_template(template_code: str, context: Optional[dict] = None):

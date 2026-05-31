@@ -237,6 +237,15 @@ class UserCreateSerializer(serializers.ModelSerializer):
         # AbstractUser qui exige USERNAME_FIELD non-null).
         if not validated.get("username"):
             validated["username"] = validated["email"]
+
+        # Si l'admin coche "Imposer la MFA" à la création → on active aussi
+        # mfa_enabled (sinon état incohérent "imposé mais pas activé").
+        if validated.get("mfa_enforced") is True:
+            validated["mfa_enabled"] = True
+
+        # Force le changement du mot de passe à la 1ère connexion (sécurité)
+        validated.setdefault("must_change_password", True)
+
         user = User(**validated)
         user.set_password(password)
         user.save()
