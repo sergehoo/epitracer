@@ -78,7 +78,7 @@ x-django-env: &django-env
   INTERNAL_EMAIL_FROM_ADDRESS: ${INTERNAL_EMAIL_FROM_ADDRESS:-inhp@veillesanitaire.com}
   DEFAULT_REPLY_TO_INTERNAL: ${DEFAULT_REPLY_TO_INTERNAL:-inhp@veillesanitaire.com}
   INTERNAL_EMAIL_TIMEOUT: ${INTERNAL_EMAIL_TIMEOUT:-20}
-  ADMIN_LOGIN_URL: ${ADMIN_LOGIN_URL:-https://admin.veillesanitaire.com/login}
+  ADMIN_LOGIN_URL: ${ADMIN_LOGIN_URL:-https://admin.veillesanitaire.com/auth/login}
   PASSWORD_RESET_TOKEN_TTL_HOURS: ${PASSWORD_RESET_TOKEN_TTL_HOURS:-24}
 
 services:

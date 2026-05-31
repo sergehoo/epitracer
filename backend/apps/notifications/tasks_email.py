@@ -191,8 +191,15 @@ def send_password_reset_email(user_id: int, raw_token: str) -> dict:
     if not user:
         return {"ok": False, "error": "User not found"}
 
-    base = getattr(settings, "ADMIN_LOGIN_URL", "https://admin.veillesanitaire.com/login")
-    reset_url = base.rstrip("/login").rstrip("/") + f"/reset-password?token={raw_token}"
+    # On extrait proprement le root du site (https://admin.veillesanitaire.com)
+    # depuis ADMIN_LOGIN_URL pour reconstruire l'URL /auth/reset-password.
+    # rstrip('/login') ne marche pas correctement (rstrip retire des CARACTÈRES,
+    # pas une string), donc on utilise urlparse pour être sûr.
+    from urllib.parse import urlparse
+    base = getattr(settings, "ADMIN_LOGIN_URL", "https://admin.veillesanitaire.com/auth/login")
+    parsed = urlparse(base)
+    root = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else base
+    reset_url = f"{root}/auth/reset-password?token={raw_token}"
     ttl_h = getattr(settings, "PASSWORD_RESET_TOKEN_TTL_HOURS", 24)
 
     full_name = (

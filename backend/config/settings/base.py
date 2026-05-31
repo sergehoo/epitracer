@@ -445,8 +445,9 @@ EMAIL_PROFILES = {
     },
 }
 
-# URL du dashboard admin (utilisée dans les emails de création de compte)
-ADMIN_LOGIN_URL = env("ADMIN_LOGIN_URL", default="https://admin.veillesanitaire.com/login")
+# URL de la page de connexion admin (utilisée dans les emails de création
+# de compte et reset password). Doit être l'URL Next.js exacte (/auth/login).
+ADMIN_LOGIN_URL = env("ADMIN_LOGIN_URL", default="https://admin.veillesanitaire.com/auth/login")
 
 # Durée de validité des tokens de reset password (heures)
 PASSWORD_RESET_TOKEN_TTL_HOURS = env.int("PASSWORD_RESET_TOKEN_TTL_HOURS", default=24)
