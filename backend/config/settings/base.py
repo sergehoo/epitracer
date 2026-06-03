@@ -94,6 +94,7 @@ LOCAL_APPS = [
     "apps.notifications",
     "apps.realtime",
     "apps.analytics",
+    "apps.mobile_api",
     "apps.companion",
     "apps.reports",
 ]

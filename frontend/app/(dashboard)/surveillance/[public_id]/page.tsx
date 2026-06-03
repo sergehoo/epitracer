@@ -16,6 +16,19 @@ import type { RiskLevel } from '@/types/ebola';
 import { SendMessageModal, SendMessageTarget } from '@/components/notifications/SendMessageModal';
 import { NotificationHistory } from '@/components/notifications/NotificationHistory';
 
+/**
+ * Construit une URL absolue pour un fichier media servi par le backend.
+ * Robuste aux 3 cas :
+ *   - URL absolue déjà : 'https://api.veillesanitaire.com/media/x.png' → telle quelle
+ *   - Path absolu : '/media/x.png' → API_URL + path
+ *   - Path relatif : 'media/x.png' → API_URL + '/' + path
+ */
+function absUrl(path: string | null | undefined): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_URL}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
 /* ============================================================
    Types (depuis /ebola/public/pass/<public_id>/ — endpoint AllowAny)
    ============================================================ */
@@ -357,7 +370,7 @@ export default function TravelerDetailPage() {
                 <div className="mt-3">
                   <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500 mb-1">Signature</div>
                   <img
-                    src={`${API_URL}${inv.declaration.signature.startsWith('/') ? '' : '/'}${inv.declaration.signature}`}
+                    src={absUrl(inv.declaration.signature)}
                     alt="Signature"
                     className="h-20 object-contain rounded-lg border border-slate-200 dark:border-slate-700 bg-white p-2"
                   />
@@ -389,7 +402,7 @@ export default function TravelerDetailPage() {
               {pass.qr_url && (
                 <div className="mt-3 rounded-xl bg-slate-50 dark:bg-slate-900 p-3 grid place-items-center">
                   <img
-                    src={`${API_URL}${pass.qr_url.startsWith('/') ? '' : '/'}${pass.qr_url}`}
+                    src={absUrl(pass.qr_url)}
                     alt="QR pass"
                     className="h-40 w-40 object-contain"
                   />

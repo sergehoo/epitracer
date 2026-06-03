@@ -24,10 +24,18 @@ class HealthPassSerializer(serializers.ModelSerializer):
         ]
 
     def get_qr_url(self, obj):
-        return obj.qr_image.url if obj.qr_image else None
+        if not obj.qr_image:
+            return None
+        url = obj.qr_image.url
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
 
     def get_pdf_url(self, obj):
-        return obj.pdf_file.url if obj.pdf_file else None
+        if not obj.pdf_file:
+            return None
+        url = obj.pdf_file.url
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
 
 
 class HealthPassIssueSerializer(serializers.Serializer):

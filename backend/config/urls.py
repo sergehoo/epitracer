@@ -3,7 +3,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.http import JsonResponse
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.static import serve as static_serve
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
@@ -73,10 +74,31 @@ urlpatterns = [
 
     # API v1
     path("api/v1/", include((api_v1_patterns, "v1"), namespace="v1")),
+
+    # API mobile (Mon Pass Sanitaire — app Flutter)
+    path("api/mobile/", include("apps.mobile_api.urls")),
+]
+
+# ─────────────────────────────────────────────────────────────────────
+# Médias (uploads runtime : QR codes, signatures, certificats vaccinaux,
+# passports voyageurs). Django ne sert /media/ par défaut qu'en DEBUG.
+# Pour EpiTrace : on autorise Django à servir /media/ même en prod car
+# (a) volume modeste, (b) bénéficie du middleware d'auth Django,
+# (c) Traefik termine déjà le TLS.
+#
+# Pour des volumes >100 req/s sur /media/, configurer Traefik pour
+# proxy direct vers le volume media_data (voir docs/RUNBOOK_TRAEFIK.md).
+# ─────────────────────────────────────────────────────────────────────
+urlpatterns += [
+    re_path(
+        r"^media/(?P<path>.*)$",
+        static_serve,
+        {"document_root": settings.MEDIA_ROOT},
+        name="media-serve",
+    ),
 ]
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     try:
         import debug_toolbar
         urlpatterns = [path("__debug__/", include(debug_toolbar.urls))] + urlpatterns

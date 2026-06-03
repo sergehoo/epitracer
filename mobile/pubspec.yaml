@@ -1,0 +1,94 @@
+name: mon_pass_sanitaire
+description: "Application mobile officielle Mon Pass Sanitaire — INHP / MSHPCMU."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # ── State management ──────────────────────────────────────────────
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # ── Modèles / sérialisation ───────────────────────────────────────
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # ── Routing ──────────────────────────────────────────────────────
+  go_router: ^14.6.2
+
+  # ── Network ──────────────────────────────────────────────────────
+  dio: ^5.7.0
+  pretty_dio_logger: ^1.4.0
+  connectivity_plus: ^6.1.0
+
+  # ── Stockage ─────────────────────────────────────────────────────
+  flutter_secure_storage: ^9.2.4
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  shared_preferences: ^2.3.4
+
+  # ── QR / Scanner ─────────────────────────────────────────────────
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.3
+
+  # ── Géoloc / permissions ─────────────────────────────────────────
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
+
+  # ── Auth / sécurité ──────────────────────────────────────────────
+  local_auth: ^2.3.0
+  crypto: ^3.0.6
+
+  # ── Files & PDF ──────────────────────────────────────────────────
+  file_picker: ^8.1.6
+  path_provider: ^2.1.5
+  flutter_pdfview: ^1.3.4
+  url_launcher: ^6.3.1
+  share_plus: ^10.1.2
+
+  # ── Push notifications ───────────────────────────────────────────
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.5
+  flutter_local_notifications: ^17.2.4
+
+  # ── UI / utils ───────────────────────────────────────────────────
+  cupertino_icons: ^1.0.8
+  intl: ^0.19.0
+  flutter_dotenv: ^5.2.1
+  cached_network_image: ^3.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.13
+  freezed: ^2.5.7
+  json_serializable: ^6.9.0
+  riverpod_generator: ^2.4.3
+  custom_lint: ^0.7.0
+  riverpod_lint: ^2.4.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
+    - .env
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
