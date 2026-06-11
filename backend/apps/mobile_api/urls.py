@@ -31,16 +31,23 @@ from .views import (
     MobilePassesViewSet, MobileProfileView, MobilePushRegisterView,
     MobileQrImportView, MobileVaccinationsViewSet,
 )
+from .voyageur_auth import VoyageurRequestOtpView, VoyageurVerifyOtpView
 
 router = DefaultRouter()
 router.register("passes", MobilePassesViewSet, basename="mobile-pass")
 router.register("vaccinations", MobileVaccinationsViewSet, basename="mobile-vaccination")
 
 urlpatterns = [
-    # ── Auth (réutilise les vues web — JWT unifié) ───────────────────
+    # ── Auth agents INHP (email + password + MFA) ────────────────────
     path("auth/login/", EpidemiTokenObtainPairView.as_view(), name="mobile-login"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="mobile-refresh"),
     path("auth/otp/resend/", MobileOtpResendView.as_view(), name="mobile-otp-resend"),
+
+    # ── Auth voyageurs (passport/phone + OTP SMS) ────────────────────
+    path("auth/voyageur/request-otp/",
+         VoyageurRequestOtpView.as_view(), name="mobile-voyageur-request-otp"),
+    path("auth/voyageur/verify-otp/",
+         VoyageurVerifyOtpView.as_view(), name="mobile-voyageur-verify-otp"),
 
     # ── Profil ────────────────────────────────────────────────────────
     path("profile/", MobileProfileView.as_view(), name="mobile-profile"),
