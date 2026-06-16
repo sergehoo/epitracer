@@ -69,6 +69,8 @@ class FollowupsOverviewView(APIView):
         # Subqueries pour last_check_date, last_check_feeling, has_symptoms,
         # last_location_at. Tout est exécuté en SQL côté Postgres.
 
+        from apps.ebola.models import EbolaInvestigation
+
         last_check_sq = (
             DailyCheck.objects.filter(quarantine=OuterRef("pk"))
             .order_by("-check_date")
@@ -76,6 +78,10 @@ class FollowupsOverviewView(APIView):
         last_ping_sq = (
             TravelerLocationPing.objects.filter(traveler=OuterRef("traveler"))
             .order_by("-captured_at")
+        )
+        last_investigation_sq = (
+            EbolaInvestigation.objects.filter(traveler=OuterRef("traveler"))
+            .order_by("-created_at")
         )
 
         active = (
@@ -87,6 +93,7 @@ class FollowupsOverviewView(APIView):
                 last_check_has_symptoms=Subquery(last_check_sq.values("has_symptoms")[:1]),
                 last_check_details=Subquery(last_check_sq.values("symptoms_details")[:1]),
                 last_location_at=Subquery(last_ping_sq.values("captured_at")[:1]),
+                last_risk_level=Subquery(last_investigation_sq.values("risk_level")[:1]),
             )
             .order_by("-started_on")
         )
@@ -120,6 +127,11 @@ class FollowupsOverviewView(APIView):
                 "full_name": t.full_name,
                 "phone": t.phone_mobile,
                 "entry_point": t.entry_point.name if t.entry_point else None,
+                "arrival_date": t.arrival_date,
+                "confinement_city": t.confinement_city or None,
+                "confinement_commune": t.confinement_commune or None,
+                "confinement_neighborhood": t.confinement_neighborhood or None,
+                "risk_level": (getattr(q, "last_risk_level", None) or "low"),
                 "started_on": q.started_on,
                 "day_index": day_index,
                 "total_days": (q.expected_end_on - q.started_on).days,

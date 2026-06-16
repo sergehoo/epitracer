@@ -1,0 +1,348 @@
+'use client';
+
+/**
+ * Modal d'envoi groupé de messages aux voyageurs sélectionnés.
+ *
+ * - Mode template (interpolation par destinataire) ou message libre
+ * - Choix du canal SMS / WhatsApp
+ * - Envoi séquentiel avec barre de progression
+ * - Récap final (succès / échecs par ligne)
+ */
+
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, MessageCircle, Send, Smartphone, Users, X, XCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { api, extractApiError } from '@/lib/api';
+
+export interface BulkTarget {
+  traveler_id?: number | null;
+  traveler_public_id?: string;
+  full_name: string;
+  phone: string;
+  first_name?: string;
+}
+
+interface NotificationTemplate {
+  id: number;
+  code: string;
+  name: string;
+  channels: string[];
+  body_sms?: string;
+  body_whatsapp?: string;
+}
+
+interface Props {
+  open: boolean;
+  targets: BulkTarget[];
+  onClose: () => void;
+  onSent?: (sent: number, failed: number) => void;
+}
+
+type SendStatus = 'pending' | 'sending' | 'ok' | 'failed';
+
+interface Row {
+  target: BulkTarget;
+  status: SendStatus;
+  error?: string;
+  notificationId?: number;
+}
+
+export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) {
+  const [channel, setChannel] = useState<'sms' | 'whatsapp'>('sms');
+  const [mode, setMode] = useState<'free' | 'template'>('template');
+  const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
+  const [selectedTplCode, setSelectedTplCode] = useState<string>('');
+  const [body, setBody] = useState('');
+  const [rows, setRows] = useState<Row[]>([]);
+  const [sending, setSending] = useState(false);
+  const [done, setDone] = useState(false);
+
+  // Charge les templates au mount
+  useEffect(() => {
+    if (!open) return;
+    api.get('/notifications/templates/?is_active=true&page_size=50')
+      .then((r) => setTemplates(r.data.results || r.data))
+      .catch(() => setTemplates([]));
+  }, [open]);
+
+  // Reset state à chaque ouverture
+  useEffect(() => {
+    if (open) {
+      setBody('');
+      setSelectedTplCode('');
+      setMode('template');
+      setChannel('sms');
+      setSending(false);
+      setDone(false);
+      setRows(targets.map((t) => ({ target: t, status: 'pending' })));
+    }
+  }, [open, targets]);
+
+  const channelTemplates = useMemo(
+    () => templates.filter((t) => (t.channels || []).includes(channel)),
+    [templates, channel],
+  );
+
+  const validPhones = targets.filter((t) => !!t.phone).length;
+  const noPhones = targets.length - validPhones;
+
+  const send = async () => {
+    if (mode === 'free' && !body.trim()) {
+      toast.error('Message vide.');
+      return;
+    }
+    if (mode === 'template' && !selectedTplCode) {
+      toast.error('Sélectionnez un modèle ou choisissez « Message libre ».');
+      return;
+    }
+
+    setSending(true);
+    setDone(false);
+
+    const updated = [...rows];
+    let okCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < updated.length; i++) {
+      const r = updated[i];
+      if (!r.target.phone) {
+        r.status = 'failed';
+        r.error = 'Pas de téléphone';
+        failCount++;
+        setRows([...updated]);
+        continue;
+      }
+      r.status = 'sending';
+      setRows([...updated]);
+
+      try {
+        const payload: any = {
+          channel,
+          recipient: r.target.phone.trim(),
+        };
+        if (r.target.traveler_id) payload.traveler = r.target.traveler_id;
+
+        if (mode === 'template' && selectedTplCode) {
+          payload.template_code = selectedTplCode;
+          payload.context = {
+            first_name: r.target.first_name || r.target.full_name.split(' ')[0] || '',
+            checkin_link: 'https://destinationci.com/voyageur/suivi',
+            location_link: 'https://destinationci.com/voyageur/suivi#geo',
+            message: body || '',
+          };
+        } else {
+          payload.body = body;
+        }
+
+        const resp = await api.post('/notifications/send/', payload);
+        r.status = 'ok';
+        r.notificationId = resp.data?.id;
+        okCount++;
+      } catch (e: any) {
+        r.status = 'failed';
+        r.error = extractApiError(e);
+        failCount++;
+      }
+      setRows([...updated]);
+      // Petit délai pour ménager le router SMS et laisser respirer l'UI
+      await new Promise((res) => setTimeout(res, 250));
+    }
+
+    setSending(false);
+    setDone(true);
+    onSent?.(okCount, failCount);
+    if (failCount === 0) {
+      toast.success(`${okCount} message(s) envoyé(s)`);
+    } else {
+      toast(`${okCount} envoyés · ${failCount} échec(s)`, { icon: '⚠️' });
+    }
+  };
+
+  if (!open) return null;
+
+  const progress = rows.length === 0
+    ? 0
+    : Math.round((rows.filter((r) => r.status === 'ok' || r.status === 'failed').length / rows.length) * 100);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl mt-8 mb-8">
+        {/* En-tête */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-ciOrange" />
+              <h2 className="font-display text-lg font-black">Envoi groupé</h2>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {targets.length} voyageur(s) sélectionné(s)
+              {noPhones > 0 && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {' '}· {noPhones} sans téléphone (ignorés)
+                </span>
+              )}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={sending}
+            className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          {/* Canal */}
+          <div>
+            <label className="block text-xs uppercase tracking-widest text-slate-500 font-bold mb-2">
+              Canal
+            </label>
+            <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-700 p-1">
+              {[
+                { value: 'sms', label: 'SMS', icon: <Smartphone className="h-4 w-4" /> },
+                { value: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
+              ].map((c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => !sending && setChannel(c.value as 'sms' | 'whatsapp')}
+                  className={`px-4 py-1.5 text-sm rounded-lg font-semibold transition inline-flex items-center gap-1.5 ${
+                    channel === c.value
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-600 dark:text-slate-300'
+                  }`}
+                  disabled={sending}
+                >
+                  {c.icon}
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Mode template/libre */}
+          <div>
+            <label className="block text-xs uppercase tracking-widest text-slate-500 font-bold mb-2">
+              Contenu
+            </label>
+            <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-700 p-1 mb-3">
+              {[
+                { value: 'template', label: 'Modèle' },
+                { value: 'free', label: 'Message libre' },
+              ].map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => !sending && setMode(m.value as 'template' | 'free')}
+                  className={`px-3 py-1.5 text-sm rounded-lg font-semibold transition ${
+                    mode === m.value
+                      ? 'bg-ciOrange text-white'
+                      : 'text-slate-600 dark:text-slate-300'
+                  }`}
+                  disabled={sending}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {mode === 'template' ? (
+              <select
+                className="select w-full"
+                value={selectedTplCode}
+                onChange={(e) => setSelectedTplCode(e.target.value)}
+                disabled={sending}
+              >
+                <option value="">— Sélectionner un modèle —</option>
+                {channelTemplates.map((t) => (
+                  <option key={t.id} value={t.code}>{t.name}</option>
+                ))}
+              </select>
+            ) : (
+              <textarea
+                className="textarea w-full"
+                rows={4}
+                placeholder="Tapez votre message (variables disponibles : {first_name}, {checkin_link})"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                disabled={sending}
+              />
+            )}
+          </div>
+
+          {/* Progression / résultats */}
+          {(sending || done) && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-widest text-slate-500 font-bold">
+                  {done ? 'Résultats' : 'Progression'}
+                </span>
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  {progress}%
+                </span>
+              </div>
+              <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden mb-3">
+                <div
+                  className="h-full bg-emerald-500 transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <div className="max-h-48 overflow-y-auto border border-slate-100 dark:border-slate-800 rounded-lg divide-y divide-slate-100 dark:divide-slate-800">
+                {rows.map((r, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-2 text-xs">
+                    {r.status === 'pending' && (
+                      <span className="h-3 w-3 rounded-full bg-slate-300" />
+                    )}
+                    {r.status === 'sending' && (
+                      <span className="h-3 w-3 rounded-full bg-amber-400 animate-pulse" />
+                    )}
+                    {r.status === 'ok' && (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    )}
+                    {r.status === 'failed' && (
+                      <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                    )}
+                    <span className="font-semibold flex-1 truncate">
+                      {r.target.full_name}
+                    </span>
+                    <span className="text-slate-500 truncate">
+                      {r.target.phone || '—'}
+                    </span>
+                    {r.error && (
+                      <span className="text-rose-600 truncate max-w-[180px]">{r.error}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={sending}
+            className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-50"
+          >
+            {done ? 'Fermer' : 'Annuler'}
+          </button>
+          {!done && (
+            <button
+              type="button"
+              onClick={send}
+              disabled={sending || validPhones === 0}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send className="h-4 w-4" />
+              {sending ? 'Envoi en cours...' : `Envoyer à ${validPhones} voyageur(s)`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
