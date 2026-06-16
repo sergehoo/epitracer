@@ -265,3 +265,186 @@ class ActiveFollowupsMapView(APIView):
             })
 
         return Response({"count": len(markers), "markers": markers})
+
+
+# ============================================================================
+# Journal global d'accès aux données (DataAccessLog + PassVerificationLog
+# + AuditLog unifiés en un seul flux paginé)
+# ============================================================================
+
+
+class GlobalAuditLogView(APIView):
+    """GET /api/v1/admin/companion/audit/
+
+    Agrège les 3 sources de logs :
+      - DataAccessLog (consultations de données sensibles voyageur)
+      - PassVerificationLog (scans QR du pass sanitaire)
+      - AuditLog (actions administratives génériques)
+
+    Filtres supportés via query params :
+      - source : data_access | pass_scan | admin
+      - from / to : ISO date (YYYY-MM-DD)
+      - traveler : public_id du voyageur (filtre data_access + pass_scan)
+      - q : recherche libre (user, IP, motif, pass_number)
+      - page / page_size : pagination
+    """
+
+    permission_classes = [IsAuthenticatedAndActive, HasRole]
+    required_roles = [
+        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
+    ]
+
+    def get(self, request):
+        from datetime import datetime as _dt
+
+        from apps.health_pass.models import PassVerificationLog
+
+        source = (request.query_params.get("source") or "").lower()
+        traveler_pid = (request.query_params.get("traveler") or "").strip().upper()
+        q = (request.query_params.get("q") or "").strip()
+        date_from_raw = request.query_params.get("from") or ""
+        date_to_raw = request.query_params.get("to") or ""
+
+        try:
+            page = max(1, int(request.query_params.get("page") or 1))
+        except ValueError:
+            page = 1
+        try:
+            page_size = min(200, max(1, int(request.query_params.get("page_size") or 25)))
+        except ValueError:
+            page_size = 25
+
+        date_from = _dt.fromisoformat(date_from_raw + "T00:00:00") if date_from_raw else None
+        date_to = _dt.fromisoformat(date_to_raw + "T23:59:59") if date_to_raw else None
+
+        items: list[dict] = []
+
+        # --- 1. DataAccessLog ----------------------------------------------
+        if not source or source == "data_access":
+            qs = (
+                DataAccessLog.objects
+                .select_related("accessed_by", "traveler")
+                .order_by("-created_at")
+            )
+            if traveler_pid:
+                qs = qs.filter(traveler__public_id=traveler_pid)
+            if date_from:
+                qs = qs.filter(created_at__gte=date_from)
+            if date_to:
+                qs = qs.filter(created_at__lte=date_to)
+            if q:
+                qs = qs.filter(
+                    Q(reason__icontains=q)
+                    | Q(ip_address__icontains=q)
+                    | Q(accessed_by__email__icontains=q)
+                    | Q(accessed_by__username__icontains=q)
+                )
+            for r in qs[:500]:
+                items.append({
+                    "id": f"data_{r.pk}",
+                    "source": "data_access",
+                    "occurred_at": r.created_at,
+                    "user_label": (r.accessed_by.email if r.accessed_by else "—"),
+                    "user_role": r.accessed_by_role or "",
+                    "action": r.get_resource_display(),
+                    "target": (r.traveler.public_id if r.traveler else "—"),
+                    "reason": r.reason or "",
+                    "ip_address": r.ip_address,
+                    "ok": True,
+                })
+
+        # --- 2. PassVerificationLog (scans QR) -----------------------------
+        if not source or source == "pass_scan":
+            qs = (
+                PassVerificationLog.objects
+                .select_related("verified_by", "pass_obj", "pass_obj__traveler", "entry_point")
+                .order_by("-verified_at")
+            )
+            if traveler_pid:
+                qs = qs.filter(pass_obj__traveler__public_id=traveler_pid)
+            if date_from:
+                qs = qs.filter(verified_at__gte=date_from)
+            if date_to:
+                qs = qs.filter(verified_at__lte=date_to)
+            if q:
+                qs = qs.filter(
+                    Q(pass_number__icontains=q)
+                    | Q(reason__icontains=q)
+                    | Q(verified_by__email__icontains=q)
+                )
+            for r in qs[:500]:
+                pid = (
+                    r.pass_obj.traveler.public_id
+                    if r.pass_obj and r.pass_obj.traveler else None
+                )
+                items.append({
+                    "id": f"scan_{r.pk}",
+                    "source": "pass_scan",
+                    "occurred_at": r.verified_at,
+                    "user_label": (r.verified_by.email if r.verified_by else "Agent terrain"),
+                    "user_role": "",
+                    "action": ("Scan QR valide" if r.is_valid else "Scan QR refusé"),
+                    "target": pid or r.pass_number,
+                    "reason": r.reason or "",
+                    "ip_address": None,
+                    "entry_point": (r.entry_point.name if r.entry_point else None),
+                    "pass_number": r.pass_number,
+                    "ok": bool(r.is_valid),
+                })
+
+        # --- 3. AuditLog générique -----------------------------------------
+        if not source or source == "admin":
+            try:
+                from apps.audit.models import AuditLog
+
+                qs = (
+                    AuditLog.objects.select_related("actor")
+                    .order_by("-created_at")
+                )
+                if date_from:
+                    qs = qs.filter(created_at__gte=date_from)
+                if date_to:
+                    qs = qs.filter(created_at__lte=date_to)
+                if q:
+                    qs = qs.filter(
+                        Q(summary__icontains=q)
+                        | Q(action__icontains=q)
+                        | Q(actor__email__icontains=q)
+                        | Q(ip_address__icontains=q)
+                    )
+                for r in qs[:500]:
+                    items.append({
+                        "id": f"audit_{r.pk}",
+                        "source": "admin",
+                        "occurred_at": r.created_at,
+                        "user_label": (r.actor.email if r.actor else "Système"),
+                        "user_role": "",
+                        "action": r.action,
+                        "target": "",
+                        "reason": r.summary or "",
+                        "ip_address": getattr(r, "ip_address", None),
+                        "ok": True,
+                    })
+            except Exception:
+                # AuditLog optionnel — l'app peut ne pas être branchée
+                pass
+
+        # Tri global par date décroissante + pagination en mémoire (sources OK
+        # car volume borné à 1500 max)
+        items.sort(key=lambda x: x["occurred_at"], reverse=True)
+        total = len(items)
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        # Stats par source (avant pagination)
+        from collections import Counter
+        by_source = Counter([i["source"] for i in items])
+
+        return Response({
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": max(1, (total + page_size - 1) // page_size),
+            "by_source": dict(by_source),
+            "rows": items[start:end],
+        })

@@ -4,6 +4,7 @@ from django.urls import path
 from .admin_views import (
     ActiveFollowupsMapView,
     FollowupsOverviewView,
+    GlobalAuditLogView,
     TravelerAccessLogView,
     TravelerLocationsView,
 )
@@ -15,4 +16,6 @@ urlpatterns = [
          TravelerLocationsView.as_view(), name="companion-admin-traveler-locations"),
     path("travelers/<str:public_id>/access-log/",
          TravelerAccessLogView.as_view(), name="companion-admin-traveler-access-log"),
+    # Journal global (DataAccessLog + PassVerificationLog + AuditLog unifiés)
+    path("audit/", GlobalAuditLogView.as_view(), name="companion-admin-audit-global"),
 ]
