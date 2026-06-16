@@ -411,6 +411,12 @@ class VisitsOverviewView(APIView):
             .annotate(count=Count("id"))
             .order_by("-count")[:15]
         )
+        top_cities = list(
+            current_qs.exclude(city="")
+            .values("city", "country_code", "country_name")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:15]
+        )
         top_paths = list(
             current_qs.values("path").annotate(count=Count("id")).order_by("-count")[:15]
         )
@@ -429,6 +435,7 @@ class VisitsOverviewView(APIView):
             "kpi": kpi,
             "by_day": by_day,
             "top_countries": top_countries,
+            "top_cities": top_cities,
             "top_paths": top_paths,
             "by_portal": by_portal,
             "top_languages": top_languages,

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
+import { Pagination, paginate } from '@/components/ui/Pagination';
 
 interface FollowupRow {
   public_id: string;
@@ -49,6 +50,9 @@ export default function CheckinsPage() {
   const [data, setData] = useState<OverviewPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'ok' | 'symptom' | 'assistance' | 'missed'>('all');
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [filter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -162,7 +166,7 @@ export default function CheckinsPage() {
               {!loading && filtered.length === 0 && (
                 <tr><td colSpan={6} className="p-8 text-center text-slate-400">Aucune ligne.</td></tr>
               )}
-              {filtered.map((r) => (
+              {paginate(filtered, page, PAGE_SIZE).map((r) => (
                 <tr key={r.public_id}
                     className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50">
                   <Td>
@@ -196,6 +200,15 @@ export default function CheckinsPage() {
             </tbody>
           </table>
         </div>
+        {!loading && filtered.length > 0 && (
+          <Pagination
+            page={page}
+            total={filtered.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            itemLabel="check-in(s)"
+          />
+        )}
       </div>
     </div>
   );

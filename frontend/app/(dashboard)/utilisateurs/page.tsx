@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
+import { Pagination, paginate } from '@/components/ui/Pagination';
 
 // =========================================================================
 // Types
@@ -75,6 +76,11 @@ export default function UtilisateursPage() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'locked'>('all');
   const [filterRole, setFilterRole] = useState<string>('');
 
+  // Pagination (20/page)
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [search, filterStatus, filterRole]);
+
   // modals
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -128,6 +134,8 @@ export default function UtilisateursPage() {
       return true;
     });
   }, [users, search, filterStatus, filterRole]);
+
+  const pagedUsers = useMemo(() => paginate(filtered, page, PAGE_SIZE), [filtered, page]);
 
   const kpis = useMemo(() => {
     const total = users.length;
@@ -302,7 +310,7 @@ export default function UtilisateursPage() {
                 </tr>
               )}
               {!loading &&
-                filtered.map((u) => (
+                pagedUsers.map((u) => (
                   <tr key={u.uuid} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/40">
                     <td className="px-4 py-3 font-medium">{u.email}</td>
                     <td className="px-4 py-3">{u.full_name || '—'}</td>
@@ -370,6 +378,15 @@ export default function UtilisateursPage() {
             </tbody>
           </table>
         </div>
+        {!loading && filtered.length > 0 && (
+          <Pagination
+            page={page}
+            total={filtered.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            itemLabel="utilisateur(s)"
+          />
+        )}
       </div>
 
       {/* Modals */}

@@ -6,7 +6,7 @@ import {
   Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {
-  ArrowDown, ArrowUp, Eye, Globe2, Languages, MousePointerClick, Users,
+  ArrowDown, ArrowUp, Building2, Eye, Globe2, Languages, MousePointerClick, Users,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
 
@@ -26,6 +26,7 @@ interface OverviewResp {
   };
   by_day: { date: string; count: number }[];
   top_countries: { country_code: string; country_name: string; count: number }[];
+  top_cities: { city: string; country_code: string; country_name: string; count: number }[];
   top_paths: { path: string; count: number }[];
   by_portal: { portal: string; count: number }[];
   top_languages: { language: string; count: number }[];
@@ -74,6 +75,10 @@ export default function VisitsPage() {
   );
   const topCountryMax = useMemo(
     () => Math.max(1, ...(data?.top_countries ?? []).map((p) => p.count)),
+    [data],
+  );
+  const topCityMax = useMemo(
+    () => Math.max(1, ...(data?.top_cities ?? []).map((p) => p.count)),
     [data],
   );
 
@@ -206,7 +211,7 @@ export default function VisitsPage() {
             </div>
           </article>
 
-          {/* Top pays + Top pages */}
+          {/* Top pays + Top villes */}
           <div className="grid lg:grid-cols-2 gap-6">
             <article className="card p-6">
               <h3 className="font-display text-lg font-black flex items-center gap-2">
@@ -238,6 +243,44 @@ export default function VisitsPage() {
               )}
             </article>
 
+            <article className="card p-6">
+              <h3 className="font-display text-lg font-black flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-ciGreen" /> Top villes / localités
+              </h3>
+              {(data.top_cities || []).length === 0 ? (
+                <p className="text-sm text-slate-500 mt-3">
+                  Aucune ville détectée. L'enrichissement GeoIP est requis pour cette
+                  statistique (voir <code className="text-xs">apps/analytics</code>).
+                </p>
+              ) : (
+                <ul className="mt-4 space-y-2.5">
+                  {data.top_cities.map((c, i) => (
+                    <li key={`${c.city}-${c.country_code}-${i}`}>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="text-base leading-none">{flag(c.country_code)}</span>
+                          <span className="font-semibold truncate">{c.city}</span>
+                          <span className="text-xs text-slate-400 truncate">
+                            {c.country_name || c.country_code}
+                          </span>
+                        </span>
+                        <span className="font-bold text-ciDark shrink-0 ml-2">{c.count}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-500 to-ciOrange"
+                          style={{ width: `${(c.count / topCityMax) * 100}%` }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          </div>
+
+          {/* Pages les plus visitées (full width) */}
+          <div className="grid lg:grid-cols-1 gap-6">
             <article className="card p-6">
               <h3 className="font-display text-lg font-black flex items-center gap-2">
                 <MousePointerClick className="h-5 w-5 text-ciGreen" /> Pages les plus visitées
