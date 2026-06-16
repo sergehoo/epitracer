@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../core/security/qr_verifier.dart';
 import '../../core/theme/app_colors.dart';
+import '../passes/passes_repository.dart';
 
-class QrScannerScreen extends StatefulWidget {
+class QrScannerScreen extends ConsumerStatefulWidget {
   const QrScannerScreen({super.key});
 
   @override
-  State<QrScannerScreen> createState() => _QrScannerScreenState();
+  ConsumerState<QrScannerScreen> createState() => _QrScannerScreenState();
 }
 
-class _QrScannerScreenState extends State<QrScannerScreen> {
+class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   final _controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
@@ -25,19 +29,51 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) {
+  Future<void> _onDetect(BarcodeCapture capture) async {
     if (_handled) return;
     final raw = capture.barcodes.firstOrNull?.rawValue;
     if (raw == null || raw.isEmpty) return;
     _handled = true;
-    _controller.stop();
-    _showResult(raw);
+    await _controller.stop();
+
+    final result = await ref.read(qrVerifierProvider).verify(raw);
+    if (!mounted) return;
+    _showResult(raw, result);
   }
 
-  void _showResult(String value) {
+  Future<void> _importPass(String raw) async {
+    Navigator.pop(context); // ferme le sheet
+    final pass =
+        await ref.read(passesRepositoryProvider).importQr(raw);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(pass != null
+          ? 'Pass ${pass.passNumber} importé ✓'
+          : 'Import échoué — réessayez plus tard'),
+    ));
+    if (pass != null) context.pop();
+  }
+
+  void _showResult(String raw, QrVerifyResult result) {
+    final ok = result.valid;
+    final expired = result.expired;
+    final color = ok
+        ? AppColors.statusOk
+        : (expired ? AppColors.statusWarn : AppColors.statusError);
+    final icon = ok
+        ? Icons.verified
+        : (expired ? Icons.timelapse : Icons.gpp_bad);
+    final title = ok
+        ? 'Signature valide'
+        : (expired ? 'Pass expiré' : 'Signature invalide');
+
+    final payload = result.payload;
+    final df = DateFormat('dd/MM/yyyy');
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
       builder: (_) => Padding(
         padding: EdgeInsets.only(
           left: 24,
@@ -50,48 +86,63 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              height: 60,
-              width: 60,
+              height: 64,
+              width: 64,
               decoration: BoxDecoration(
-                color: AppColors.statusOk.withValues(alpha: 0.1),
+                color: color.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle,
-                  color: AppColors.statusOk, size: 36),
+              child: Icon(icon, color: color, size: 40),
             ),
             const SizedBox(height: 16),
             Text(
-              'QR Code scanné',
-              style: Theme.of(context).textTheme.titleLarge,
+              title,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(color: color, fontWeight: FontWeight.w800),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.slate100,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                value,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            if (result.reason != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                result.reason!,
                 textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.slate500),
               ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Import en cours (Phase 2)')),
-                );
-                Future<void>.delayed(const Duration(seconds: 1), () {
-                  if (mounted) context.pop();
-                });
-              },
-              icon: const Icon(Icons.download),
-              label: const Text('Importer ce pass'),
-            ),
+            ],
+            const SizedBox(height: 16),
+            if (payload != null)
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.slate100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _PayloadRow('Pass', payload['pass_number']?.toString()),
+                    _PayloadRow('Voyageur', payload['full_name']?.toString()),
+                    _PayloadRow('Maladie', payload['disease']?.toString()),
+                    _PayloadRow(
+                      'Expire',
+                      payload['exp'] != null
+                          ? df.format(
+                              DateTime.tryParse(payload['exp'].toString()) ??
+                                  DateTime.now())
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 20),
+            if (ok)
+              ElevatedButton.icon(
+                onPressed: () => _importPass(raw),
+                icon: const Icon(Icons.download),
+                label: const Text('Importer ce pass'),
+              ),
             const SizedBox(height: 8),
             OutlinedButton(
               onPressed: () {
@@ -133,7 +184,6 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             controller: _controller,
             onDetect: _onDetect,
           ),
-          // Overlay viseur
           Center(
             child: Container(
               width: 260,
@@ -150,18 +200,47 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             right: 0,
             child: Center(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Text(
-                  'Placez le QR dans le cadre',
-                  style: TextStyle(color: Colors.white, fontSize: 14),
+                  'Vérification Ed25519 hors-ligne',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PayloadRow extends StatelessWidget {
+  const _PayloadRow(this.label, this.value);
+  final String label;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) {
+    if (value == null || value!.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label,
+                style: const TextStyle(
+                    color: AppColors.slate500, fontSize: 12)),
+          ),
+          Expanded(
+            child: Text(value!,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
           ),
         ],
       ),

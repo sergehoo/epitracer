@@ -1,0 +1,37 @@
+// TEMPLATE — à appliquer manuellement après `flutter create .` côté Android.
+// Copier les blocs entre les marqueurs <<< et >>> dans le build.gradle généré
+// par Flutter, puis supprimer ce fichier .template.
+
+// <<< En haut du fichier, avant `android { ... }` >>>
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+// <<< fin >>>
+
+android {
+    // ... (le reste de la config Flutter par défaut)
+
+    // <<< Dans android { ... } >>>
+    signingConfigs {
+        release {
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            storePassword keystoreProperties['storePassword']
+        }
+    }
+
+    buildTypes {
+        release {
+            // Utilise le keystore si configuré, sinon retombe sur le debug
+            // (utile en local pour smoke-tester sans secret).
+            signingConfig keystoreProperties['storeFile'] ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    // <<< fin >>>
+}

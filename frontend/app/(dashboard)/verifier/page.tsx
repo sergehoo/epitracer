@@ -37,7 +37,68 @@ type VerifyResult = {
   is_expired?: boolean;
   /** True quand la vérification a été faite localement uniquement */
   offline_only?: boolean;
+  /** Niveau de risque du pass renvoyé par le backend */
+  risk_level?: 'low' | 'moderate' | 'high' | 'critical' | string;
+  risk_score?: number;
+  followup?: {
+    active: boolean;
+    day: number;
+    total_days: number;
+    started_at?: string;
+  };
+  traveler_status?: {
+    case_status?: string;
+    risk_level?: string;
+    last_update?: string;
+  };
 };
+
+/** Visuel d'un niveau de risque. */
+function riskMeta(level?: string) {
+  switch ((level || '').toLowerCase()) {
+    case 'critical':
+      return {
+        label: 'CRITIQUE',
+        sub: 'Mise en quarantaine immédiate · alerter superviseur',
+        ring: 'ring-rose-500',
+        bg: 'bg-rose-50 dark:bg-rose-950/40',
+        border: 'border-rose-300 dark:border-rose-900',
+        text: 'text-rose-700 dark:text-rose-300',
+        dot: 'bg-rose-600',
+      };
+    case 'high':
+      return {
+        label: 'ÉLEVÉ',
+        sub: 'Suivi sanitaire renforcé · interview obligatoire',
+        ring: 'ring-orange-500',
+        bg: 'bg-orange-50 dark:bg-orange-950/40',
+        border: 'border-orange-300 dark:border-orange-900',
+        text: 'text-orange-700 dark:text-orange-300',
+        dot: 'bg-orange-600',
+      };
+    case 'moderate':
+      return {
+        label: 'MODÉRÉ',
+        sub: 'Vigilance · check-in quotidien recommandé',
+        ring: 'ring-amber-400',
+        bg: 'bg-amber-50 dark:bg-amber-950/40',
+        border: 'border-amber-300 dark:border-amber-900',
+        text: 'text-amber-700 dark:text-amber-300',
+        dot: 'bg-amber-500',
+      };
+    case 'low':
+    default:
+      return {
+        label: 'NORMAL',
+        sub: 'Aucune action particulière requise',
+        ring: 'ring-emerald-500',
+        bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+        border: 'border-emerald-300 dark:border-emerald-900',
+        text: 'text-emerald-700 dark:text-emerald-300',
+        dot: 'bg-emerald-600',
+      };
+  }
+}
 
 const API_BASE = `${API_URL.replace(/\/$/, '')}/api/v1`;
 
@@ -275,6 +336,68 @@ export default function AdminVerifierPage() {
                   </div>
                 </div>
               )}
+
+              {/* Badge "niveau de risque" — uniquement si online + connu en base */}
+              {result.online_checked && result.risk_level && (() => {
+                const rm = riskMeta(result.risk_level);
+                return (
+                  <div
+                    className={`mt-4 rounded-xl ${rm.bg} ${rm.border} border p-4 ring-2 ${rm.ring} ring-offset-2 dark:ring-offset-slate-950`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`h-10 w-10 rounded-full ${rm.dot} text-white grid place-items-center shrink-0 shadow-lg`}
+                      >
+                        <ShieldAlert className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-widest text-slate-500">
+                            Niveau de risque voyageur
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-black tracking-wider ${rm.text} ${rm.bg} border ${rm.border}`}
+                          >
+                            {rm.label}
+                          </span>
+                          {typeof result.risk_score === 'number' && (
+                            <span className="text-[10px] text-slate-500">
+                              score {result.risk_score.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                        <div className={`mt-1 text-sm font-semibold ${rm.text}`}>
+                          {rm.sub}
+                        </div>
+                        {result.traveler_status?.case_status && (
+                          <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                            Dossier voyageur :{' '}
+                            <strong className="uppercase tracking-wide">
+                              {result.traveler_status.case_status}
+                            </strong>
+                            {result.traveler_status.last_update && (
+                              <span className="opacity-70">
+                                {' '}· maj{' '}
+                                {new Date(
+                                  result.traveler_status.last_update,
+                                ).toLocaleDateString('fr-FR')}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {result.followup?.active && (
+                          <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                            Suivi 21j en cours · jour{' '}
+                            <strong>
+                              {result.followup.day}/{result.followup.total_days}
+                            </strong>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {result.payload && (
                 <div className="mt-5 space-y-2 text-sm">

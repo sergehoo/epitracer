@@ -19,6 +19,7 @@ class AppColors {
   static const Color statusOk = Color(0xFF10B981);      // pass valide / sain
   static const Color statusWarn = Color(0xFFF59E0B);    // bientôt expiré / vigilance
   static const Color statusDanger = Color(0xFFEF4444);  // expiré / symptôme grave
+  static const Color statusError = statusDanger;        // alias rétro-compat
   static const Color statusInfo = Color(0xFF0EA5E9);    // notification
 
   // ── Neutres ────────────────────────────────────────────────────────

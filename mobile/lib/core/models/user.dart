@@ -1,18 +1,32 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
+/// Utilisateur authentifié — modèle plain Dart (sans Freezed).
+class AppUser {
+  const AppUser({
+    required this.id,
+    required this.email,
+    this.fullName = '',
+    this.phone = '',
+    this.mfaEnabled = false,
+    this.avatarUrl,
+  });
 
-part 'user.freezed.dart';
-part 'user.g.dart';
+  final int id;
+  final String email;
+  final String fullName;
+  final String phone;
+  final bool mfaEnabled;
+  final String? avatarUrl;
 
-@freezed
-class AppUser with _$AppUser {
-  const factory AppUser({
-    required int id,
-    required String email,
-    @Default('') String fullName,
-    @Default('') String phone,
-    @Default(false) bool mfaEnabled,
-    String? avatarUrl,
-  }) = _AppUser;
-
-  factory AppUser.fromJson(Map<String, dynamic> json) => _$AppUserFromJson(json);
+  factory AppUser.fromJson(Map<String, dynamic> json) {
+    return AppUser(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      email: (json['email'] ?? '').toString(),
+      fullName:
+          (json['fullName'] ?? json['full_name'] ?? '').toString(),
+      phone: (json['phone'] ?? '').toString(),
+      mfaEnabled:
+          json['mfaEnabled'] == true || json['mfa_enabled'] == true,
+      avatarUrl: json['avatarUrl']?.toString() ??
+          json['avatar_url']?.toString(),
+    );
+  }
 }

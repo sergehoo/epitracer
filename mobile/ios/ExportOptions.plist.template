@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+"http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template ExportOptions pour `flutter build ipa` en mode release.
+  À renommer en ios/ExportOptions.plist après avoir remplacé :
+    - TEAM_ID            : Apple Developer Team ID (10 chars)
+    - BUNDLE_ID          : ex. com.veillesanitaire.monpasssanitaire
+    - PROVISION_NAME     : nom exact du provisioning profile distribution
+
+  Méthodes supportées :
+    - app-store     : pour publication App Store / TestFlight
+    - ad-hoc        : pour distribution interne signée
+    - enterprise    : si compte Apple Developer Enterprise
+-->
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>app-store</string>
+    <key>teamID</key>
+    <string>TEAM_ID</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>uploadBitcode</key>
+    <false/>
+    <key>uploadSymbols</key>
+    <true/>
+    <key>compileBitcode</key>
+    <false/>
+    <key>stripSwiftSymbols</key>
+    <true/>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>BUNDLE_ID</key>
+        <string>PROVISION_NAME</string>
+    </dict>
+</dict>
+</plist>

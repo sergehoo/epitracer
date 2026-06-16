@@ -32,7 +32,14 @@ class EbolaInvestigationViewSet(viewsets.ModelViewSet):
         RoleCode.BORDER_AGENT, RoleCode.FIELD_AGENT, RoleCode.OBSERVER,
     ]
     lookup_field = "case_number"
-    filterset_fields = ["status", "risk_level", "entry_point", "traveler"]
+    filterset_fields = {
+        "status": ["exact"],
+        "risk_level": ["exact"],
+        "entry_point": ["exact"],
+        "traveler": ["exact"],
+        # Filtrage par date d'arrivée du voyageur (range supporté)
+        "traveler__arrival_date": ["exact", "gte", "lte"],
+    }
     search_fields = ["case_number", "traveler__public_id", "traveler__last_name", "notes"]
 
     def get_serializer_class(self):

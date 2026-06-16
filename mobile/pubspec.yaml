@@ -13,67 +13,77 @@ dependencies:
     sdk: flutter
 
   # ── State management ──────────────────────────────────────────────
-  flutter_riverpod: ^2.5.1
-  riverpod_annotation: ^2.3.5
+  flutter_riverpod: ^3.1.0
+  riverpod_annotation: ^4.0.0
 
   # ── Modèles / sérialisation ───────────────────────────────────────
-  freezed_annotation: ^2.4.4
+  freezed_annotation: ^3.1.0
   json_annotation: ^4.9.0
 
   # ── Routing ──────────────────────────────────────────────────────
-  go_router: ^14.6.2
+  go_router: ^17.3.0
 
   # ── Network ──────────────────────────────────────────────────────
   dio: ^5.7.0
   pretty_dio_logger: ^1.4.0
-  connectivity_plus: ^6.1.0
+  connectivity_plus: ^7.1.1
 
   # ── Stockage ─────────────────────────────────────────────────────
-  flutter_secure_storage: ^9.2.4
+  flutter_secure_storage: ^10.3.1
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   shared_preferences: ^2.3.4
 
   # ── QR / Scanner ─────────────────────────────────────────────────
   qr_flutter: ^4.1.0
-  mobile_scanner: ^5.2.3
+  mobile_scanner: ^7.2.0
 
   # ── Géoloc / permissions ─────────────────────────────────────────
-  geolocator: ^13.0.2
-  permission_handler: ^11.3.1
+  geolocator: ^14.0.2
+  permission_handler: ^12.0.3
 
   # ── Auth / sécurité ──────────────────────────────────────────────
-  local_auth: ^2.3.0
+  local_auth: ^3.0.1
   crypto: ^3.0.6
+  cryptography: ^2.7.0   # Ed25519 verify offline
 
   # ── Files & PDF ──────────────────────────────────────────────────
-  file_picker: ^8.1.6
+  file_picker: ^12.0.0-beta.5
   path_provider: ^2.1.5
   flutter_pdfview: ^1.3.4
   url_launcher: ^6.3.1
-  share_plus: ^10.1.2
+  share_plus: ^13.1.0
 
   # ── Push notifications ───────────────────────────────────────────
-  firebase_core: ^3.8.0
-  firebase_messaging: ^15.1.5
-  flutter_local_notifications: ^17.2.4
+  firebase_core: ^4.10.0
+  firebase_messaging: ^16.3.0
+  # flutter_local_notifications : à réintégrer plus tard (API instable
+  # entre versions 17/18/21). FCM seul gère déjà la barre système Android.
 
   # ── UI / utils ───────────────────────────────────────────────────
   cupertino_icons: ^1.0.8
-  intl: ^0.19.0
-  flutter_dotenv: ^5.2.1
+  intl: ^0.20.2
+  flutter_dotenv: ^6.0.1
   cached_network_image: ^3.4.1
+  path: ^1.9.0   # utilisé dans tests Hive
+
+  # ── Phase 7 — enrichissement ─────────────────────────────────────
+  fl_chart: ^0.69.0          # charts dashboard
+  flutter_map: ^7.0.2        # carte CI (Phase 7D)
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
   build_runner: ^2.4.13
-  freezed: ^2.5.7
+  freezed: ^3.2.3
   json_serializable: ^6.9.0
-  riverpod_generator: ^2.4.3
-  custom_lint: ^0.7.0
-  riverpod_lint: ^2.4.0
+  riverpod_generator: ^4.0.0+1
+  custom_lint: ^0.8.1
+  riverpod_lint: ^3.1.0
+  mocktail: ^1.0.4
+  fake_async: ^1.3.1
 
 flutter:
   uses-material-design: true
@@ -81,14 +91,17 @@ flutter:
     - assets/images/
     - assets/icons/
     - .env
-  fonts:
-    - family: Inter
-      fonts:
-        - asset: assets/fonts/Inter-Regular.ttf
-          weight: 400
-        - asset: assets/fonts/Inter-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/Inter-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/Inter-Bold.ttf
-          weight: 700
+  # Polices Inter — à activer après avoir téléchargé les .ttf depuis
+  # https://fonts.google.com/specimen/Inter et les avoir placés dans
+  # assets/fonts/. En attendant, l'app utilise la police système.
+  # fonts:
+  #   - family: Inter
+  #     fonts:
+  #       - asset: assets/fonts/Inter-Regular.ttf
+  #         weight: 400
+  #       - asset: assets/fonts/Inter-Medium.ttf
+  #         weight: 500
+  #       - asset: assets/fonts/Inter-SemiBold.ttf
+  #         weight: 600
+  #       - asset: assets/fonts/Inter-Bold.ttf
+  #         weight: 700

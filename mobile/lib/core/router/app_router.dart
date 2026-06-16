@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/otp_screen.dart';
+import '../../features/auth/voyageur_login_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/onboarding/splash_screen.dart';
@@ -17,12 +18,17 @@ import '../../features/profile/profile_screen.dart';
 import '../../features/vaccinations/vaccinations_screen.dart';
 import '../../features/followup/followup_screen.dart';
 import '../../features/followup/checkin_screen.dart';
+import '../../features/education/stories_screen.dart';
+import '../../features/family/family_screen.dart';
+import '../../features/map/map_screen.dart';
+import '../../features/medical/medical_record_screen.dart';
 import '../storage/secure_storage.dart';
 
 class AppRoutes {
   static const splash = '/';
   static const onboarding = '/onboarding';
-  static const login = '/login';
+  static const voyageurLogin = '/voyageur-login';
+  static const login = '/login';   // agent INHP (email + MFA)
   static const otp = '/otp';
   static const dashboard = '/dashboard';
   static const passes = '/passes';
@@ -35,6 +41,12 @@ class AppRoutes {
   static const notifications = '/notifications';
   static const assistance = '/assistance';
   static const profile = '/profile';
+  static const medicalRecord = '/medical-record';
+  static const map = '/map';
+  static const stories = '/stories';
+  static const family = '/family';
+  static const teleconsult = '/teleconsultation';
+  static const quizzes = '/quizzes';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -48,6 +60,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final publicRoutes = [
         AppRoutes.splash,
         AppRoutes.onboarding,
+        AppRoutes.voyageurLogin,
         AppRoutes.login,
         AppRoutes.otp,
         AppRoutes.qrScanner,
@@ -55,12 +68,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (publicRoutes.contains(state.matchedLocation)) return null;
 
       final hasSession = await storage.hasSession();
-      if (!hasSession) return AppRoutes.login;
+      // Redirection par défaut : voyageur (l'app cible le grand public)
+      if (!hasSession) return AppRoutes.voyageurLogin;
       return null;
     },
     routes: [
       GoRoute(path: AppRoutes.splash, builder: (_, __) => const SplashScreen()),
       GoRoute(path: AppRoutes.onboarding, builder: (_, __) => const OnboardingScreen()),
+      GoRoute(path: AppRoutes.voyageurLogin, builder: (_, __) => const VoyageurLoginScreen()),
       GoRoute(path: AppRoutes.login, builder: (_, __) => const LoginScreen()),
       GoRoute(
         path: AppRoutes.otp,
@@ -92,6 +107,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.notifications, builder: (_, __) => const NotificationsScreen()),
       GoRoute(path: AppRoutes.assistance, builder: (_, __) => const AssistanceScreen()),
       GoRoute(path: AppRoutes.profile, builder: (_, __) => const ProfileScreen()),
+      GoRoute(
+        path: AppRoutes.medicalRecord,
+        builder: (_, __) => const MedicalRecordScreen(),
+      ),
+      GoRoute(path: AppRoutes.map, builder: (_, __) => const MapScreen()),
+      GoRoute(path: AppRoutes.family, builder: (_, __) => const FamilyScreen()),
+      GoRoute(path: AppRoutes.stories, builder: (_, __) => const StoriesScreen()),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(

@@ -91,7 +91,7 @@ class AppTheme {
     );
   }
 
-  static CardTheme _cardTheme(Color fill) => CardTheme(
+  static CardThemeData _cardTheme(Color fill) => CardThemeData(
         color: fill,
         elevation: 0,
         shape: RoundedRectangleBorder(

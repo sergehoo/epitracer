@@ -1,0 +1,22 @@
+# Configuration de signing Android pour release.
+# ⚠️ NE JAMAIS COMMITER LE VRAI key.properties — il est dans .gitignore.
+#
+# 1. Générer le keystore (une seule fois) :
+#    keytool -genkey -v -keystore release.keystore -alias monpass \
+#            -keyalg RSA -keysize 4096 -validity 36500
+#    -> mot de passe fort + sauvegarde Bitwarden / 1Password
+#
+# 2. Copier ce fichier en `key.properties` (sans .example)
+# 3. Remplir les 4 champs ci-dessous
+# 4. Le build Gradle lira automatiquement ces valeurs (voir build.gradle.template)
+#
+# Pour la CI, ne PAS écrire ce fichier en clair — utiliser les secrets GitHub :
+#   ANDROID_KEYSTORE_BASE64
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+
+storeFile=keys/release.keystore
+storePassword=__REPLACE__
+keyAlias=monpass
+keyPassword=__REPLACE__

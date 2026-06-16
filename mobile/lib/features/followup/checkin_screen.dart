@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
+import 'followup_repository.dart';
 
-class CheckinScreen extends StatefulWidget {
+class CheckinScreen extends ConsumerStatefulWidget {
   const CheckinScreen({super.key});
 
   @override
-  State<CheckinScreen> createState() => _CheckinScreenState();
+  ConsumerState<CheckinScreen> createState() => _CheckinScreenState();
 }
 
-class _CheckinScreenState extends State<CheckinScreen> {
+class _CheckinScreenState extends ConsumerState<CheckinScreen> {
   bool feelingWell = true;
   bool fever = false;
   bool fatigue = false;
@@ -24,19 +26,44 @@ class _CheckinScreenState extends State<CheckinScreen> {
 
   Future<void> _submit() async {
     setState(() => _submitting = true);
-    // TODO Phase 2 — POST /mobile/checkins/
-    await Future<void>.delayed(const Duration(seconds: 1));
+
+    final payload = {
+      'feeling_well': feelingWell,
+      'fever': fever,
+      'fatigue': fatigue,
+      'headache': headache,
+      'muscle_pain': muscle,
+      'digestive': digestive,
+      'bleeding': bleeding,
+      'wants_contact': wantsContact,
+      'submitted_at': DateTime.now().toUtc().toIso8601String(),
+    };
+
+    final ok = await ref
+        .read(followupRepositoryProvider)
+        .submitCheckin(payload);
+
+    // Invalide la résumé pour rafraîchir le compteur jour/total + flag du jour
+    ref.invalidate(followupSummaryProvider);
+
     if (!mounted) return;
     setState(() => _submitting = false);
 
     await showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        icon: const Icon(Icons.check_circle,
-            color: AppColors.statusOk, size: 48),
-        title: const Text('Merci pour votre confirmation'),
-        content: const Text(
-          'Votre suivi est bien enregistré. Les équipes sanitaires restent disponibles si vous avez besoin d\'aide.',
+        icon: Icon(
+          ok ? Icons.check_circle : Icons.cloud_off,
+          color: ok ? AppColors.statusOk : AppColors.statusWarn,
+          size: 48,
+        ),
+        title: Text(ok
+            ? 'Merci pour votre confirmation'
+            : 'Enregistré hors-ligne'),
+        content: Text(
+          ok
+              ? "Votre suivi est bien enregistré. Les équipes sanitaires restent disponibles si vous avez besoin d'aide."
+              : "Votre check-in sera envoyé automatiquement dès le retour de la connexion.",
           textAlign: TextAlign.center,
         ),
         actions: [

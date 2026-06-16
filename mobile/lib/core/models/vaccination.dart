@@ -1,28 +1,62 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
+/// Vaccination — modèle plain Dart (sans Freezed).
+class Vaccination {
+  const Vaccination({
+    required this.id,
+    required this.diseaseCode,
+    required this.diseaseName,
+    required this.vaccineName,
+    required this.administeredAt,
+    this.manufacturer,
+    this.lotNumber,
+    this.nextDoseAt,
+    this.doseNumber = 1,
+    this.totalDoses = 1,
+    this.centerName,
+    this.countryCode = 'CI',
+    this.certificatePdfUrl,
+    this.qrPayload,
+    this.verified = false,
+  });
 
-part 'vaccination.freezed.dart';
-part 'vaccination.g.dart';
+  final int id;
+  final String diseaseCode;
+  final String diseaseName;
+  final String vaccineName;
+  final String? manufacturer;
+  final String? lotNumber;
+  final DateTime administeredAt;
+  final DateTime? nextDoseAt;
+  final int doseNumber;
+  final int totalDoses;
+  final String? centerName;
+  final String countryCode;
+  final String? certificatePdfUrl;
+  final String? qrPayload;
+  final bool verified;
 
-@freezed
-class Vaccination with _$Vaccination {
-  const factory Vaccination({
-    required int id,
-    @JsonKey(name: 'disease_code') required String diseaseCode,
-    @JsonKey(name: 'disease_name') required String diseaseName,
-    @JsonKey(name: 'vaccine_name') required String vaccineName,
-    @JsonKey(name: 'manufacturer') String? manufacturer,
-    @JsonKey(name: 'lot_number') String? lotNumber,
-    @JsonKey(name: 'administered_at') required DateTime administeredAt,
-    @JsonKey(name: 'next_dose_at') DateTime? nextDoseAt,
-    @JsonKey(name: 'dose_number') @Default(1) int doseNumber,
-    @JsonKey(name: 'total_doses') @Default(1) int totalDoses,
-    @JsonKey(name: 'center_name') String? centerName,
-    @JsonKey(name: 'country_code') @Default('CI') String countryCode,
-    @JsonKey(name: 'certificate_pdf_url') String? certificatePdfUrl,
-    @JsonKey(name: 'qr_payload') String? qrPayload,
-    @Default(false) bool verified,
-  }) = _Vaccination;
+  factory Vaccination.fromJson(Map<String, dynamic> j) {
+    return Vaccination(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      diseaseCode: (j['disease_code'] ?? '').toString(),
+      diseaseName: (j['disease_name'] ?? j['disease_code'] ?? '').toString(),
+      vaccineName: (j['vaccine_name'] ?? '').toString(),
+      manufacturer: j['manufacturer']?.toString(),
+      lotNumber: j['lot_number']?.toString(),
+      administeredAt: _parse(j['administered_at']) ?? DateTime.now(),
+      nextDoseAt: _parse(j['next_dose_at']),
+      doseNumber: (j['dose_number'] as num?)?.toInt() ?? 1,
+      totalDoses: (j['total_doses'] as num?)?.toInt() ?? 1,
+      centerName: j['center_name']?.toString(),
+      countryCode: (j['country_code'] ?? 'CI').toString(),
+      certificatePdfUrl: j['certificate_pdf_url']?.toString(),
+      qrPayload: j['qr_payload']?.toString(),
+      verified: j['verified'] == true,
+    );
+  }
 
-  factory Vaccination.fromJson(Map<String, dynamic> json) =>
-      _$VaccinationFromJson(json);
+  static DateTime? _parse(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    return DateTime.tryParse(v.toString());
+  }
 }

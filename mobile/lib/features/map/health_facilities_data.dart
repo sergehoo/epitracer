@@ -1,0 +1,205 @@
+import '../../core/models/health_facility.dart';
+
+/// Dataset embarqué des principaux établissements de santé publics en CI.
+/// À synchroniser avec l'endpoint /api/mobile/health-facilities/ quand
+/// le backend l'exposera (Phase 7D backend).
+const List<HealthFacility> kCIHealthFacilities = [
+  // ───────────── Abidjan ─────────────
+  HealthFacility(
+    id: 'chu-cocody',
+    name: 'CHU de Cocody',
+    type: FacilityType.chu,
+    lat: 5.3506,
+    lng: -3.9889,
+    city: 'Abidjan',
+    address: 'Boulevard Latrille, Cocody',
+    phone: '+22527226740',
+    openHours: '24h/24',
+    hasEmergency: true,
+    specialties: ['Urgences', 'Maladies infectieuses', 'Cardiologie'],
+  ),
+  HealthFacility(
+    id: 'chu-treichville',
+    name: 'CHU de Treichville',
+    type: FacilityType.chu,
+    lat: 5.2978,
+    lng: -4.0048,
+    city: 'Abidjan',
+    address: 'Boulevard de Marseille, Treichville',
+    phone: '+22521243333',
+    openHours: '24h/24',
+    hasEmergency: true,
+    specialties: ['Urgences', 'Réanimation', 'Pédiatrie'],
+  ),
+  HealthFacility(
+    id: 'chu-yopougon',
+    name: 'CHU de Yopougon',
+    type: FacilityType.chu,
+    lat: 5.3450,
+    lng: -4.0825,
+    city: 'Abidjan',
+    address: 'Yopougon Attié',
+    phone: '+22523457400',
+    openHours: '24h/24',
+    hasEmergency: true,
+  ),
+  HealthFacility(
+    id: 'inhp-abj',
+    name: 'INHP — Institut National d\'Hygiène Publique',
+    type: FacilityType.vaccinationCenter,
+    lat: 5.3232,
+    lng: -4.0089,
+    city: 'Abidjan',
+    address: 'Treichville, BP V14',
+    phone: '+22521240050',
+    openHours: 'Lun-Ven 7h30-15h30',
+    specialties: ['Vaccination fièvre jaune', 'Vaccination internationale'],
+  ),
+  HealthFacility(
+    id: 'hg-abobo',
+    name: 'Hôpital Général d\'Abobo',
+    type: FacilityType.hospital,
+    lat: 5.4239,
+    lng: -4.0156,
+    city: 'Abidjan',
+    address: 'Abobo Centre',
+    phone: '+22523351100',
+    openHours: '24h/24',
+    hasEmergency: true,
+  ),
+  HealthFacility(
+    id: 'hg-port-bouet',
+    name: 'Hôpital Général de Port-Bouët',
+    type: FacilityType.hospital,
+    lat: 5.2598,
+    lng: -3.9286,
+    city: 'Abidjan',
+    address: 'Port-Bouët',
+    phone: '+22521275033',
+  ),
+  HealthFacility(
+    id: 'aeroport-fhb',
+    name: 'Centre sanitaire Aéroport FHB',
+    type: FacilityType.clinic,
+    lat: 5.2614,
+    lng: -3.9264,
+    city: 'Abidjan',
+    address: 'Aéroport Félix-Houphouët-Boigny',
+    phone: '+22521275000',
+    openHours: '24h/24',
+    hasEmergency: true,
+    specialties: ['Contrôle sanitaire frontière'],
+  ),
+
+  // ───────────── Bouaké ─────────────
+  HealthFacility(
+    id: 'chu-bouake',
+    name: 'CHU de Bouaké',
+    type: FacilityType.chu,
+    lat: 7.6883,
+    lng: -5.0301,
+    city: 'Bouaké',
+    address: 'Bouaké Centre',
+    phone: '+22531633535',
+    openHours: '24h/24',
+    hasEmergency: true,
+  ),
+
+  // ───────────── Yamoussoukro ─────────────
+  HealthFacility(
+    id: 'chr-yamoussoukro',
+    name: 'CHR de Yamoussoukro',
+    type: FacilityType.hospital,
+    lat: 6.8276,
+    lng: -5.2893,
+    city: 'Yamoussoukro',
+    phone: '+22530640000',
+    openHours: '24h/24',
+    hasEmergency: true,
+  ),
+
+  // ───────────── Korhogo ─────────────
+  HealthFacility(
+    id: 'chr-korhogo',
+    name: 'CHR de Korhogo',
+    type: FacilityType.hospital,
+    lat: 9.4580,
+    lng: -5.6294,
+    city: 'Korhogo',
+    phone: '+22536860000',
+    openHours: '24h/24',
+    hasEmergency: true,
+    specialties: ['Maladies infectieuses', 'Surveillance Ebola'],
+  ),
+
+  // ───────────── San-Pédro ─────────────
+  HealthFacility(
+    id: 'chr-san-pedro',
+    name: 'CHR de San-Pédro',
+    type: FacilityType.hospital,
+    lat: 4.7485,
+    lng: -6.6363,
+    city: 'San-Pédro',
+    phone: '+22534711400',
+    openHours: '24h/24',
+    hasEmergency: true,
+  ),
+
+  // ───────────── Daloa ─────────────
+  HealthFacility(
+    id: 'chr-daloa',
+    name: 'CHR de Daloa',
+    type: FacilityType.hospital,
+    lat: 6.8770,
+    lng: -6.4502,
+    city: 'Daloa',
+    phone: '+22532782000',
+    openHours: '24h/24',
+    hasEmergency: true,
+  ),
+
+  // ───────────── Man ─────────────
+  HealthFacility(
+    id: 'chr-man',
+    name: 'CHR de Man',
+    type: FacilityType.hospital,
+    lat: 7.4126,
+    lng: -7.5536,
+    city: 'Man',
+    phone: '+22533792000',
+    hasEmergency: true,
+  ),
+
+  // ───────────── Abengourou ─────────────
+  HealthFacility(
+    id: 'chr-abengourou',
+    name: 'CHR d\'Abengourou',
+    type: FacilityType.hospital,
+    lat: 6.7299,
+    lng: -3.4961,
+    city: 'Abengourou',
+    phone: '+22535912000',
+  ),
+
+  // ───────────── Pharmacies de garde Abidjan (échantillon) ─────────────
+  HealthFacility(
+    id: 'pharma-plateau-centrale',
+    name: 'Pharmacie Centrale du Plateau',
+    type: FacilityType.pharmacy,
+    lat: 5.3214,
+    lng: -4.0167,
+    city: 'Abidjan',
+    address: 'Plateau, Boulevard Roume',
+    openHours: '8h-22h',
+  ),
+  HealthFacility(
+    id: 'pharma-cocody-riviera',
+    name: 'Pharmacie Riviera 2',
+    type: FacilityType.pharmacy,
+    lat: 5.3680,
+    lng: -3.9591,
+    city: 'Abidjan',
+    address: 'Cocody Riviera 2',
+    openHours: '8h-22h',
+  ),
+];

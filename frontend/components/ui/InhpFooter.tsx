@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { adminUrl } from '@/lib/hosts';
+import { AfriqConsultingCredit } from './AfriqConsultingCredit';
 
 export function InhpFooter() {
   return (
@@ -91,9 +92,16 @@ export function InhpFooter() {
       </div>
 
       <div className="border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-emerald-100/70">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-emerald-100/70">
           <span>Tous droits réservés.</span>
           <span>Données protégées · Signature cryptographique Ed25519</span>
+        </div>
+      </div>
+
+      {/* Bande crédit AfriqConsulting */}
+      <div className="border-t border-white/10 bg-black/20">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <AfriqConsultingCredit variant="dark" />
         </div>
       </div>
     </footer>

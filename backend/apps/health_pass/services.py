@@ -746,14 +746,66 @@ def verify_pass(token: str, *, entry_point=None, user=None, online: bool = True)
     if hp is None:
         _log_verification(None, pass_number, False, "unknown", entry_point, user)
         return {**result, "reason": "Pass inconnu côté serveur."}
+    # Construit le bloc d'enrichissement métier (niveau de risque, suivi en
+    # cours, statut voyageur). Toujours renvoyé même si le pass est invalide
+    # pour qu'un agent voie « pourquoi » + « qui ».
+    enrichment = _build_pass_enrichment(hp)
     if hp.status != HealthPassStatus.ACTIVE:
         _log_verification(hp, pass_number, False, f"status_{hp.status}", entry_point, user)
-        return {**result, "reason": f"Pass non actif ({hp.status})."}
+        return {**result, "reason": f"Pass non actif ({hp.status}).", **enrichment}
     if not hp.is_valid:
         _log_verification(hp, pass_number, False, "expired_or_inactive", entry_point, user)
-        return {**result, "reason": "Pass expiré côté serveur."}
+        return {**result, "reason": "Pass expiré côté serveur.", **enrichment}
     _log_verification(hp, pass_number, True, "ok", entry_point, user)
-    return {**result, "is_valid": True}
+    return {**result, "is_valid": True, **enrichment}
+
+
+def _build_pass_enrichment(hp) -> dict:
+    """Construit le bloc d'infos métier renvoyé avec la vérification :
+    niveau de risque, statut voyageur, suivi en cours, jours restants.
+    """
+    if hp is None:
+        return {}
+    out: dict = {
+        "risk_level": (hp.risk_level or "low").lower(),
+        "risk_score": float(hp.risk_score or 0),
+    }
+    # Suivi 21j (Companion) si présent
+    try:
+        from apps.companion.models import TravelerFollowup
+
+        followup = TravelerFollowup.objects.filter(
+            traveler=hp.traveler, active=True,
+        ).order_by("-created_at").first()
+        if followup:
+            from django.utils import timezone
+
+            days_done = (timezone.now().date() - followup.started_at.date()).days
+            out["followup"] = {
+                "active": True,
+                "day": max(0, days_done),
+                "total_days": followup.total_days or 21,
+                "started_at": followup.started_at.isoformat(),
+            }
+    except Exception:
+        pass
+    # Statut du voyageur (Ebola investigation par exemple)
+    try:
+        from apps.ebola.models import EbolaInvestigation
+
+        last = EbolaInvestigation.objects.filter(
+            traveler=hp.traveler,
+        ).order_by("-created_at").first()
+        if last:
+            out["traveler_status"] = {
+                "case_status": last.status,
+                "risk_level": last.risk_level,
+                "last_update": last.updated_at.isoformat()
+                    if getattr(last, "updated_at", None) else None,
+            }
+    except Exception:
+        pass
+    return out
 
 
 def _log_verification(hp, pass_number, ok, reason, entry_point, user):

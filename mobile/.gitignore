@@ -22,8 +22,16 @@ build/
 *.keystore
 *.jks
 ios/Runner/GoogleService-Info.plist
+ios/ExportOptions.plist
+ios/certs/
+*.p12
+*.mobileprovision
 android/app/google-services.json
 android/key.properties
+android/keys/
+
+# Coverage
+coverage/
 
 # OS
 .DS_Store

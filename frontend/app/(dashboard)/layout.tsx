@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Topbar } from '@/components/dashboard/Topbar';
 import { BottomNav } from '@/components/dashboard/BottomNav';
+import { AdminFooter } from '@/components/dashboard/AdminFooter';
 import { getAccess } from '@/lib/api';
 import { useRealtimeAlerts } from '@/lib/useRealtimeAlerts';
 import { useEdgeSwipe } from '@/lib/useEdgeSwipe';
@@ -63,8 +64,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           onMenuClick={() => setMobileNavOpen(true)}
         />
         {/* pb-24 mobile pour laisser de la place à la BottomNav (≈ 64px + safe-area) */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 pb-24 lg:pb-8">
-          {children}
+        <div className="flex-1 overflow-y-auto pb-24 lg:pb-0">
+          <div className="p-3 sm:p-6 lg:p-8">
+            {children}
+          </div>
+          {/* Footer admin discret — masqué sur mobile (BottomNav prend la place) */}
+          <div className="hidden lg:block">
+            <AdminFooter />
+          </div>
         </div>
       </div>
 

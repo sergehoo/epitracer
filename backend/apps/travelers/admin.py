@@ -20,8 +20,14 @@ class TravelerAdmin(GISModelAdmin):
     list_display = (
         "public_id", "last_name", "first_name", "nationality",
         "arrival_date", "entry_point", "current_health_status",
+        "created_at",
     )
-    list_filter = ("current_health_status", "transport_mode", "gender", "entry_point")
+    list_filter = (
+        "current_health_status", "transport_mode", "gender", "entry_point",
+        "created_at",
+    )
+    date_hierarchy = "created_at"
+    ordering = ("-created_at",)
     search_fields = ("public_id", "first_name", "last_name", "id_document_number", "phone_mobile", "email")
     inlines = [TravelHistoryInline, CompanionInline]
     fieldsets = (

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
+import 'assistance_repository.dart';
 
-class AssistanceScreen extends StatelessWidget {
+class AssistanceScreen extends ConsumerWidget {
   const AssistanceScreen({super.key});
 
   Future<void> _call(String number) async {
@@ -13,8 +15,52 @@ class AssistanceScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _requestCallback(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Demander un rappel'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Un agent INHP vous contactera dans la journée.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Décrivez brièvement votre besoin',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Envoyer'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty) return;
+    final ok = await ref
+        .read(assistanceRepositoryProvider)
+        .createRequest(category: 'callback', message: result);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? 'Demande envoyée. Un agent INHP vous contactera.'
+          : 'Envoyée hors-ligne — sync au retour de la connexion.'),
+    ));
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(title: const Text('Assistance santé')),
       body: ListView(
@@ -68,11 +114,7 @@ class AssistanceScreen extends StatelessWidget {
             label: 'Demander un rappel',
             subtitle: 'Un agent INHP vous contactera',
             color: AppColors.ciOrange,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Demande envoyée (Phase 2)')),
-              );
-            },
+            onTap: () => _requestCallback(context, ref),
           ),
           _ActionTile(
             icon: Icons.location_on,

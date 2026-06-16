@@ -69,6 +69,8 @@ export default function SurveillancePage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState<'' | RiskLevel>('');
   const [entryFilter, setEntryFilter] = useState('');
+  const [arrivalFrom, setArrivalFrom] = useState('');
+  const [arrivalTo, setArrivalTo] = useState('');
   const [ordering, setOrdering] = useState('-created_at');
   const [entryPoints, setEntryPoints] = useState<EntryPoint[]>([]);
 
@@ -94,6 +96,8 @@ export default function SurveillancePage() {
     if (statusFilter) params.set('status', statusFilter);
     if (riskFilter) params.set('risk_level', riskFilter);
     if (entryFilter) params.set('entry_point', entryFilter);
+    if (arrivalFrom) params.set('traveler__arrival_date__gte', arrivalFrom);
+    if (arrivalTo) params.set('traveler__arrival_date__lte', arrivalTo);
 
     api.get(`/ebola/investigations/?${params.toString()}`)
       .then((r) => {
@@ -110,7 +114,7 @@ export default function SurveillancePage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [page, ordering, statusFilter, riskFilter, entryFilter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [page, ordering, statusFilter, riskFilter, entryFilter, arrivalFrom, arrivalTo]);
 
   // Search debouncé local
   useEffect(() => {
@@ -150,7 +154,7 @@ export default function SurveillancePage() {
   };
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
-  const hasFilters = !!(search || statusFilter || riskFilter || entryFilter);
+  const hasFilters = !!(search || statusFilter || riskFilter || entryFilter || arrivalFrom || arrivalTo);
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -160,9 +164,9 @@ export default function SurveillancePage() {
           <div className="text-[11px] uppercase tracking-widest text-ciOrange font-bold">
             Surveillance épidémiologique
           </div>
-          <h1 className="font-display text-3xl font-black">Enquêtes Ebola</h1>
+          <h1 className="font-display text-3xl font-black">Liste des voyageurs</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {count.toLocaleString('fr-FR')} enquête(s) — page {page}/{totalPages}
+            {count.toLocaleString('fr-FR')} voyageur(s) sous surveillance — page {page}/{totalPages}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -221,11 +225,36 @@ export default function SurveillancePage() {
             ))}
           </select>
 
+          {/* Filtre par date d'arrivée — du/au */}
+          <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 px-2 py-1">
+            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold pl-1">
+              Arrivée
+            </span>
+            <input
+              type="date"
+              value={arrivalFrom}
+              max={arrivalTo || undefined}
+              onChange={(e) => { setArrivalFrom(e.target.value); setPage(1); }}
+              className="bg-transparent px-2 py-1 text-xs focus:outline-none"
+              title="Date d'arrivée — début"
+            />
+            <span className="text-slate-400 text-xs">→</span>
+            <input
+              type="date"
+              value={arrivalTo}
+              min={arrivalFrom || undefined}
+              onChange={(e) => { setArrivalTo(e.target.value); setPage(1); }}
+              className="bg-transparent px-2 py-1 text-xs focus:outline-none"
+              title="Date d'arrivée — fin"
+            />
+          </div>
+
           {hasFilters && (
             <button
               onClick={() => {
                 setSearch(''); setStatusFilter(''); setRiskFilter('');
-                setEntryFilter(''); setPage(1);
+                setEntryFilter(''); setArrivalFrom(''); setArrivalTo('');
+                setPage(1);
               }}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
             >
@@ -246,7 +275,7 @@ export default function SurveillancePage() {
                 <Th label="Cas" onSort={() => setOrdering(ordering === 'case_number' ? '-case_number' : 'case_number')} active={ordering.endsWith('case_number')} dir={ordering.startsWith('-') ? 'desc' : 'asc'} />
                 <Th label="Voyageur" />
                 <Th label="Risque" onSort={() => setOrdering(ordering === 'risk_score' ? '-risk_score' : 'risk_score')} active={ordering.endsWith('risk_score')} dir={ordering.startsWith('-') ? 'desc' : 'asc'} />
-                <Th label="Statut" />
+                <Th label="Date d'arrivée" />
                 <Th label="Point d'entrée" />
                 <Th label="Créé le" onSort={() => setOrdering(ordering === 'created_at' ? '-created_at' : 'created_at')} active={ordering.endsWith('created_at')} dir={ordering.startsWith('-') ? 'desc' : 'asc'} />
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -274,10 +303,10 @@ export default function SurveillancePage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3"><RiskBadge level={r.risk_level} score={r.risk_score} /></td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold">
-                        {STATUS_LABELS[r.status] || r.status}
-                      </span>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                      {r.traveler_detail?.arrival_date
+                        ? new Date(r.traveler_detail.arrival_date).toLocaleDateString('fr-FR')
+                        : '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{r.entry_point_name || '—'}</td>
                     <td className="px-4 py-3 text-xs text-slate-500">{formatDateTime(r.created_at)}</td>
