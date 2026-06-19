@@ -1,0 +1,206 @@
+# ===========================================================================
+# EpiTrace — overlay STAGING (recette / pré-prod).
+#
+# Coexiste avec la PROD sur le même hôte grâce au `name:` distinct :
+#   - Containers   : epitrace-staging_*
+#   - Volumes      : epitrace-staging_db_data, epitrace-staging_media_data, ...
+#   - Base données : SÉPARÉE de la prod (volume db_data dédié)
+#
+# Domaines par défaut (overridables via .env.staging) :
+#   - staging.destinationci.com         → frontend public (formulaire voyageur)
+#   - admin-staging.veillesanitaire.com → back-office Next.js
+#   - api-staging.veillesanitaire.com   → API Django + WebSocket
+#
+# Protection :
+#   - Auth basique HTTP via middleware Traefik (STAGING_BASIC_AUTH)
+#   - Header X-Robots-Tag: noindex,nofollow (anti-indexation Google)
+#   - Cookies SECURE + HSTS court (60s) pour faciliter les bascules
+#
+# Usage :
+#   # 1. Créer le htpasswd (une fois)
+#   htpasswd -nbB inhp '<mot-de-passe-staging>' | sed 's/\$/\$\$/g'
+#   # → coller le résultat dans .env.staging : STAGING_BASIC_AUTH=...
+#
+#   # 2. Lancer la stack staging
+#   docker compose --env-file .env.staging \
+#       -f docker-compose.yml -f docker-compose.staging.yml \
+#       up -d --build
+#
+#   # 3. Logs
+#   docker compose --env-file .env.staging -p epitrace-staging logs -f web
+# ===========================================================================
+
+name: epitrace-staging
+
+services:
+
+  # --- Backend Django (gunicorn) ----------------------------------------
+  web:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DJANGO_DEBUG: "0"
+      DJANGO_ENVIRONMENT: staging
+      DJANGO_ALLOWED_HOSTS: ${API_HOST:-api-staging.veillesanitaire.com},${PUBLIC_HOST:-staging.destinationci.com},${ADMIN_HOST:-admin-staging.veillesanitaire.com},web,localhost,127.0.0.1
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://${API_HOST:-api-staging.veillesanitaire.com},https://${PUBLIC_HOST:-staging.destinationci.com},https://${ADMIN_HOST:-admin-staging.veillesanitaire.com}
+      DJANGO_CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOST:-staging.destinationci.com},https://${ADMIN_HOST:-admin-staging.veillesanitaire.com}
+      SECURE_SSL_REDIRECT: "1"
+      SESSION_COOKIE_SECURE: "1"
+      CSRF_COOKIE_SECURE: "1"
+      SECURE_HSTS_SECONDS: "60"
+      # Indicateur affiché par le frontend → bandeau "STAGING" visible
+      NEXT_PUBLIC_ENVIRONMENT: staging
+      # Notifications : par défaut on DÉSACTIVE l'envoi réel pour ne pas
+      # spammer les vrais numéros / boîtes mails. À surcharger en .env.staging
+      # si on veut tester un canal en particulier.
+      ORANGE_CI_SMS_ENABLED: ${ORANGE_CI_SMS_ENABLED:-false}
+      TWILIO_SMS_ENABLED: ${TWILIO_SMS_ENABLED:-false}
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+    ports: []
+    networks: [default, proxy]
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
+      # Router API staging
+      - "traefik.http.routers.epitrace-staging-api.rule=Host(`${API_HOST:-api-staging.veillesanitaire.com}`)"
+      - "traefik.http.routers.epitrace-staging-api.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-staging-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.routers.epitrace-staging-api.priority=10"
+      - "traefik.http.routers.epitrace-staging-api.service=epitrace-staging-api"
+      - "traefik.http.services.epitrace-staging-api.loadbalancer.server.port=8000"
+      # Middleware basic auth (htpasswd) — bloque l'API au public
+      - "traefik.http.middlewares.epitrace-staging-auth.basicauth.users=${STAGING_BASIC_AUTH}"
+      - "traefik.http.middlewares.epitrace-staging-auth.basicauth.realm=EpiTrace Staging"
+      # Middleware noindex
+      - "traefik.http.middlewares.epitrace-staging-noindex.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow, nosnippet, noarchive"
+      # Middleware sécurité (HSTS court + nosniff + frame-deny)
+      - "traefik.http.middlewares.epitrace-staging-sec.headers.stsSeconds=60"
+      - "traefik.http.middlewares.epitrace-staging-sec.headers.frameDeny=true"
+      - "traefik.http.middlewares.epitrace-staging-sec.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.epitrace-staging-compress.compress=true"
+      - "traefik.http.routers.epitrace-staging-api.middlewares=epitrace-staging-auth,epitrace-staging-noindex,epitrace-staging-sec,epitrace-staging-compress"
+
+  # --- WebSocket / Channels --------------------------------------------
+  channels:
+    ports: []
+    networks: [default, proxy]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -H 'X-Forwarded-Proto: https' http://127.0.0.1:8001/healthz/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
+      - "traefik.http.routers.epitrace-staging-ws.rule=Host(`${API_HOST:-api-staging.veillesanitaire.com}`) && PathPrefix(`/ws`)"
+      - "traefik.http.routers.epitrace-staging-ws.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-staging-ws.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.routers.epitrace-staging-ws.priority=100"
+      - "traefik.http.routers.epitrace-staging-ws.service=epitrace-staging-ws"
+      - "traefik.http.services.epitrace-staging-ws.loadbalancer.server.port=8001"
+      # WS authentifié par cookie de session Django (JWT) — pas de basicAuth
+      # ici sinon le browser envoie le header Authorization Basic à la place
+      # de l'Authorization Bearer JWT.
+
+  worker:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DJANGO_DEBUG: "0"
+      DJANGO_ENVIRONMENT: staging
+    healthcheck:
+      test: ["NONE"]
+
+  beat:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DJANGO_DEBUG: "0"
+      DJANGO_ENVIRONMENT: staging
+    healthcheck:
+      test: ["NONE"]
+
+  # --- Frontend Next.js (public + admin) -------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: https://${API_HOST:-api-staging.veillesanitaire.com}
+        NEXT_PUBLIC_WS_URL: wss://${API_HOST:-api-staging.veillesanitaire.com}
+        NEXT_PUBLIC_PUBLIC_HOST: ${PUBLIC_HOST:-staging.destinationci.com}
+        NEXT_PUBLIC_ADMIN_HOST: ${ADMIN_HOST:-admin-staging.veillesanitaire.com}
+        NEXT_PUBLIC_ENVIRONMENT: staging
+    environment:
+      NEXT_PUBLIC_API_URL: https://${API_HOST:-api-staging.veillesanitaire.com}
+      NEXT_PUBLIC_WS_URL: wss://${API_HOST:-api-staging.veillesanitaire.com}
+      NEXT_PUBLIC_PUBLIC_HOST: ${PUBLIC_HOST:-staging.destinationci.com}
+      NEXT_PUBLIC_ADMIN_HOST: ${ADMIN_HOST:-admin-staging.veillesanitaire.com}
+      NEXT_PUBLIC_ENVIRONMENT: staging
+      NODE_ENV: production
+    ports: []
+    networks: [default, proxy]
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
+
+      # Portail PUBLIC staging — apex uniquement (pas de www. en staging)
+      - "traefik.http.routers.epitrace-staging-public.rule=Host(`${PUBLIC_HOST:-staging.destinationci.com}`)"
+      - "traefik.http.routers.epitrace-staging-public.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-staging-public.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.routers.epitrace-staging-public.service=epitrace-staging-frontend"
+
+      # Portail ADMIN staging
+      - "traefik.http.routers.epitrace-staging-admin.rule=Host(`${ADMIN_HOST:-admin-staging.veillesanitaire.com}`)"
+      - "traefik.http.routers.epitrace-staging-admin.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-staging-admin.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.routers.epitrace-staging-admin.service=epitrace-staging-frontend"
+
+      - "traefik.http.services.epitrace-staging-frontend.loadbalancer.server.port=3000"
+
+      # Middlewares partagés : basic auth + noindex + sécurité + compression
+      - "traefik.http.middlewares.epitrace-staging-front-auth.basicauth.users=${STAGING_BASIC_AUTH}"
+      - "traefik.http.middlewares.epitrace-staging-front-auth.basicauth.realm=EpiTrace Staging"
+      - "traefik.http.middlewares.epitrace-staging-front-noindex.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow, nosnippet, noarchive"
+      - "traefik.http.middlewares.epitrace-staging-front-sec.headers.stsSeconds=60"
+      - "traefik.http.middlewares.epitrace-staging-front-sec.headers.frameDeny=true"
+      - "traefik.http.middlewares.epitrace-staging-front-sec.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.epitrace-staging-front-compress.compress=true"
+
+      - "traefik.http.routers.epitrace-staging-public.middlewares=epitrace-staging-front-auth,epitrace-staging-front-noindex,epitrace-staging-front-sec,epitrace-staging-front-compress"
+      - "traefik.http.routers.epitrace-staging-admin.middlewares=epitrace-staging-front-auth,epitrace-staging-front-noindex,epitrace-staging-front-sec,epitrace-staging-front-compress"
+
+  # --- Observabilité : DÉSACTIVÉE en staging --------------------------
+  # Pas besoin de Prometheus/Grafana/Loki en environnement de recette.
+  # `replicas: 0` évite que les services soient démarrés sans les supprimer
+  # de la définition du compose (utile pour rétablir si besoin de debug).
+  prometheus:
+    deploy:
+      replicas: 0
+    labels:
+      - "traefik.enable=false"
+
+  grafana:
+    deploy:
+      replicas: 0
+    labels:
+      - "traefik.enable=false"
+
+  loki:
+    deploy:
+      replicas: 0
+
+  promtail:
+    deploy:
+      replicas: 0
+
+  # Mailhog ACTIVÉ en staging : capture les emails sortants pour QA
+  # sans envoyer aux vrais destinataires. À utiliser en surchargeant
+  # PUBLIC_EMAIL_HOST=mailhog dans .env.staging.
+  mailhog:
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:-proxy}
