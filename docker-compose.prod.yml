@@ -136,11 +136,16 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
 
-      # Portail PUBLIC voyageurs (sans www. — pas de record DNS séparé)
-      - "traefik.http.routers.epitrace-public.rule=Host(`${PUBLIC_HOST:-destinationci.com}`)"
+      # Portail PUBLIC voyageurs — accepte apex + www
+      - "traefik.http.routers.epitrace-public.rule=Host(`${PUBLIC_HOST:-destinationci.com}`) || Host(`www.${PUBLIC_HOST:-destinationci.com}`)"
       - "traefik.http.routers.epitrace-public.entrypoints=websecure"
       - "traefik.http.routers.epitrace-public.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
       - "traefik.http.routers.epitrace-public.service=epitrace-frontend"
+
+      # Redirection www.destinationci.com → destinationci.com (SEO + canonical)
+      - "traefik.http.middlewares.epitrace-www-to-apex.redirectregex.regex=^https?://www\\.(.+)"
+      - "traefik.http.middlewares.epitrace-www-to-apex.redirectregex.replacement=https://$$1"
+      - "traefik.http.middlewares.epitrace-www-to-apex.redirectregex.permanent=true"
 
       # Portail ADMIN INHP (sans www. — pas de record DNS séparé)
       - "traefik.http.routers.epitrace-admin.rule=Host(`${ADMIN_HOST:-admin.veillesanitaire.com}`)"
@@ -157,7 +162,7 @@ services:
       - "traefik.http.middlewares.epitrace-front-sec.headers.forceSTSHeader=true"
       - "traefik.http.middlewares.epitrace-front-sec.headers.frameDeny=true"
       - "traefik.http.middlewares.epitrace-front-sec.headers.contentTypeNosniff=true"
-      - "traefik.http.routers.epitrace-public.middlewares=epitrace-front-compress,epitrace-front-sec"
+      - "traefik.http.routers.epitrace-public.middlewares=epitrace-www-to-apex,epitrace-front-compress,epitrace-front-sec"
       - "traefik.http.routers.epitrace-admin.middlewares=epitrace-front-compress,epitrace-front-sec"
 
   # --- Observabilité interne ---------------------------------------------

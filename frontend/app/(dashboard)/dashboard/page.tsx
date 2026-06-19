@@ -13,6 +13,11 @@ import {
 } from 'recharts';
 import { api, extractApiError } from '@/lib/api';
 import { NationalOverview } from '@/components/dashboard/NationalOverview';
+import { DashboardFilters, DashboardFilterState } from '@/components/dashboard/DashboardFilters';
+import {
+  FunnelChart, HourlyHeatmap, ComplianceGauge, ComparisonCard,
+} from '@/components/dashboard/AdvancedStats';
+import { Users as UsersIcon, Siren as SirenIcon, ShieldAlert as ShieldAlertIcon } from 'lucide-react';
 
 /* ============================================================
    Types
@@ -106,6 +111,13 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Filtres pilotant le bandeau national + les stats avancées
+  const [filters, setFilters] = useState<DashboardFilterState>({
+    period: 30, risk: '', followup: '', country: '', entryPoint: '',
+  });
+  // Données du payload /analytics/national/ remontées par NationalOverview
+  const [nationalData, setNationalData] = useState<any>(null);
+
   const load = (silent = false) => {
     if (silent) setRefreshing(true); else setLoading(true);
     setErr(null);
@@ -197,9 +209,80 @@ export default function DashboardPage() {
      ============================================================ */
   return (
     <div className="space-y-6 animate-fade-up">
+      {/* ============ Barre de filtres globale ============ */}
+      <DashboardFilters value={filters} onChange={setFilters} />
+
+      {/* ============ Cards de comparaison période vs précédente ============ */}
+      {nationalData?.kpis?.comparison && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <ComparisonCard
+            label="Voyageurs (période)"
+            current={nationalData.kpis.comparison.travelers.current}
+            previous={nationalData.kpis.comparison.travelers.previous}
+            trendPct={nationalData.kpis.comparison.travelers.trend_pct}
+            icon={<UsersIcon className="h-4 w-4" />}
+          />
+          <ComparisonCard
+            label="Cas critiques"
+            current={nationalData.kpis.comparison.cases_critical.current}
+            previous={nationalData.kpis.comparison.cases_critical.previous}
+            trendPct={nationalData.kpis.comparison.cases_critical.trend_pct}
+            icon={<SirenIcon className="h-4 w-4 text-rose-500" />}
+          />
+          <ComparisonCard
+            label="Cas à risque élevé"
+            current={nationalData.kpis.comparison.cases_high.current}
+            previous={nationalData.kpis.comparison.cases_high.previous}
+            trendPct={nationalData.kpis.comparison.cases_high.trend_pct}
+            icon={<ShieldAlertIcon className="h-4 w-4 text-orange-500" />}
+          />
+        </div>
+      )}
+
       {/* ============ Bandeau premium temps réel (Phase 4) ============ */}
-      {/* Branché sur /api/v1/analytics/national/ — agrégation 1 appel. */}
-      <NationalOverview />
+      {/* Branché sur /api/v1/analytics/national/ — filtres pris en compte */}
+      <NationalOverview filters={filters} onData={setNationalData} />
+
+      {/* ============ Stats avancées (funnel + heatmap + compliance) ============ */}
+      {nationalData && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {nationalData.funnel && (
+            <FunnelChart data={nationalData.funnel} />
+          )}
+          {nationalData.arrivals_by_hour && (
+            <HourlyHeatmap data={nationalData.arrivals_by_hour} />
+          )}
+          {nationalData.checkin_compliance && (
+            <ComplianceGauge
+              pct={nationalData.checkin_compliance.pct}
+              withRecent={nationalData.checkin_compliance.with_recent}
+              totalActive={nationalData.checkin_compliance.total_active}
+            />
+          )}
+        </div>
+      )}
+
+      {/* ============ Top nationalités (sur la période filtrée) ============ */}
+      {nationalData?.top_nationalities && nationalData.top_nationalities.length > 0 && (
+        <article className="card p-6">
+          <h3 className="font-display text-lg font-black flex items-center gap-2">
+            <Globe2 className="h-5 w-5 text-ciOrange" /> Top nationalités · {filters.period}j
+          </h3>
+          <ul className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
+            {nationalData.top_nationalities.slice(0, 10).map((n: any, i: number) => (
+              <li
+                key={i}
+                className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition"
+              >
+                <div className="text-xs text-slate-500 truncate">{n.nationality || '—'}</div>
+                <div className="font-display text-xl font-black text-ciDark dark:text-emerald-200 mt-1">
+                  {n.count.toLocaleString('fr-FR')}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </article>
+      )}
 
       {/* ============ HERO BANNER ============ */}
       <section className="relative overflow-hidden rounded-3xl border border-emerald-900/20 bg-gradient-to-br from-ciDark via-emerald-900 to-emerald-950 text-white shadow-card">

@@ -32,6 +32,7 @@ from .views import (
     MobileQrImportView, MobileVaccinationsViewSet,
 )
 from .voyageur_auth import VoyageurRequestOtpView, VoyageurVerifyOtpView
+from .registration import ActiveFormsListView
 
 router = DefaultRouter()
 router.register("passes", MobilePassesViewSet, basename="mobile-pass")
@@ -48,6 +49,10 @@ urlpatterns = [
          VoyageurRequestOtpView.as_view(), name="mobile-voyageur-request-otp"),
     path("auth/voyageur/verify-otp/",
          VoyageurVerifyOtpView.as_view(), name="mobile-voyageur-verify-otp"),
+
+    # ── Enregistrement voyageur (liste formulaires actifs, public) ────
+    path("registration/forms/",
+         ActiveFormsListView.as_view(), name="mobile-registration-forms"),
 
     # ── Profil ────────────────────────────────────────────────────────
     path("profile/", MobileProfileView.as_view(), name="mobile-profile"),

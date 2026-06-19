@@ -23,8 +23,16 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { api } from '@/lib/api';
 
 interface NationalData {
+  filters?: {
+    period_days: number;
+    risk?: string | null;
+    country?: string | null;
+    entry_point?: string | null;
+    followup?: string | null;
+  };
   kpis: {
     travelers_today: number;
+    travelers_period?: number;
     travelers_total: number;
     active_followups: number;
     passes_issued: number;
@@ -32,20 +40,45 @@ interface NationalData {
     alerts_open: number;
     alerts_critical_24h: number;
     high_risk_travelers: number;
+    cases_critical_period?: number;
+    cases_high_period?: number;
     checkins_today: number;
     checkins_with_symptoms_today: number;
     checkins_missed_48h: number;
+    comparison?: {
+      travelers: { current: number; previous: number; trend_pct: number };
+      cases_critical: { current: number; previous: number; trend_pct: number };
+      cases_high: { current: number; previous: number; trend_pct: number };
+    };
   };
-  timeline: { date: string; travelers: number }[];
+  timeline: {
+    date: string; travelers: number;
+    cases_low?: number; cases_moderate?: number;
+    cases_high?: number; cases_critical?: number;
+  }[];
   top_entry_points: { entry_point__name: string; entry_point__code: string; count: number }[];
   top_origins: { country__code: string; country__name: string; count: number }[];
+  top_nationalities?: { nationality: string; count: number }[];
   statuses: Record<string, number>;
   risk_levels: Record<string, number>;
+  funnel?: { step: string; count: number }[];
+  arrivals_by_hour?: { hour: number; count: number }[];
+  checkin_compliance?: {
+    pct: number; with_recent: number; total_active: number;
+  };
   recent_alerts: {
     id: string; code: string; title: string;
     severity: string; status: string; created_at: string;
   }[];
   generated_at: string;
+}
+
+export interface NationalOverviewFilters {
+  period: number;
+  risk: string;
+  followup: string;
+  country: string;
+  entryPoint: string;
 }
 
 const SEV_STYLES: Record<string, string> = {
@@ -56,25 +89,43 @@ const SEV_STYLES: Record<string, string> = {
   INFO: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
-export function NationalOverview() {
+export function NationalOverview({
+  filters,
+  onData,
+}: {
+  filters?: NationalOverviewFilters;
+  onData?: (d: NationalData) => void;
+} = {}) {
   const [data, setData] = useState<NationalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
 
+  const queryString = useMemo(() => {
+    if (!filters) return '';
+    const p = new URLSearchParams();
+    p.set('period', String(filters.period));
+    if (filters.risk) p.set('risk', filters.risk);
+    if (filters.followup) p.set('followup', filters.followup);
+    if (filters.country) p.set('country', filters.country);
+    if (filters.entryPoint) p.set('entry_point', filters.entryPoint);
+    return `?${p.toString()}`;
+  }, [filters]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get<NationalData>('/analytics/national/');
+      const { data } = await api.get<NationalData>(`/analytics/national/${queryString}`);
       setData(data);
       setLastFetch(new Date());
+      onData?.(data);
     } catch {
       /* silencieux — le dashboard existant continue de marcher */
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryString, onData]);
 
-  // Auto-refresh 60s
+  // Re-fetch quand les filtres changent
   useEffect(() => {
     load();
     const id = window.setInterval(load, 60_000);

@@ -22,6 +22,10 @@ import '../../features/education/stories_screen.dart';
 import '../../features/family/family_screen.dart';
 import '../../features/map/map_screen.dart';
 import '../../features/medical/medical_record_screen.dart';
+import '../../features/registration/registration_picker_screen.dart';
+import '../../features/settings/about_screen.dart';
+import '../../features/settings/settings_screen.dart';
+import '../../features/teleconsult/teleconsult_screen.dart';
 import '../storage/secure_storage.dart';
 
 class AppRoutes {
@@ -47,6 +51,9 @@ class AppRoutes {
   static const family = '/family';
   static const teleconsult = '/teleconsultation';
   static const quizzes = '/quizzes';
+  static const settings = '/settings';
+  static const about = '/about';
+  static const registration = '/registration';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -64,6 +71,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         AppRoutes.login,
         AppRoutes.otp,
         AppRoutes.qrScanner,
+        AppRoutes.registration,
       ];
       if (publicRoutes.contains(state.matchedLocation)) return null;
 
@@ -114,6 +122,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.map, builder: (_, __) => const MapScreen()),
       GoRoute(path: AppRoutes.family, builder: (_, __) => const FamilyScreen()),
       GoRoute(path: AppRoutes.stories, builder: (_, __) => const StoriesScreen()),
+      GoRoute(path: AppRoutes.teleconsult, builder: (_, __) => const TeleconsultScreen()),
+      GoRoute(path: AppRoutes.settings, builder: (_, __) => const SettingsScreen()),
+      GoRoute(path: AppRoutes.about, builder: (_, __) => const AboutScreen()),
+      GoRoute(
+        path: AppRoutes.registration,
+        builder: (_, __) => const RegistrationPickerScreen(),
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(

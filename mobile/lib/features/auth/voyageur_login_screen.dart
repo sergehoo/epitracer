@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_gradients.dart';
+import '../../shared/widgets/afriq_credit_footer.dart';
 import 'voyageur_auth_repository.dart';
 
 /// Connexion voyageur — minimaliste, sans mot de passe.
@@ -96,6 +97,9 @@ class _VoyageurLoginScreenState extends ConsumerState<VoyageurLoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Bandeau institutionnel
+                const OfficialLogosBanner(size: 44),
+                const SizedBox(height: 20),
                 Center(
                   child: Container(
                     height: 72,
@@ -112,7 +116,7 @@ class _VoyageurLoginScreenState extends ConsumerState<VoyageurLoginScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 const Text(
                   'Mon Pass Sanitaire',
                   textAlign: TextAlign.center,
@@ -175,7 +179,7 @@ class _VoyageurLoginScreenState extends ConsumerState<VoyageurLoginScreen> {
                       style: TextStyle(color: AppColors.slate500, fontSize: 13),
                     ),
                     TextButton(
-                      onPressed: () {/* open URL veillesanitaire.com */},
+                      onPressed: () => context.push(AppRoutes.registration),
                       child: const Text(
                         'M\'enregistrer',
                         style: TextStyle(
@@ -202,6 +206,9 @@ class _VoyageurLoginScreenState extends ConsumerState<VoyageurLoginScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                const Divider(color: AppColors.slate200, height: 1),
+                const AfriqCreditFooter(),
               ],
             ),
           ),
