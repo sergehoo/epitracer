@@ -170,33 +170,15 @@ services:
       - "traefik.http.routers.epitrace-staging-public.middlewares=epitrace-staging-front-auth,epitrace-staging-front-noindex,epitrace-staging-front-sec,epitrace-staging-front-compress"
       - "traefik.http.routers.epitrace-staging-admin.middlewares=epitrace-staging-front-auth,epitrace-staging-front-noindex,epitrace-staging-front-sec,epitrace-staging-front-compress"
 
-  # --- Observabilité : DÉSACTIVÉE en staging --------------------------
-  # Pas besoin de Prometheus/Grafana/Loki en environnement de recette.
-  # `replicas: 0` évite que les services soient démarrés sans les supprimer
-  # de la définition du compose (utile pour rétablir si besoin de debug).
-  prometheus:
-    deploy:
-      replicas: 0
-    labels:
-      - "traefik.enable=false"
-
-  grafana:
-    deploy:
-      replicas: 0
-    labels:
-      - "traefik.enable=false"
-
-  loki:
-    deploy:
-      replicas: 0
-
-  promtail:
-    deploy:
-      replicas: 0
+  # --- Observabilité : NON INCLUSE en staging -------------------------
+  # Prometheus / Grafana / Loki / Promtail ne sont définis QUE dans
+  # docker-compose.prod.yml. Comme on n'inclut PAS prod.yml en staging,
+  # ces services ne tournent simplement pas — c'est l'effet voulu, pas
+  # besoin de les désactiver explicitement.
 
   # Mailhog ACTIVÉ en staging : capture les emails sortants pour QA
   # sans envoyer aux vrais destinataires. À utiliser en surchargeant
-  # PUBLIC_EMAIL_HOST=mailhog dans .env.staging.
+  # PUBLIC_EMAIL_HOST=mailhog dans .env.staging (déjà fait dans l'example).
   mailhog:
     restart: unless-stopped
 
