@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/config/app_env.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_gradients.dart';
 import '../../shared/widgets/afriq_credit_footer.dart';
@@ -62,6 +63,46 @@ class AboutScreen extends StatelessWidget {
                     fontSize: 12,
                   ),
                 ),
+                if (AppEnv.isStaging) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.ciOrange.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.ciOrange.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.science_outlined,
+                            size: 12, color: AppColors.ciOrange),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Build ${AppEnv.label}',
+                          style: const TextStyle(
+                            color: AppColors.ciOrange,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    AppEnv.apiBaseUrl,
+                    style: const TextStyle(
+                      color: AppColors.slate500,
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
