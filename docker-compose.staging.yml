@@ -61,7 +61,19 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
-      # Router API staging
+      # ─── Router 1 : CORS preflight (OPTIONS) — priorité HAUTE, SANS basicAuth ───
+      # Les browsers envoient les preflights OPTIONS sans credentials → Traefik
+      # ne doit pas exiger basicAuth dessus, sinon le 401 bloque toute requête
+      # cross-origin de admin-staging → api-staging. Django renvoie alors les
+      # bons headers CORS via django-cors-headers.
+      - "traefik.http.routers.epitrace-staging-api-cors.rule=Host(`${API_HOST:-api-staging.veillesanitaire.com}`) && Method(`OPTIONS`)"
+      - "traefik.http.routers.epitrace-staging-api-cors.entrypoints=websecure"
+      - "traefik.http.routers.epitrace-staging-api-cors.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
+      - "traefik.http.routers.epitrace-staging-api-cors.priority=200"
+      - "traefik.http.routers.epitrace-staging-api-cors.service=epitrace-staging-api"
+      - "traefik.http.routers.epitrace-staging-api-cors.middlewares=epitrace-staging-noindex,epitrace-staging-sec,epitrace-staging-compress"
+
+      # ─── Router 2 : toutes les autres méthodes — AVEC basicAuth ───
       - "traefik.http.routers.epitrace-staging-api.rule=Host(`${API_HOST:-api-staging.veillesanitaire.com}`)"
       - "traefik.http.routers.epitrace-staging-api.entrypoints=websecure"
       - "traefik.http.routers.epitrace-staging-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
