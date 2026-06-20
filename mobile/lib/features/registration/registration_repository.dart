@@ -69,7 +69,7 @@ class RegistrationRepository {
           diseaseCode: null,
           diseaseName: null,
           isDefault: true,
-          webUrl: '$fallbackBase/voyageur/inscription',
+          webUrl: '$fallbackBase/voyageur',
         ),
       ];
     }

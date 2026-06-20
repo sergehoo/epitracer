@@ -53,9 +53,9 @@ class ActiveFormsListView(APIView):
             # URL canonique du formulaire web — voyageur enregistrement
             # Si le code est "ebola_arrival" ou similaire, on garde l'URL générique
             # sauf si un slug spécifique est défini.
-            web_url = f"{public_base}/voyageur/inscription"
+            web_url = f"{public_base}/voyageur"
             if f.code:
-                web_url = f"{public_base}/voyageur/inscription?form={f.code}"
+                web_url = f"{public_base}/voyageur?form={f.code}"
 
             out.append({
                 "id": f.pk,
@@ -79,7 +79,7 @@ class ActiveFormsListView(APIView):
                 "disease_code": None,
                 "disease_name": None,
                 "is_default": True,
-                "web_url": f"{public_base}/voyageur/inscription",
+                "web_url": f"{public_base}/voyageur",
             })
 
         return Response({"results": out, "count": len(out)})
