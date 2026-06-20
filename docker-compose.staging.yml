@@ -61,36 +61,33 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-proxy}"
-      # ─── Router 1 : CORS preflight (OPTIONS) — priorité HAUTE, SANS basicAuth ───
-      # Les browsers envoient les preflights OPTIONS sans credentials → Traefik
-      # ne doit pas exiger basicAuth dessus, sinon le 401 bloque toute requête
-      # cross-origin de admin-staging → api-staging. Django renvoie alors les
-      # bons headers CORS via django-cors-headers.
-      - "traefik.http.routers.epitrace-staging-api-cors.rule=Host(`${API_HOST:-api-staging.veillesanitaire.com}`) && Method(`OPTIONS`)"
-      - "traefik.http.routers.epitrace-staging-api-cors.entrypoints=websecure"
-      - "traefik.http.routers.epitrace-staging-api-cors.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
-      - "traefik.http.routers.epitrace-staging-api-cors.priority=200"
-      - "traefik.http.routers.epitrace-staging-api-cors.service=epitrace-staging-api"
-      - "traefik.http.routers.epitrace-staging-api-cors.middlewares=epitrace-staging-noindex,epitrace-staging-sec,epitrace-staging-compress"
-
-      # ─── Router 2 : toutes les autres méthodes — AVEC basicAuth ───
+      # ─── Router API staging — PAS de basicAuth ───────────────────────────
+      # L'API est consommée par les SPA (admin + public) qui ne peuvent pas
+      # injecter de Basic auth dans chaque fetch() sans exposer les creds dans
+      # le bundle JS. La protection se fait sur 3 niveaux :
+      #   1. Endpoints sensibles → JWT obligatoire (DRF permissions, idem prod)
+      #   2. Endpoints publics  → conçus anonymes, rate-limit Django actif
+      #   3. X-Robots-Tag noindex → pas d'indexation Google
+      # Le DNS staging.* n'étant pas listé publiquement, le seul vecteur est
+      # quelqu'un qui devine l'URL — risque acceptable sur données fake.
       - "traefik.http.routers.epitrace-staging-api.rule=Host(`${API_HOST:-api-staging.veillesanitaire.com}`)"
       - "traefik.http.routers.epitrace-staging-api.entrypoints=websecure"
       - "traefik.http.routers.epitrace-staging-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-lets}"
       - "traefik.http.routers.epitrace-staging-api.priority=10"
       - "traefik.http.routers.epitrace-staging-api.service=epitrace-staging-api"
       - "traefik.http.services.epitrace-staging-api.loadbalancer.server.port=8000"
-      # Middleware basic auth (htpasswd) — bloque l'API au public
+      # Middleware basic auth (réutilisé sur le frontend uniquement)
       - "traefik.http.middlewares.epitrace-staging-auth.basicauth.users=${STAGING_BASIC_AUTH}"
       - "traefik.http.middlewares.epitrace-staging-auth.basicauth.realm=EpiTrace Staging"
-      # Middleware noindex
+      # Middleware noindex (s'applique sur tous les domaines staging)
       - "traefik.http.middlewares.epitrace-staging-noindex.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow, nosnippet, noarchive"
       # Middleware sécurité (HSTS court + nosniff + frame-deny)
       - "traefik.http.middlewares.epitrace-staging-sec.headers.stsSeconds=60"
       - "traefik.http.middlewares.epitrace-staging-sec.headers.frameDeny=true"
       - "traefik.http.middlewares.epitrace-staging-sec.headers.contentTypeNosniff=true"
       - "traefik.http.middlewares.epitrace-staging-compress.compress=true"
-      - "traefik.http.routers.epitrace-staging-api.middlewares=epitrace-staging-auth,epitrace-staging-noindex,epitrace-staging-sec,epitrace-staging-compress"
+      # API → noindex + sécurité + compression, mais SANS basicAuth
+      - "traefik.http.routers.epitrace-staging-api.middlewares=epitrace-staging-noindex,epitrace-staging-sec,epitrace-staging-compress"
 
   # --- WebSocket / Channels --------------------------------------------
   channels:
