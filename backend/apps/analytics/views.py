@@ -307,9 +307,12 @@ class NationalDashboardView(APIView):
         except Exception:  # noqa: BLE001
             top_origins = []
 
+        # nationality est une FK vers Country — on resort code + name comme top_origins.
+        # .exclude(nationality__isnull=True) suffit ; pas de .exclude(nationality="")
+        # qui castait "" en int et crashait avec ValueError sur FK.
         top_nationalities = list(
-            period_travelers.exclude(nationality__isnull=True).exclude(nationality="")
-            .values("nationality")
+            period_travelers.exclude(nationality__isnull=True)
+            .values("nationality__code", "nationality__name")
             .annotate(count=Count("id")).order_by("-count")[:10]
         )
 
