@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
-  Activity, AlertTriangle, Bell, HeartPulse, RefreshCcw, ShieldCheck,
+  AlertTriangle, Bell, HeartPulse, RefreshCcw, ShieldCheck,
   TrendingUp, Users,
 } from 'lucide-react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
@@ -227,13 +227,9 @@ export function NationalOverview({
           tone={k && k.alerts_open > 0 ? 'rose' : 'slate'}
           delay={0.2}
         />
-        <KpiCard
-          icon={<Activity className="h-4 w-4" />}
-          label="Manqués > 48h"
-          value={k?.checkins_missed_48h}
-          tone={k && k.checkins_missed_48h > 0 ? 'amber' : 'slate'}
-          delay={0.25}
-        />
+        {/* KPI "Manqués > 48h" retiré pour rester aligné sur 6 colonnes après
+            l'ajout de "Enregistrements aujourd'hui". L'info reste accessible
+            dans le tableau de bord Suivi voyageurs. */}
       </div>
 
       {/* Trend + sparkline */}
