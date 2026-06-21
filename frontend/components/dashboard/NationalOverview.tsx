@@ -31,7 +31,10 @@ interface NationalData {
     followup?: string | null;
   };
   kpis: {
-    travelers_today: number;
+    travelers_today: number;          // alias historique = registrations_today
+    registrations_today?: number;     // enregistrements du jour (created_at=today)
+    arrivals_today?: number;          // arrivées du jour (arrival_date=today)
+    arrivals_tomorrow?: number;       // arrivées attendues demain
     travelers_period?: number;
     travelers_total: number;
     active_followups: number;
@@ -176,9 +179,22 @@ export function NationalOverview({
         <KpiCard
           icon={<Users className="h-4 w-4" />}
           label="Arrivées aujourd'hui"
-          value={k?.travelers_today}
+          value={k?.arrivals_today ?? 0}
+          sub={
+            (k?.arrivals_tomorrow ?? 0) > 0
+              ? `${k?.arrivals_tomorrow} attendu(s) demain`
+              : 'aucune arrivée demain'
+          }
           tone="orange"
           delay={0}
+        />
+        <KpiCard
+          icon={<Users className="h-4 w-4" />}
+          label="Enregistrements aujourd'hui"
+          value={k?.registrations_today ?? k?.travelers_today ?? 0}
+          sub="formulaires soumis"
+          tone="sky"
+          delay={0.025}
         />
         <KpiCard
           icon={<HeartPulse className="h-4 w-4" />}
@@ -316,7 +332,7 @@ interface KpiCardProps {
   label: string;
   value: number | undefined;
   sub?: string;
-  tone: 'orange' | 'emerald' | 'rose' | 'amber' | 'slate';
+  tone: 'orange' | 'emerald' | 'rose' | 'amber' | 'slate' | 'sky';
   delay?: number;
 }
 
@@ -326,6 +342,7 @@ const TONE_STYLES: Record<KpiCardProps['tone'], { bg: string; text: string; ring
   rose: { bg: 'bg-rose-50 dark:bg-rose-950/30', text: 'text-rose-700 dark:text-rose-300', ring: 'ring-rose-200/60' },
   amber: { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-300', ring: 'ring-amber-200/60' },
   slate: { bg: 'bg-slate-50 dark:bg-slate-900', text: 'text-slate-700 dark:text-slate-300', ring: 'ring-slate-200/60' },
+  sky: { bg: 'bg-sky-50 dark:bg-sky-950/30', text: 'text-sky-700 dark:text-sky-300', ring: 'ring-sky-200/60' },
 };
 
 function KpiCard({ icon, label, value, sub, tone, delay = 0 }: KpiCardProps) {

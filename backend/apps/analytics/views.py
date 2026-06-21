@@ -186,8 +186,22 @@ class NationalDashboardView(APIView):
             created_at__gte=prev_period_start, created_at__lt=period_start,
         )
 
+        # Demain pour anticipation opérationnelle (équipes points d'entrée)
+        tomorrow = today + timedelta(days=1)
+
         kpis = {
+            # `travelers_today` = enregistrements du jour (formulaires soumis
+            # aujourd'hui, indépendamment de la date d'arrivée déclarée).
+            # Conservé pour compat ascendante avec l'ancien frontend.
             "travelers_today": travelers_qs.filter(created_at__date=today).count(),
+            # `registrations_today` : alias explicite plus lisible côté UI.
+            "registrations_today": travelers_qs.filter(created_at__date=today).count(),
+            # `arrivals_today` : voyageurs dont la date d'arrivée DÉCLARÉE
+            # tombe aujourd'hui. C'est la métrique pertinente pour préparer
+            # les équipes aux points d'entrée (aéroport / port / frontière).
+            "arrivals_today": travelers_qs.filter(arrival_date=today).count(),
+            # Anticipation J+1 — utile pour le briefing du soir précédent
+            "arrivals_tomorrow": travelers_qs.filter(arrival_date=tomorrow).count(),
             "travelers_period": period_travelers.count(),
             "travelers_total": travelers_qs.count(),
             "active_followups": quars_qs.filter(
