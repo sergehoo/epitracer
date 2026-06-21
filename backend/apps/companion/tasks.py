@@ -10,9 +10,11 @@ idempotentes (on peut les relancer sans dommage).
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, timedelta
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
 from .models import ConsentScope, PushSubscription
@@ -22,10 +24,325 @@ from .services import has_consent
 logger = logging.getLogger(__name__)
 
 
+# ----------------------------------------------------------------------------
+# Métriques Prometheus (custom). On utilise `prometheus_client` qui est
+# fourni transitivement par `django_prometheus`. Si pour une raison X le
+# module n'est pas disponible, on retombe sur un no-op qui ne casse rien.
+# ----------------------------------------------------------------------------
+try:  # pragma: no cover — import guard
+    from prometheus_client import Counter as _Counter
+
+    DAILY_REMINDER_SENT = _Counter(
+        "companion_daily_reminder_sent_total",
+        "Total des rappels quotidiens envoyés, par canal d'aboutissement.",
+        ["channel"],  # values: fcm | vapid | sms | whatsapp | none
+    )
+    DAILY_REMINDER_SKIPPED = _Counter(
+        "companion_daily_reminder_skipped_total",
+        "Rappels non envoyés, par motif.",
+        ["reason"],  # values: no_consent | closed | day_overflow | no_quarantine
+    )
+except Exception:  # pragma: no cover — pas de prometheus_client → no-op
+    class _NoopMetric:
+        def labels(self, *_, **__):
+            return self
+
+        def inc(self, *_, **__):
+            return None
+
+    DAILY_REMINDER_SENT = _NoopMetric()
+    DAILY_REMINDER_SKIPPED = _NoopMetric()
+
+
+# ----------------------------------------------------------------------------
+# Helpers — masquage PII pour les logs
+# ----------------------------------------------------------------------------
+
+
+def _mask_phone(phone: str | None) -> str:
+    """Masque un numéro de téléphone pour les logs (RGPD friendly).
+
+    +2250708090911 → +225 07****911
+
+    Garde l'indicatif pays + le 5 dernier chiffres en clair pour le support.
+    Ne logue jamais le numéro complet.
+    """
+    if not phone:
+        return ""
+    s = re.sub(r"\s+", "", phone)
+    if len(s) < 6:
+        return "***"
+    # On garde +225 puis 2 chars + 4 stars + 3 last
+    return f"{s[:5]}{s[5:7]}****{s[-3:]}"
+
+
+def _traveler_tag(traveler) -> str:
+    """Identifiant masqué pour les logs structurés."""
+    return f"traveler_id={getattr(traveler, 'public_id', '?')}"
+
+
 # ============================================================================
 # Rappel quotidien — envoyé chaque matin à tous les voyageurs en quarantaine
 # active qui ont consenti aux notifications.
 # ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# FCM mobile — envoi best-effort vers tous les MobileDevice actifs du voyageur.
+# Le voyageur est lié à un User côté mobile (voir apps.mobile_api).
+# Si aucun appareil n'est enregistré ou si FCM n'est pas configuré, on
+# retombe silencieusement (le canal VAPID / SMS prendra le relais).
+# ----------------------------------------------------------------------------
+
+
+def _send_fcm_to_traveler(traveler, *, title: str, body: str, data: dict) -> int:
+    """Envoie une notification FCM à tous les appareils mobiles du voyageur.
+
+    Retourne le nombre d'envois réussis (>=0). N'échoue jamais — toute
+    erreur d'envoi est loggée et compte comme 0.
+
+    Les `data` (str → str) sont passés au payload FCM pour permettre au
+    handler côté app Flutter de router le tap vers /followup/checkin.
+    """
+    try:
+        from apps.mobile_api.models import MobileDevice  # noqa: WPS433
+    except Exception:  # apps.mobile_api absent (cas de test minimal)
+        return 0
+
+    # Le traveler n'est PAS un User. Convention actuelle (Phase 7) :
+    # `apps.mobile_api.registration` lie un Traveler à un User via email.
+    # Tant qu'on n'a pas de FK directe, on fait le match par email.
+    user = None
+    email = (traveler.email or "").strip().lower()
+    if email:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.filter(email__iexact=email).first()
+    if user is None:
+        return 0
+
+    devices = MobileDevice.objects.filter(user=user, is_active=True)
+    if not devices.exists():
+        return 0
+
+    sent = 0
+    # Conversion des valeurs `data` en strings — exigence FCM.
+    data_str = {str(k): str(v) for k, v in (data or {}).items()}
+    try:
+        from apps.notifications.providers import send_push  # noqa: WPS433
+    except Exception:
+        return 0
+
+    for device in devices:
+        try:
+            # `send_push` (legacy FCM) ne propage pas les `data`. On le
+            # complète ici via httpx direct si FCM_SERVER_KEY est dispo,
+            # sinon stub.
+            ok = _send_fcm_with_data(device.fcm_token, title, body, data_str)
+            if ok:
+                sent += 1
+                # MAJ last_seen via auto_now au save
+                try:
+                    device.save(update_fields=["last_seen_at"])
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception:  # noqa: BLE001 — best-effort par appareil
+            logger.exception(
+                "FCM send failed for device device_id=%s (%s)",
+                device.id, _traveler_tag(traveler),
+            )
+            # Politique douce : on ne désactive le device qu'après 5 échecs
+            # — pas implémenté ici, géré côté cleanup task.
+    return sent
+
+
+def _send_fcm_with_data(token: str, title: str, body: str, data: dict) -> bool:
+    """Envoi FCM legacy avec support `data` payload.
+
+    Wrapper minimaliste autour de l'API FCM legacy (HTTP) — l'API HTTP v1
+    nécessite une auth OAuth Google plus complexe (TODO).
+    En l'absence de `FCM_SERVER_KEY`, log + succès "stub" pour les
+    environnements dev/CI (cohérent avec providers.send_push).
+    """
+    import httpx
+
+    key = settings.NOTIFICATIONS.get("FCM_SERVER_KEY", "")
+    if not key:
+        logger.info(
+            "[FCM:stub] token=%s title=%r data_type=%s",
+            (token or "")[:12], title, data.get("type"),
+        )
+        return True
+
+    try:
+        r = httpx.post(
+            "https://fcm.googleapis.com/fcm/send",
+            headers={"Authorization": f"key={key}", "Content-Type": "application/json"},
+            json={
+                "to": token,
+                "notification": {"title": title, "body": body},
+                "data": data,
+                "priority": "high",
+                # Android : groupe notif quotidien check-in
+                "collapse_key": "daily_checkin",
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("FCM HTTP error: %s", str(exc)[:160])
+        return False
+
+
+# ----------------------------------------------------------------------------
+# Tâche principale — rappel quotidien.
+# Tourne chaque matin à 08:00 Africa/Abidjan (configuré dans beat_schedule).
+# ----------------------------------------------------------------------------
+
+
+# Constantes — surface de surveillance.
+SURVEILLANCE_DAYS = 21  # période standard EpiTrace (Ebola = 21j)
+
+
+@shared_task(
+    bind=True, name="companion.send_daily_checkin_reminders",
+    autoretry_for=(Exception,), retry_backoff=True, max_retries=3,
+)
+def send_daily_checkin_reminders(self) -> dict[str, int]:
+    """Envoie un rappel quotidien "comment vous sentez-vous aujourd'hui ?"
+    à chaque voyageur en suivi actif (jour < 21).
+
+    Canaux essayés dans l'ordre :
+      1. FCM mobile (si appareils enregistrés via app Flutter).
+      2. VAPID Web Push (si abonnement PWA actif).
+      3. Fallback SMS (Orange CI / Twilio) via apps.notifications.dispatcher,
+         uniquement si aucun push n'a abouti.
+
+    Garanties privacy / RGPD :
+      - n'envoie RIEN sans `PrivacyConsent(scope=push, granted=True)` actif ;
+      - numéro de téléphone masqué dans les logs (jamais en clair) ;
+      - le `data.traveler_id` est le `public_id` (slug 24 chars), pas la
+        PK interne — c'est un identifiant non-PII destiné au deep-link.
+
+    Métriques Prometheus :
+      - companion_daily_reminder_sent_total{channel}
+      - companion_daily_reminder_skipped_total{reason}
+    """
+    from apps.quarantine.models import QuarantineRecord, QuarantineStatus
+
+    stats = {
+        "travelers": 0,
+        "fcm_sent": 0,
+        "vapid_sent": 0,
+        "sms_sent": 0,
+        "whatsapp_sent": 0,
+        "skipped_no_consent": 0,
+        "skipped_day_overflow": 0,
+    }
+
+    active_qs = QuarantineRecord.objects.filter(
+        status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
+    ).select_related("traveler")
+
+    today = date.today()
+
+    for q in active_qs:
+        traveler = q.traveler
+        if traveler is None:
+            continue
+        stats["travelers"] += 1
+
+        # Calcul du jour J — on n'envoie que si on est dans la fenêtre 21j.
+        day_index = max(0, (today - q.started_on).days)
+        total = (q.expected_end_on - q.started_on).days or SURVEILLANCE_DAYS
+        if day_index >= total:
+            stats["skipped_day_overflow"] += 1
+            DAILY_REMINDER_SKIPPED.labels(reason="day_overflow").inc()
+            continue
+
+        # Consentement push — bloque tout (FCM + VAPID + SMS de rappel).
+        if not has_consent(traveler, ConsentScope.PUSH_NOTIFICATIONS):
+            stats["skipped_no_consent"] += 1
+            DAILY_REMINDER_SKIPPED.labels(reason="no_consent").inc()
+            continue
+
+        # ---- Préparation du payload de notification ------------------------
+        prenom = (traveler.first_name or "").strip().title() or "Voyageur"
+        title = f"Bonjour {prenom} — comment allez-vous ?"
+        body = (
+            f"Jour {day_index}/{total} de surveillance. "
+            "Déclarez votre état aujourd'hui pour aider l'INHP "
+            "à protéger la Côte d'Ivoire."
+        )
+        data_payload = {
+            "type": "daily_checkin",
+            "traveler_id": traveler.public_id,
+            "day": day_index,
+            "total": total,
+        }
+
+        # ---- 1. FCM mobile -------------------------------------------------
+        fcm_sent = _send_fcm_to_traveler(
+            traveler, title=title, body=body, data=data_payload,
+        )
+        if fcm_sent > 0:
+            stats["fcm_sent"] += fcm_sent
+            DAILY_REMINDER_SENT.labels(channel="fcm").inc(fcm_sent)
+
+        # ---- 2. VAPID Web Push (PWA) + Fallback SMS automatique -----------
+        # `push_notify` envoie aux subscriptions VAPID actives ET tombe en
+        # fallback SMS si AUCUN push n'aboutit (sent==0). Comportement déjà
+        # implémenté dans apps.companion.push.
+        push_url = f"/voyageur/suivi?id={traveler.public_id}"
+        vapid_result = push_notify(
+            traveler=traveler,
+            title=title,
+            body=body,
+            url=push_url,
+            tag="daily-checkin",
+            notification_type="daily_checkin",
+            extra=data_payload,
+            # On laisse `fallback_to_sms=True` par défaut — mais SI le FCM
+            # mobile a déjà abouti, on n'a plus besoin du SMS.
+            fallback_to_sms=(fcm_sent == 0),
+            fallback_to_whatsapp=False,
+        )
+        if vapid_result["sent"] > 0:
+            stats["vapid_sent"] += vapid_result["sent"]
+            DAILY_REMINDER_SENT.labels(channel="vapid").inc(vapid_result["sent"])
+        if vapid_result.get("sms_sent", 0):
+            stats["sms_sent"] += vapid_result["sms_sent"]
+            DAILY_REMINDER_SENT.labels(channel="sms").inc(vapid_result["sms_sent"])
+        if vapid_result.get("whatsapp_sent", 0):
+            stats["whatsapp_sent"] += vapid_result["whatsapp_sent"]
+            DAILY_REMINDER_SENT.labels(channel="whatsapp").inc(vapid_result["whatsapp_sent"])
+
+        # ---- Log structuré, sans PII ---------------------------------------
+        any_sent = (
+            fcm_sent
+            + vapid_result.get("sent", 0)
+            + vapid_result.get("sms_sent", 0)
+        )
+        if any_sent == 0:
+            DAILY_REMINDER_SENT.labels(channel="none").inc()
+        logger.info(
+            "daily_reminder %s day=%s/%s fcm=%s vapid=%s sms=%s phone_masked=%s",
+            _traveler_tag(traveler),
+            day_index, total,
+            fcm_sent, vapid_result.get("sent", 0), vapid_result.get("sms_sent", 0),
+            _mask_phone(traveler.phone_mobile),
+        )
+
+    logger.info("send_daily_checkin_reminders summary: %s", stats)
+    return stats
+
+
+# ----------------------------------------------------------------------------
+# Alias rétro-compatible — l'ancien nom `send_daily_followup_reminders` est
+# toujours référencé par d'éventuelles PeriodicTask en DB. On garde le nom
+# enregistré pour ne pas casser les schedules existants.
+# ----------------------------------------------------------------------------
 
 
 @shared_task(
@@ -33,42 +350,13 @@ logger = logging.getLogger(__name__)
     autoretry_for=(Exception,), retry_backoff=True, max_retries=3,
 )
 def send_daily_followup_reminders(self) -> dict[str, int]:
-    """Envoie un rappel push à chaque voyageur en suivi actif."""
-    from apps.quarantine.models import QuarantineRecord, QuarantineStatus
+    """Alias historique → délègue à `send_daily_checkin_reminders`.
 
-    stats = {"travelers": 0, "push_sent": 0, "push_failed": 0, "skipped_no_consent": 0}
-
-    active_qs = QuarantineRecord.objects.filter(
-        status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
-    ).select_related("traveler")
-
-    for q in active_qs:
-        traveler = q.traveler
-        stats["travelers"] += 1
-        if not has_consent(traveler, ConsentScope.PUSH_NOTIFICATIONS):
-            stats["skipped_no_consent"] += 1
-            continue
-
-        day_index = max(0, (date.today() - q.started_on).days)
-        total = (q.expected_end_on - q.started_on).days
-        body = (
-            "Bonjour, nous espérons que vous allez bien. Merci de prendre quelques "
-            "secondes pour confirmer votre état de santé aujourd'hui."
-        )
-        result = push_notify(
-            traveler=traveler,
-            title=f"Comment vous sentez-vous aujourd'hui ?",
-            body=body,
-            url=f"/voyageur/suivi?id={traveler.public_id}",
-            tag="daily-followup",
-            notification_type="daily_reminder",
-            extra={"day": day_index, "total": total},
-        )
-        stats["push_sent"] += result["sent"]
-        stats["push_failed"] += result["failed"] + result["gone"]
-
-    logger.info("send_daily_followup_reminders: %s", stats)
-    return stats
+    Conservé pour ne pas invalider les PeriodicTask en base avec l'ancien
+    nom. Tout nouveau schedule doit pointer sur
+    `companion.send_daily_checkin_reminders`.
+    """
+    return send_daily_checkin_reminders.run()
 
 
 # ============================================================================

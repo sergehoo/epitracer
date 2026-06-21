@@ -23,10 +23,15 @@ app.autodiscover_tasks()
 # Fuseau : Africa/Abidjan (= UTC) — voir DJANGO_TIME_ZONE.
 # ----------------------------------------------------------------------------
 app.conf.beat_schedule = {
-    # Rappel quotidien à 08:00 heure locale Abidjan (= 08:00 UTC).
-    "companion-daily-followup-reminders": {
-        "task": "companion.send_daily_followup_reminders",
+    # Rappel quotidien check-in à 08:00 heure locale Abidjan (= 08:00 UTC).
+    # NB : ce job remplace l'ancien `send_daily_followup_reminders`, qui
+    # subsiste comme alias pour ne pas casser les anciennes PeriodicTask
+    # en base. Tous les nouveaux déploiements pointent sur le nom
+    # `send_daily_checkin_reminders`.
+    "companion-daily-checkin": {
+        "task": "companion.send_daily_checkin_reminders",
         "schedule": crontab(hour=8, minute=0),
+        "options": {"queue": "notifications"},
     },
     # Détection des check-ins manqués toutes les 6 heures (à xx:15 pour
     # éviter le congestion à l'heure pile).

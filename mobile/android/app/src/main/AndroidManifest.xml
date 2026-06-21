@@ -53,15 +53,42 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-    <!-- Required to query activities that can process text, see:
-         https://developer.android.com/training/package-visibility and
-         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+    <!-- Package visibility — Android 11+ : sans ces déclarations, canLaunchUrl
+         retourne false pour les URLs https, tel:, mailto:, etc. (même quand
+         un navigateur ou client est installé). Conséquence côté app : les
+         boutons "M'enregistrer", "Appeler 143", "Envoyer un email" semblent
+         cassés alors qu'ils sont simplement bloqués par la visibilité.
 
-         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+         Doc : https://developer.android.com/training/package-visibility -->
     <queries>
+        <!-- Process text (édition Flutter) -->
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Navigateur web : https://staging.destinationci.com/voyageur etc. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
+        <!-- Appels téléphoniques : tel:143, tel:185 -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
+        <!-- Email : mailto:info@destinationci.com -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
+        </intent>
+        <!-- SMS (au cas où, pour les liens "envoyer SMS") -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="smsto"/>
         </intent>
     </queries>
 </manifest>

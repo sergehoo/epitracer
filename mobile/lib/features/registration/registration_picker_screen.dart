@@ -10,29 +10,43 @@ import '../../shared/widgets/glass_card.dart';
 import 'registration_repository.dart';
 
 /// Écran d'enregistrement voyageur : liste les formulaires d'enquête
-/// actifs (Ebola, etc.) et redirige vers le portail web pour remplissage.
-/// Une fois le formulaire complété en ligne, le voyageur revient à l'app
-/// et se connecte via OTP SMS.
+/// actifs (Ebola, etc.).
+///
+/// Phase 8B — au clic sur un formulaire, on lance le runner Flutter natif
+/// (`/registration/run/:code`) au lieu d'ouvrir le portail web externe.
+/// L'option "Ouvrir dans le navigateur" reste dispo en fallback discret
+/// au bas de chaque carte au cas où le runner natif aurait un bug.
 class RegistrationPickerScreen extends ConsumerWidget {
   const RegistrationPickerScreen({super.key});
 
-  Future<void> _openWebForm(BuildContext context, String url) async {
+  void _openNativeRunner(BuildContext context, RegistrationForm form) {
+    // Si pas de code utilisable → fallback ebola par défaut. Le backend a
+    // un schéma de secours qui répondra toujours.
+    final code = form.code.isEmpty || form.code == 'default'
+        ? 'ebola_inhp_v1'
+        : form.code;
+    context.go('/registration/run/$code');
+  }
+
+  Future<void> _openWebFallback(BuildContext context, String url) async {
+    if (url.isEmpty) return;
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!context.mounted) return;
-      // Affiche une notice expliquant l'étape suivante
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Une fois le formulaire validé, revenez ici et connectez-vous avec votre téléphone.'),
-          duration: Duration(seconds: 5),
-        ),
-      );
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Impossible d\'ouvrir : $url')),
-      );
+    try {
+      final ok =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) throw 'launchUrl returned false';
+    } catch (_) {
+      try {
+        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Impossible d\'ouvrir le navigateur. Adresse : $url'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
@@ -130,7 +144,8 @@ class RegistrationPickerScreen extends ConsumerWidget {
                   for (final f in forms) ...[
                     _FormCard(
                       form: f,
-                      onTap: () => _openWebForm(context, f.webUrl),
+                      onTap: () => _openNativeRunner(context, f),
+                      onWebFallback: () => _openWebFallback(context, f.webUrl),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -175,9 +190,14 @@ class RegistrationPickerScreen extends ConsumerWidget {
 }
 
 class _FormCard extends StatelessWidget {
-  const _FormCard({required this.form, required this.onTap});
+  const _FormCard({
+    required this.form,
+    required this.onTap,
+    required this.onWebFallback,
+  });
   final RegistrationForm form;
   final VoidCallback onTap;
+  final VoidCallback onWebFallback;
 
   Color _color() {
     final code = (form.diseaseCode ?? '').toLowerCase();
@@ -286,21 +306,44 @@ class _FormCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.open_in_new,
-                  size: 14, color: AppColors.slate500),
+              const Icon(Icons.phone_iphone,
+                  size: 14, color: AppColors.ciGreen),
               const SizedBox(width: 6),
               const Expanded(
                 child: Text(
-                  'S\'ouvre dans votre navigateur',
+                  'Remplir directement dans l\'application',
                   style: TextStyle(
-                    color: AppColors.slate500,
+                    color: AppColors.ciGreen,
                     fontSize: 11,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
               Icon(Icons.arrow_forward, size: 18, color: color),
             ],
           ),
+          // Fallback discret : ouvrir dans le navigateur en cas de bug runner
+          if (form.webUrl.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: onWebFallback,
+                icon: const Icon(Icons.open_in_new, size: 12),
+                label: const Text(
+                  'Ouvrir dans le navigateur',
+                  style: TextStyle(fontSize: 10),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.slate500,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 4, vertical: 0),
+                  minimumSize: const Size(0, 24),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -332,9 +375,9 @@ class _StepsExplainer extends StatelessWidget {
           ),
           SizedBox(height: 10),
           _Step(num: '1', text: 'Choisissez le formulaire correspondant à votre cas'),
-          _Step(num: '2', text: 'Remplissez le formulaire en ligne (sécurisé HTTPS)'),
-          _Step(num: '3', text: 'Recevez votre pass sanitaire par email + SMS'),
-          _Step(num: '4', text: 'Revenez ici, connectez-vous avec votre téléphone'),
+          _Step(num: '2', text: 'Remplissez directement dans l\'application (mode hors ligne possible)'),
+          _Step(num: '3', text: 'Recevez votre pass sanitaire instantanément'),
+          _Step(num: '4', text: 'Conservez votre QR dans l\'app et présentez-le à l\'arrivée'),
         ],
       ),
     );

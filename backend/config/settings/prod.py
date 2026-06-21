@@ -22,6 +22,14 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SESSION_COOKIE_SAMESITE = "Strict"
 
+# ---------------------------------------------------------------------------
+# CSP — en prod : ENFORCE (pas report-only) par défaut. On garde report-uri
+# en option pour collecter les violations résiduelles dans Sentry / endpoint
+# custom. Override via env CSP_REPORT_ONLY=true permet un rollback à chaud
+# sans redéploiement.
+# ---------------------------------------------------------------------------
+CSP_REPORT_ONLY = env.bool("CSP_REPORT_ONLY", default=False)
+
 # Sentry
 SENTRY_DSN = env("SENTRY_DSN", default="")
 if SENTRY_DSN:

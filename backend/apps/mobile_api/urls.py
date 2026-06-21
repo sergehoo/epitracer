@@ -32,7 +32,11 @@ from .views import (
     MobileQrImportView, MobileVaccinationsViewSet,
 )
 from .voyageur_auth import VoyageurRequestOtpView, VoyageurVerifyOtpView
-from .registration import ActiveFormsListView
+from .registration import (
+    ActiveFormsListView,
+    MobileFormSchemaView,
+    MobileFormSubmissionView,
+)
 
 router = DefaultRouter()
 router.register("passes", MobilePassesViewSet, basename="mobile-pass")
@@ -53,6 +57,14 @@ urlpatterns = [
     # ── Enregistrement voyageur (liste formulaires actifs, public) ────
     path("registration/forms/",
          ActiveFormsListView.as_view(), name="mobile-registration-forms"),
+
+    # ── Phase 8B — Schéma complet + soumission native mobile ─────────
+    # GET  /api/mobile/forms/<code>/schema/        → DynamicFormSerializer
+    # POST /api/mobile/forms/<code>/submissions/   → délivre traveler+pass
+    path("forms/<slug:code>/schema/",
+         MobileFormSchemaView.as_view(), name="mobile-form-schema"),
+    path("forms/<slug:code>/submissions/",
+         MobileFormSubmissionView.as_view(), name="mobile-form-submission"),
 
     # ── Profil ────────────────────────────────────────────────────────
     path("profile/", MobileProfileView.as_view(), name="mobile-profile"),

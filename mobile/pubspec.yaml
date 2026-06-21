@@ -54,6 +54,9 @@ dependencies:
   url_launcher: ^6.3.1
   share_plus: ^13.1.0
 
+  # ── Form runner Phase 8B ─────────────────────────────────────────
+  signature: ^5.4.0   # pad de signature manuscrite pour DynamicForm
+
   # ── Push notifications ───────────────────────────────────────────
   firebase_core: ^4.10.0
   firebase_messaging: ^16.3.0

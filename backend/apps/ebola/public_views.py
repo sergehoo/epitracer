@@ -29,6 +29,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.audit.services import audit
+from apps.core.validators import validate_uploaded_file
 from apps.diseases.models import Disease
 from apps.geo.models import Country, EntryPoint
 from apps.health_pass.models import HealthPass
@@ -114,7 +115,10 @@ class PublicTravelerRegisterView(APIView):
 
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "anon"
+    # task #213 — scope dédié 5/min/IP (cf. settings DEFAULT_THROTTLE_RATES).
+    # On bascule de "anon" (60/min) vers "public_registration" pour resserrer
+    # l'angle d'attaque sur cet endpoint très exposé (formulaire grand public).
+    throttle_scope = "public_registration"
 
     @extend_schema(
         request=PublicTravelerSubmissionSerializer,
@@ -474,6 +478,9 @@ class PublicPassportUploadView(APIView):
 
     permission_classes = [AllowAny]
     parser_classes = []  # injectés explicitement ci-dessous
+    # task #213 — endpoint exposé, on cap à 5/min/IP comme le register.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "public_registration"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -482,30 +489,49 @@ class PublicPassportUploadView(APIView):
 
     @extend_schema(
         summary="Joindre une copie du passeport / document de voyage",
-        description="Champ : `passport_document` (PDF/JPG/PNG, 8 Mo max).",
-        responses={200: OpenApiResponse(description="Document enregistré.")},
+        description=(
+            "Champ : `passport_document` (PDF/JPG/PNG/WebP). "
+            "Taille max : `settings.MAX_UPLOAD_SIZE_MB` (5 Mo par défaut). "
+            "Validation par magic bytes — un fichier renommé sera rejeté."
+        ),
+        responses={
+            200: OpenApiResponse(description="Document enregistré."),
+            400: OpenApiResponse(description="Fichier absent ou format non supporté."),
+        },
     )
     def post(self, request, public_id: str):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
         traveler = get_object_or_404(Traveler, public_id=public_id)
         file = request.FILES.get("passport_document")
         if file is None:
-            return Response({"detail": "Aucun fichier transmis (champ 'passport_document')."}, status=400)
-        # Validation basique
-        max_bytes = 8 * 1024 * 1024
-        if file.size > max_bytes:
-            return Response({"detail": "Fichier trop volumineux (max 8 Mo)."}, status=413)
-        allowed_ct = ("application/pdf", "image/jpeg", "image/png")
-        if file.content_type not in allowed_ct:
             return Response(
-                {"detail": "Format invalide. Acceptés : PDF, JPG, PNG."},
-                status=415,
+                {"detail": "Aucun fichier transmis (champ 'passport_document')."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # task #213 — Magic bytes + taille + MIME via validator centralisé.
+        # Renvoie un 400 explicite si le fichier est un .exe renommé ou un
+        # texte clair, même si le client a fourni un Content-Type valide.
+        try:
+            detected_mime = validate_uploaded_file(file)
+        except DjangoValidationError as exc:
+            # Aucun PII dans le message (le validator évite déjà de logger le nom).
+            detail = (
+                exc.messages[0] if getattr(exc, "messages", None)
+                else "Format de fichier non supporté."
+            )
+            return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
+
         traveler.passport_document = file
         traveler.passport_uploaded_at = timezone.now()
         traveler.save(update_fields=["passport_document", "passport_uploaded_at"])
         audit(request, action="update",
               summary=f"Upload passeport public {traveler.public_id}",
-              target=traveler, payload={"size": file.size, "ct": file.content_type})
+              target=traveler,
+              # On audite la taille + le MIME effectivement détecté (PAS le
+              # Content-Type déclaré, qui peut être falsifié).
+              payload={"size": file.size, "detected_mime": detected_mime})
         return Response({
             "detail": "Document de voyage enregistré.",
             "public_id": traveler.public_id,

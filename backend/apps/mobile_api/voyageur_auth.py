@@ -24,6 +24,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -66,10 +67,17 @@ def _find_traveler(passport_number: str | None, phone: str | None) -> Traveler |
 
 
 class VoyageurRequestOtpView(APIView):
-    """Génère un code OTP, l'envoie par SMS au voyageur identifié."""
+    """Génère un code OTP, l'envoie par SMS au voyageur identifié.
+
+    task #213 : protégé par ScopedRateThrottle ``mobile_otp_request`` (3/min/IP)
+    + cooldown applicatif par phone (max 5/heure) — empêche le spam SMS même
+    si l'attaquant change d'IP.
+    """
 
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "mobile_otp_request"
 
     def post(self, request):
         passport = request.data.get("passport_number") or ""
@@ -93,13 +101,33 @@ class VoyageurRequestOtpView(APIView):
                 status=status.HTTP_200_OK,
             )
 
+        # task #213 — cooldown applicatif par phone : max 5/heure même si
+        # l'attaquant tourne d'IP. Stocké en cache Redis (sliding window).
+        from django.core.cache import cache
+
+        phone_quota_key = f"voyageur_otp_quota:{traveler.phone_e164}"
+        phone_count = cache.get(phone_quota_key, 0)
+        if phone_count >= 5:
+            logger.warning(
+                "Voyageur OTP quota hit for phone=%s ip=%s",
+                _mask_phone(traveler.phone_e164),
+                request.META.get("REMOTE_ADDR", "?"),
+            )
+            return Response(
+                {
+                    "ok": True,  # neutralité anti-énumération
+                    "phone_masked": _mask_phone(traveler.phone_e164),
+                    "message": "Si vous êtes enregistré, un code SMS vient d'être envoyé.",
+                },
+                status=status.HTTP_200_OK,
+            )
+        cache.set(phone_quota_key, phone_count + 1, timeout=3600)
+
         code = _generate_otp()
         otp_hash = _hash_otp(code)
         cache_key = f"voyageur_otp:{traveler.pk}"
 
         # Stocker le hash + nb tentatives en cache (Redis)
-        from django.core.cache import cache
-
         cache.set(
             cache_key,
             {"hash": otp_hash, "attempts": 0, "phone": traveler.phone_e164},
@@ -143,10 +171,14 @@ class VoyageurVerifyOtpView(APIView):
     Le couple JWT est lié à un User "shadow" créé automatiquement pour le
     Traveler (username = traveler:<id>) pour profiter de l'infrastructure
     SimpleJWT existante, mais sans droits admin.
+
+    task #213 : rate-limité comme un login (``mobile_login`` = 10/min/IP).
     """
 
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "mobile_login"
 
     def post(self, request):
         passport = request.data.get("passport_number") or ""
@@ -208,6 +240,7 @@ class VoyageurVerifyOtpView(APIView):
                 "refresh": str(refresh),
                 "traveler": {
                     "id": traveler.pk,
+                    "public_id": traveler.public_id,
                     "full_name": f"{traveler.first_name} {traveler.last_name}".strip(),
                     "phone_masked": _mask_phone(traveler.phone_e164),
                     "passport_number": traveler.passport_number,

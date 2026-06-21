@@ -76,6 +76,10 @@ THIRD_PARTY_APPS = [
     "django_otp.plugins.otp_totp",
     "guardian",
     "simple_history",
+    # CSP — middleware + nonce. Activé en prod via prod.py (CSP_*).
+    # Doit rester avant LOCAL_APPS pour que les tags template soient
+    # disponibles dans nos templates Django.
+    "csp",
 ]
 
 LOCAL_APPS = [
@@ -112,6 +116,10 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # CSP — injecte le header Content-Security-Policy (et le report-only en
+    # bascule) à partir des settings CSP_*. Placé juste après SecurityMiddleware
+    # pour bénéficier du nonce dans tous les templates Django downstream.
+    "csp.middleware.CSPMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.locale.LocaleMiddleware",
@@ -210,6 +218,33 @@ MEDIA_ROOT = BASE_DIR / "media"
 FILE_UPLOAD_PERMISSIONS = 0o644
 
 # ---------------------------------------------------------------------------
+# Validation des uploads publics (task #213 — sécurité P0)
+# Utilisée par apps.core.validators.validate_uploaded_file qui vérifie :
+#   - taille max
+#   - MIME déclaré (Content-Type côté client — non-fiable mais on rejette
+#     les Content-Type non whitelistés en premier filtre)
+#   - magic bytes (en-tête réel du fichier — non triché côté client)
+# ---------------------------------------------------------------------------
+MAX_UPLOAD_SIZE_MB = env.int("MAX_UPLOAD_SIZE_MB", default=5)
+ALLOWED_UPLOAD_MIMES = env.list(
+    "ALLOWED_UPLOAD_MIMES",
+    default=[
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "application/pdf",
+    ],
+)
+# Limite globale Django sur le corps multipart (sécurité défense-en-profondeur).
+# 8 Mo : laisse une marge au MAX_UPLOAD_SIZE_MB + champs texte du formulaire.
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int(
+    "DATA_UPLOAD_MAX_MEMORY_SIZE", default=8 * 1024 * 1024,
+)
+FILE_UPLOAD_MAX_MEMORY_SIZE = env.int(
+    "FILE_UPLOAD_MAX_MEMORY_SIZE", default=8 * 1024 * 1024,
+)
+
+# ---------------------------------------------------------------------------
 # DRF
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
@@ -254,6 +289,21 @@ REST_FRAMEWORK = {
         "mfa_resend": "6/min",
         # Password reset public — anti-énumération + anti-spam
         "password_reset": "5/hour",
+        # ── Sécurité P0 (task #213) — endpoints très exposés ─────────────
+        # Formulaire voyageur public (PublicTravelerRegisterView).
+        # 5/min IP suffit pour un usage légitime (un voyageur = 1 soumission).
+        "public_registration": "5/min",
+        # Consultation publique d'un pass par public_id (anti-énumération).
+        # Duplique qr_verify_public pour clarté sémantique côté views.
+        "public_pass_consult": "20/min",
+        # Mobile — demande OTP voyageur (apps.mobile_api.voyageur_auth).
+        # 3/min IP + cooldown applicatif côté phone (cache Redis).
+        "mobile_otp_request": "3/min",
+        # Mobile — login agents (alias EpidemiTokenObtainPair).
+        "mobile_login": "10/min",
+        # Mobile — Phase 8B : récupération du schéma DynamicForm.
+        # 20/min/IP suffit largement pour un client mobile (1 fetch + drafts).
+        "mobile_form_schema": "20/min",
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_RENDERER_CLASSES": (
@@ -466,6 +516,120 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# ---------------------------------------------------------------------------
+# Content-Security-Policy (django-csp) — task #213
+#
+# Mode par défaut : REPORT-ONLY (en dev / staging). Permet de mesurer les
+# violations sans casser la PWA, l'admin Next.js ou les pages Django avant
+# de passer en mode "enforce" via prod.py.
+#
+# Stratégie :
+#   - default-src 'self'
+#   - script-src  'self' + nonce (généré par le middleware csp)
+#   - style-src   'self' 'unsafe-inline'  (Tailwind / Next.js inline)
+#                 + https://fonts.googleapis.com
+#   - img-src     'self' data: https:
+#   - font-src    'self' https://fonts.gstatic.com data:
+#   - connect-src 'self' wss: https://api.veillesanitaire.com
+#                 https://api-staging.veillesanitaire.com
+#   - frame-ancestors 'none'    (anti-clickjacking, > X-Frame-Options DENY)
+#   - report-uri  (optionnel, configurable via env)
+#
+# Le frontend Next.js applique sa propre CSP via headers Traefik côté SSR ;
+# cette config s'applique aux réponses Django (admin, swagger, healthcheck,
+# media servi en debug).
+# ---------------------------------------------------------------------------
+CSP_REPORT_ONLY = env.bool("CSP_REPORT_ONLY", default=True)
+
+CSP_DEFAULT_SRC = ("'self'",)
+
+# 'self' + nonce(via templatetag {% csp_nonce %}). 'unsafe-inline' RESTE
+# nécessaire pour l'admin Django (script inline) ET Next.js qui inline du
+# JS au build (chunks runtime). Une fois le portail Next.js entièrement
+# migré en CSP3 strict-dynamic on pourra retirer 'unsafe-inline'.
+CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'")
+CSP_INCLUDE_NONCE_IN = ("script-src",)
+
+# Tailwind + admin Django + Swagger + Google Fonts (utilisés par les PDFs
+# Reportlab embarqués mais pas dans le navigateur — gardé par sécurité).
+CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://fonts.googleapis.com")
+CSP_FONT_SRC = ("'self'", "https://fonts.gstatic.com", "data:")
+
+# Images : QR codes générés en data: + media servi sur /media/.
+CSP_IMG_SRC = ("'self'", "data:", "blob:", "https:")
+
+# Connect : appels XHR/fetch + WebSocket Channels (api.veillesanitaire.com/ws/).
+CSP_CONNECT_SRC = env.list(
+    "CSP_CONNECT_SRC",
+    default=[
+        "'self'",
+        "https://api.veillesanitaire.com",
+        "https://api-staging.veillesanitaire.com",
+        "https://admin.veillesanitaire.com",
+        "https://destinationci.com",
+        "wss://api.veillesanitaire.com",
+        "wss://api-staging.veillesanitaire.com",
+    ],
+)
+
+# Anti-clickjacking : aucun parent autorisé (plus strict que X-Frame-Options
+# DENY déjà en place — frame-ancestors prime sur XFO en CSP Level 2).
+CSP_FRAME_ANCESTORS = ("'none'",)
+CSP_BASE_URI = ("'self'",)
+CSP_FORM_ACTION = ("'self'",)
+CSP_OBJECT_SRC = ("'none'",)
+
+# Sources média (audio/video) — pas utilisé pour l'instant mais on bloque
+# explicitement.
+CSP_MEDIA_SRC = ("'self'", "blob:", "data:")
+
+# Worker (service worker PWA, side-loaded sous /voyageur/).
+CSP_WORKER_SRC = ("'self'", "blob:")
+
+# Endpoint de report optionnel — Django logge les violations.
+CSP_REPORT_URI = env("CSP_REPORT_URI", default="")
+# Active la directive seulement si un endpoint est configuré.
+if not CSP_REPORT_URI:
+    CSP_REPORT_URI = None
+
+# Exempter les endpoints suivants (collectstatic + media + healthchecks)
+# de l'en-tête CSP — sinon on pollue les logs pour rien.
+CSP_EXCLUDE_URL_PREFIXES = (
+    "/static/",
+    "/media/",
+    "/healthz",
+    "/metrics",
+)
+
+# ---------------------------------------------------------------------------
+# Chiffrement at-rest des PII (task #213 — chantier 4)
+#
+# Repose sur django-cryptography (Fernet) avec rotation via FERNET_KEYS.
+# La première clé sert au chiffrement ; toutes les clés sont essayées
+# en déchiffrement (rotation transparente : on AJOUTE la nouvelle clé en
+# tête, on garde l'ancienne pendant la migration, puis on retire l'ancienne
+# une fois `rotate_fernet` exécuté.
+#
+# IMPORTANT : la liste est lue depuis DJANGO_FERNET_KEYS au format
+#   "key1,key2,..." (clés base64 url-safe 32 bytes).
+# Générer une clé via :
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#
+# Si aucune clé n'est fournie, on retombe sur SECRET_KEY (dev/staging only —
+# en prod c'est une erreur de config et `manage.py check --deploy` doit
+# le signaler).
+# ---------------------------------------------------------------------------
+_fernet_keys_raw = env("DJANGO_FERNET_KEYS", default="")
+if _fernet_keys_raw:
+    FERNET_KEYS = [k.strip() for k in _fernet_keys_raw.split(",") if k.strip()]
+else:
+    # Fallback dev/test — DOIT être remplacé en prod via env.
+    FERNET_KEYS = [SECRET_KEY]
+# Désactive l'avertissement django-cryptography quand on utilise SECRET_KEY.
+CRYPTOGRAPHY_KEY = None  # délégué à FERNET_KEYS
+CRYPTOGRAPHY_DIGEST = "sha256"
+CRYPTOGRAPHY_SALT = env("DJANGO_CRYPTOGRAPHY_SALT", default="epitrace.cryptography")
 
 # ---------------------------------------------------------------------------
 # Health Pass / QR cryptographic signing

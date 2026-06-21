@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   FormInput, Plus, Search, Copy, Edit, Trash2, Eye, CheckCircle, XCircle,
-  Layers, FileCheck,
+  Layers, FileCheck, Star, StarOff, BarChart3,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
 
@@ -29,6 +29,7 @@ interface DForm {
   version: number;
   is_active: boolean;
   is_default: boolean;
+  submissions_count?: number;
   sections?: { id: number; fields_list?: { id: number }[] }[];
 }
 
@@ -92,6 +93,21 @@ export default function FormulairesPage() {
     try {
       await api.patch(`/forms/definitions/${f.id}/`, { is_active: !f.is_active });
       toast.success(f.is_active ? 'Formulaire désactivé' : 'Formulaire activé');
+      load();
+    } catch (e) {
+      toast.error(extractApiError(e));
+    }
+  };
+
+  const toggleDefault = async (f: DForm) => {
+    try {
+      // Si on définit ce form comme défaut, on retire le flag des autres
+      // de la même maladie côté backend via PATCH (on laisse le backend
+      // appliquer l'unicité s'il y a une contrainte ; sinon on fait deux
+      // appels). Pour rester simple ici, on PATCH juste celui-ci en true et
+      // on rafraîchit — le serializer/clean assure la cohérence.
+      await api.patch(`/forms/definitions/${f.id}/`, { is_default: !f.is_default });
+      toast.success(f.is_default ? 'Formulaire retiré des défauts' : 'Formulaire défini par défaut');
       load();
     } catch (e) {
       toast.error(extractApiError(e));
@@ -256,6 +272,12 @@ export default function FormulairesPage() {
                     {f.is_default && <span className="badge-low">Par défaut</span>}
                     <span className="badge-low">{nSections} section{nSections > 1 ? 's' : ''}</span>
                     <span className="badge-low">{nFields} champ{nFields > 1 ? 's' : ''}</span>
+                    {typeof f.submissions_count === 'number' && (
+                      <span className="badge-low inline-flex items-center gap-1">
+                        <BarChart3 className="h-3 w-3" />
+                        {f.submissions_count} soumission{f.submissions_count > 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -275,6 +297,15 @@ export default function FormulairesPage() {
                   className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                 >
                   <Copy className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => toggleDefault(f)}
+                  title={f.is_default ? 'Retirer des formulaires par défaut' : 'Définir comme formulaire par défaut'}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  {f.is_default
+                    ? <Star className="h-4 w-4 text-amber-500 fill-amber-400" />
+                    : <StarOff className="h-4 w-4" />}
                 </button>
                 <button
                   onClick={() => toggleActive(f)}

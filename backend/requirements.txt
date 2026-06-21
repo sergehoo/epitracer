@@ -26,6 +26,13 @@ drf-spectacular-sidecar==2024.7.1
 django-guardian==2.4.0
 django-simple-history==3.7.0
 
+# --- Sécurité P0 (task #213) ---
+# Content-Security-Policy via middleware + nonce sur templates Django
+django-csp==3.8
+# Détection magic bytes pour validation uploads (passeports voyageurs).
+# Fallback pur-Python prévu dans apps.core.validators si libmagic absent.
+python-magic==0.4.27
+
 # --- Async / Realtime ---
 channels==4.1.0
 channels-redis==4.2.0
