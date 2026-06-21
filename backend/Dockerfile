@@ -58,6 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdal32 \
     libgeos-c1v5 \
     libproj25 \
+    libmagic1 \
     curl \
     tini \
     && rm -rf /var/lib/apt/lists/* \
