@@ -78,11 +78,15 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 class SendNotificationSerializer(serializers.Serializer):
     """Payload pour POST /api/v1/notifications/send/"""
-    channel = serializers.ChoiceField(choices=["sms", "whatsapp"])
+    # 'email' ajouté pour permettre l'envoi par mail depuis l'admin
+    # (utilise EmailRouter côté provider — PUBLIC SES pour les voyageurs).
+    channel = serializers.ChoiceField(choices=["sms", "whatsapp", "email"])
     traveler = serializers.IntegerField(required=False, allow_null=True)
     recipient = serializers.CharField(required=False, allow_blank=True)
     template_code = serializers.CharField(required=False, allow_blank=True)
     body = serializers.CharField(required=False, allow_blank=True)
+    # subject : recommandé quand channel='email' (objet du mail).
+    subject = serializers.CharField(required=False, allow_blank=True, max_length=200)
     context = serializers.JSONField(required=False)
 
     def validate(self, data):
@@ -94,6 +98,13 @@ class SendNotificationSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Fournir au moins un recipient OU un traveler."
             )
+        # Pour email : valider grossièrement le format
+        if data.get("channel") == "email" and data.get("recipient"):
+            r = data["recipient"].strip()
+            if "@" not in r or "." not in r.split("@")[-1]:
+                raise serializers.ValidationError(
+                    {"recipient": "Adresse email invalide."}
+                )
         return data
 
 

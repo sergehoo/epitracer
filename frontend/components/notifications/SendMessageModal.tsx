@@ -25,7 +25,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  Send, X, MessageCircle, Smartphone, FileText, Pencil,
+  Send, X, MessageCircle, Smartphone, FileText, Pencil, Mail,
   Loader2, Check, AlertCircle, Wifi, WifiOff, ChevronRight,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
@@ -58,9 +58,13 @@ export interface SendMessageTarget {
   traveler_name?: string;
   /** N° de téléphone pré-rempli (whatsapp_phone ou phone_mobile) */
   phone?: string;
+  /** Email pré-rempli (si on veut router le message par email) */
+  email?: string;
   /** Données pour le contexte template ({first_name}) */
   first_name?: string;
 }
+
+type ChannelKey = 'sms' | 'whatsapp' | 'email';
 
 interface Props {
   target: SendMessageTarget;
@@ -69,9 +73,10 @@ interface Props {
   onSent?: (notificationId: number) => void;
 }
 
-const CHANNELS = [
+const CHANNELS: { value: ChannelKey; label: string; icon: JSX.Element }[] = [
   { value: 'sms', label: 'SMS', icon: <Smartphone className="h-4 w-4" /> },
   { value: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
+  { value: 'email', label: 'Email', icon: <Mail className="h-4 w-4" /> },
 ];
 
 const PROVIDER_LABEL: Record<string, { label: string; color: string }> = {
@@ -82,15 +87,19 @@ const PROVIDER_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 export function SendMessageModal({ target, open, onClose, onSent }: Props) {
-  const [channel, setChannel] = useState<'sms' | 'whatsapp'>('sms');
+  const [channel, setChannel] = useState<ChannelKey>('sms');
   const [mode, setMode] = useState<'free' | 'template'>('template');
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
   const [selectedTpl, setSelectedTpl] = useState<NotificationTemplate | null>(null);
   const [body, setBody] = useState('');
+  const [subject, setSubject] = useState('');
+  // `phone` est en fait le destinataire générique (téléphone OU email selon canal)
   const [phone, setPhone] = useState(target.phone || '');
   const [routing, setRouting] = useState<RoutingPreview | null>(null);
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+
+  const isEmail = channel === 'email';
 
   // Charge les templates au mount
   useEffect(() => {
@@ -104,6 +113,7 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
   useEffect(() => {
     if (open) {
       setPhone(target.phone || '');
+      setSubject('');
       setBody('');
       setSelectedTpl(null);
       setMode('template');
@@ -113,9 +123,21 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
     }
   }, [open, target.phone]);
 
-  // Détection provider à chaque changement de téléphone ou canal
+  // Quand on switche de canal : adapter le destinataire pré-rempli
   useEffect(() => {
-    if (!phone || !open) return;
+    if (!open) return;
+    if (channel === 'email') {
+      setPhone(target.email || '');
+    } else {
+      setPhone(target.phone || '');
+    }
+    setRouting(null);
+    setRoutingError(null);
+  }, [channel, open, target.email, target.phone]);
+
+  // Détection provider — UNIQUEMENT pour SMS/WhatsApp (l'email a un sender imposé backend)
+  useEffect(() => {
+    if (isEmail || !phone || !open) return;
     const t = setTimeout(() => {
       api.post('/notifications/preview-routing/', { phone, channel })
         .then((r) => { setRouting(r.data); setRoutingError(null); })
@@ -125,7 +147,7 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
         });
     }, 300);
     return () => clearTimeout(t);
-  }, [phone, channel, open]);
+  }, [phone, channel, open, isEmail]);
 
   // Templates filtrés selon le canal
   const channelTemplates = useMemo(
@@ -153,7 +175,11 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
 
   const submit = async () => {
     if (!phone.trim()) {
-      toast.error('Numéro de téléphone requis.');
+      toast.error(isEmail ? 'Adresse email requise.' : 'Numéro de téléphone requis.');
+      return;
+    }
+    if (isEmail && (!phone.includes('@') || !phone.split('@')[1]?.includes('.'))) {
+      toast.error('Adresse email invalide.');
       return;
     }
     if (mode === 'free' && !body.trim()) {
@@ -164,6 +190,10 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
       toast.error('Sélectionnez un modèle ou choisissez « Message libre ».');
       return;
     }
+    if (isEmail && mode === 'free' && !subject.trim()) {
+      toast.error('Objet du mail requis pour un envoi email libre.');
+      return;
+    }
 
     setSending(true);
     try {
@@ -172,6 +202,7 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
         recipient: phone.trim(),
       };
       if (target.traveler_id) payload.traveler = target.traveler_id;
+      if (isEmail) payload.subject = subject.trim() || selectedTpl?.subject || '';
 
       if (mode === 'template' && selectedTpl) {
         payload.template_code = selectedTpl.code;
@@ -252,32 +283,64 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
             </div>
           </div>
 
-          {/* Téléphone */}
+          {/* Destinataire : téléphone OU email selon canal */}
           <div>
             <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
-              Numéro destinataire
+              {isEmail ? 'Adresse email destinataire' : 'Numéro destinataire'}
             </div>
             <input
-              type="tel"
+              type={isEmail ? 'email' : 'tel'}
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+225XXXXXXXXXX"
+              placeholder={isEmail ? 'voyageur@exemple.com' : '+225XXXXXXXXXX'}
               className="input-base font-mono"
+              autoComplete={isEmail ? 'email' : 'tel'}
             />
-            {/* Affichage provider auto-détecté */}
-            {routing && providerInfo && (
+            {/* Affichage provider auto-détecté (SMS/WhatsApp seulement) */}
+            {!isEmail && routing && providerInfo && (
               <div className={`mt-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold border ${providerInfo.color}`}>
                 <Wifi className="h-3 w-3" />
                 <span>Provider auto : <strong>{providerInfo.label}</strong></span>
                 <span className="text-[10px] font-mono opacity-70">{routing.normalized}</span>
               </div>
             )}
-            {routingError && (
+            {!isEmail && routingError && (
               <div className="mt-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                 <WifiOff className="h-3 w-3" /> {routingError}
               </div>
             )}
+            {isEmail && (
+              <div className="mt-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold border bg-sky-50 text-sky-700 border-sky-200">
+                <Mail className="h-3 w-3" />
+                Expéditeur PUBLIC <strong>Destination CI</strong> (imposé)
+              </div>
+            )}
           </div>
+
+          {/* Objet du mail — visible uniquement si canal=email */}
+          {isEmail && (
+            <div>
+              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                Objet du mail
+              </div>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder={
+                  selectedTpl?.subject
+                    || 'Ex. Information importante — INHP Côte d\'Ivoire'
+                }
+                maxLength={200}
+                className="input-base"
+              />
+              {selectedTpl?.subject && !subject && (
+                <div className="mt-1 text-[10px] text-slate-400">
+                  Vide → l'objet du modèle sera utilisé : <em>« {selectedTpl.subject} »</em>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Type message */}
           <div>
@@ -381,13 +444,14 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
               <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1 flex items-center justify-between">
                 <span>Aperçu du message</span>
                 <span className="font-mono text-[10px] text-slate-400">
-                  {charCount} caractères · {smsSegments} SMS
+                  {charCount} caractères
+                  {!isEmail && <> · {smsSegments} SMS</>}
                 </span>
               </div>
               <div className="rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 p-4 text-sm whitespace-pre-wrap leading-relaxed">
                 {previewBody}
               </div>
-              {smsSegments > 4 && (
+              {!isEmail && smsSegments > 4 && (
                 <div className="mt-2 inline-flex items-center gap-1 text-xs text-amber-700">
                   <AlertCircle className="h-3 w-3" /> Message long ({smsSegments} segments SMS) — coût accru.
                 </div>

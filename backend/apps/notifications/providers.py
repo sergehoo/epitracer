@@ -52,16 +52,40 @@ def send_sms(recipient: str, message: str) -> SendResult:
 # Email
 # ---------------------------------------------------------------------------
 def send_email(recipient: str, subject: str, body: str) -> SendResult:
+    """Envoi email via le système multi-expéditeur (EmailRouter).
+
+    Route automatiquement vers le bon SenderProfile :
+      - Voyageurs / public        → PUBLIC (SES destinationci.com)
+      - Agents / staff INHP       → INTERNAL (SMTP veillesanitaire.com)
+
+    Pour les notifications "manuelles" envoyées par un agent depuis l'admin
+    (modale SendMessageModal), le destinataire est par convention un voyageur
+    → on utilise HEALTH_NOTIFICATION qui mappe vers PUBLIC.
+
+    Le frontend ne choisit JAMAIS l'expéditeur — c'est imposé côté backend
+    par la règle métier figée dans email_models.PUBLIC_EMAIL_TYPES.
+    """
     try:
-        send_mail(
-            subject=subject or "EpidemiTracker",
-            message=body,
-            from_email=None,  # uses DEFAULT_FROM_EMAIL
-            recipient_list=[recipient],
-            fail_silently=False,
+        # Import retardé pour éviter cycles d'imports avec le module email
+        from .email_models import EmailType
+        from .services.email_router import send_email_by_type
+
+        result = send_email_by_type(
+            email_type=EmailType.HEALTH_NOTIFICATION,
+            recipient=recipient,
+            subject=subject or "Notification — EpiTrace / INHP",
+            body_text=body,
+            # Pas de template_code → on envoie en plain text avec layout par défaut
         )
-        return SendResult(ok=True, provider="email")
-    except Exception as exc:
+        if result.ok:
+            return SendResult(
+                ok=True,
+                provider="email",
+                provider_id=str(result.log_id or ""),
+            )
+        return SendResult(ok=False, provider="email", error=result.error)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("send_email failed for %s", recipient[:40])
         return SendResult(ok=False, provider="email", error=str(exc))
 
 

@@ -90,41 +90,52 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         data = serializer.validated_data
 
         traveler = None
+        channel = data["channel"]
         recipient = (data.get("recipient") or "").strip()
         if data.get("traveler"):
             traveler = Traveler.objects.filter(pk=data["traveler"]).first()
             if not traveler:
                 return Response({"detail": "Voyageur introuvable."}, status=404)
             if not recipient:
-                recipient = (
-                    getattr(traveler, "whatsapp_phone", "") or
-                    traveler.phone_mobile or
-                    getattr(traveler, "emergency_phone_ci", "") or ""
-                ).strip()
+                if channel == "email":
+                    # Pour l'email : utiliser l'adresse mail déclarée par le voyageur
+                    recipient = (getattr(traveler, "email", "") or "").strip()
+                else:
+                    recipient = (
+                        getattr(traveler, "whatsapp_phone", "") or
+                        traveler.phone_mobile or
+                        getattr(traveler, "emergency_phone_ci", "") or ""
+                    ).strip()
 
         if not recipient:
-            return Response({"detail": "Aucun numéro de destinataire disponible."}, status=400)
+            label = "adresse email" if channel == "email" else "numéro de destinataire"
+            return Response({"detail": f"Aucun {label} disponible."}, status=400)
 
-        # Pré-validation pour retour 400 propre
-        try:
-            NotificationProviderRouter.detect(recipient, channel=data["channel"])
-        except PhoneValidationError as exc:
-            return Response({"detail": str(exc)}, status=400)
+        # Pré-validation pour retour 400 propre — uniquement SMS/WhatsApp
+        # (les téléphones sont validés/normalisés). Pour email, la validation
+        # de format est déjà faite par le serializer.
+        if channel in ("sms", "whatsapp"):
+            try:
+                NotificationProviderRouter.detect(recipient, channel=channel)
+            except PhoneValidationError as exc:
+                return Response({"detail": str(exc)}, status=400)
 
         if data.get("template_code"):
             result = send_template_message(
                 traveler=traveler, recipient=recipient,
                 template_code=data["template_code"],
                 context=data.get("context") or {},
-                channel=data["channel"],
+                channel=channel,
                 sent_by=request.user, request=request,
+                subject=data.get("subject", "") or "",
             )
         else:
             result = send_manual_message(
                 traveler=traveler, recipient=recipient,
                 body=data["body"],
-                channel=data["channel"],
+                channel=channel,
                 sent_by=request.user, request=request,
+                subject=data.get("subject", "") or "",
             )
 
         if not result.ok:
