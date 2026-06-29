@@ -1071,3 +1071,212 @@ def generate_followup_completion_certificate(self, case_id: int) -> dict:
     logger.info("generate_followup_completion_certificate: case=%s path=%s",
                 case.pk, saved_path)
     return stats
+
+
+# ============================================================================
+# 7) Documents Phase 9E — fiche individuelle / prélèvement / orientation
+# ============================================================================
+
+
+def _individual_sheet_relative_path(case: QuarantineRecord) -> str:
+    return f"medical/sheets/{case.uuid}.pdf"
+
+
+def _sample_report_relative_path(sample) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", sample.sample_code or f"sample-{sample.pk}")
+    return f"medical/samples/{safe}.pdf"
+
+
+def _orientation_relative_path(case: QuarantineRecord, agent_id: int | None) -> str:
+    ts = timezone.now().strftime("%Y%m%d-%H%M%S")
+    suffix = f"-by{agent_id}" if agent_id else ""
+    return f"medical/orientations/{case.uuid}-{ts}{suffix}.pdf"
+
+
+@shared_task(
+    bind=True,
+    name="medical.generate_followup_individual_sheet",
+    autoretry_for=(Exception,),
+    retry_backoff=30,
+    max_retries=3,
+)
+def generate_followup_individual_sheet(self, case_id: int) -> dict:
+    """Génère la fiche de suivi individuelle PDF + stocke /media/medical/sheets/.
+
+    Idempotent : re-génère si le fichier existe déjà (le contenu peut avoir
+    évolué — c'est un dossier vivant). Pour économiser le stockage,
+    une nouvelle exécution écrase le précédent fichier.
+    """
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
+
+    from .services_pdf import render_followup_individual_sheet
+
+    stats = {"case_id": case_id, "generated": False}
+    try:
+        case = QuarantineRecord.objects.select_related(
+            "traveler", "disease",
+        ).get(pk=case_id)
+    except QuarantineRecord.DoesNotExist:
+        return {**stats, "error": "case_not_found"}
+
+    pdf_bytes = render_followup_individual_sheet(case)
+    rel_path = _individual_sheet_relative_path(case)
+
+    # Écrasement contrôlé : on supprime l'ancienne version si elle existe
+    if default_storage.exists(rel_path):
+        try:
+            default_storage.delete(rel_path)
+        except Exception:  # pragma: no cover - best-effort
+            logger.exception("Suppression ancien PDF KO (%s)", rel_path)
+
+    saved_path = default_storage.save(rel_path, ContentFile(pdf_bytes))
+    stats["generated"] = True
+    stats["path"] = saved_path
+
+    _log_action(
+        case,
+        action_type=FollowUpActionType.MEDICAL_ORIENTATION,
+        title="Fiche de suivi individuelle générée",
+        description=(
+            f"PDF de la fiche complète régénéré pour le voyageur "
+            f"{_public_id(case.traveler)}."
+        ),
+        metadata={
+            "kind": "document_generated",
+            "document_type": "individual_sheet",
+            "path": saved_path,
+        },
+    )
+
+    logger.info(
+        "generate_followup_individual_sheet: case=%s path=%s",
+        case.pk, saved_path,
+    )
+    return stats
+
+
+@shared_task(
+    bind=True,
+    name="medical.generate_sample_collection_report",
+    autoretry_for=(Exception,),
+    retry_backoff=30,
+    max_retries=3,
+)
+def generate_sample_collection_report_task(self, sample_id: int) -> dict:
+    """Génère le rapport de prélèvement PDF + stocke /media/medical/samples/."""
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
+
+    from .models import MedicalSample
+    from .services_pdf import render_sample_collection_report
+
+    stats = {"sample_id": sample_id, "generated": False}
+    try:
+        sample = (
+            MedicalSample.objects
+            .select_related("followup_case", "followup_case__traveler",
+                            "followup_case__disease", "collected_by")
+            .get(pk=sample_id)
+        )
+    except MedicalSample.DoesNotExist:
+        return {**stats, "error": "sample_not_found"}
+
+    pdf_bytes = render_sample_collection_report(sample)
+    rel_path = _sample_report_relative_path(sample)
+
+    if default_storage.exists(rel_path):
+        try:
+            default_storage.delete(rel_path)
+        except Exception:  # pragma: no cover - best-effort
+            logger.exception("Suppression ancien PDF KO (%s)", rel_path)
+
+    saved_path = default_storage.save(rel_path, ContentFile(pdf_bytes))
+    stats["generated"] = True
+    stats["path"] = saved_path
+
+    case = sample.followup_case
+    if case is not None:
+        _log_action(
+            case,
+            action_type=FollowUpActionType.SAMPLE_REQUESTED,
+            title=f"Rapport de prélèvement généré ({sample.sample_code})",
+            description=(
+                f"PDF d'accompagnement laboratoire généré pour le prélèvement "
+                f"{sample.sample_code}."
+            ),
+            metadata={
+                "kind": "document_generated",
+                "document_type": "sample_report",
+                "sample_id": sample.pk,
+                "sample_code": sample.sample_code,
+                "path": saved_path,
+            },
+        )
+
+    logger.info(
+        "generate_sample_collection_report: sample=%s path=%s",
+        sample.pk, saved_path,
+    )
+    return stats
+
+
+@shared_task(
+    bind=True,
+    name="medical.generate_medical_orientation_form",
+    autoretry_for=(Exception,),
+    retry_backoff=30,
+    max_retries=3,
+)
+def generate_medical_orientation_form_task(
+    self, case_id: int, agent_id: int | None = None,
+) -> dict:
+    """Génère la fiche d'orientation PDF + stocke /media/medical/orientations/."""
+    from django.contrib.auth import get_user_model
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
+
+    from .services_pdf import render_medical_orientation_form
+
+    stats = {"case_id": case_id, "agent_id": agent_id, "generated": False}
+    try:
+        case = QuarantineRecord.objects.select_related(
+            "traveler", "disease",
+        ).get(pk=case_id)
+    except QuarantineRecord.DoesNotExist:
+        return {**stats, "error": "case_not_found"}
+
+    agent = None
+    if agent_id:
+        User = get_user_model()
+        agent = User.objects.filter(pk=agent_id).first()
+
+    pdf_bytes = render_medical_orientation_form(case, agent=agent)
+    rel_path = _orientation_relative_path(case, agent_id)
+
+    saved_path = default_storage.save(rel_path, ContentFile(pdf_bytes))
+    stats["generated"] = True
+    stats["path"] = saved_path
+
+    _log_action(
+        case,
+        action_type=FollowUpActionType.MEDICAL_ORIENTATION,
+        title="Fiche d'orientation médicale générée",
+        description=(
+            f"PDF d'orientation médicale généré pour le voyageur "
+            f"{_public_id(case.traveler)}."
+        ),
+        user=agent,
+        metadata={
+            "kind": "document_generated",
+            "document_type": "orientation",
+            "agent_id": agent_id,
+            "path": saved_path,
+        },
+    )
+
+    logger.info(
+        "generate_medical_orientation_form: case=%s agent=%s path=%s",
+        case.pk, agent_id, saved_path,
+    )
+    return stats

@@ -723,21 +723,235 @@ class FollowupCloseView(APIView):
 
 
 # ============================================================================
-# 14. Documents (placeholder Phase 9E)
+# 14. Documents (Phase 9E)
 # ============================================================================
 
 
 class FollowupDocumentsView(APIView):
+    """GET : liste les documents PDF disponibles pour le cas.
+
+    POST : déclenche la génération asynchrone d'un nouveau document.
+        Params query/body :
+          - `type` : "sheet" | "orientation" | "sample" | "certificate"
+          - `sample_id` (requis si type == "sample")
+    """
+
     permission_classes = [IsAuthenticated, CanViewFollowupDetail]
+
+    # Mapping document_type -> (sous-dossier MEDIA_ROOT, libellé humain)
+    _DOC_FOLDERS = (
+        ("certificate", "followup_certificates", "Attestation fin de suivi"),
+        ("sheet", "medical/sheets", "Fiche de suivi individuelle"),
+        ("sample_report", "medical/samples", "Rapport de prélèvement"),
+        ("orientation", "medical/orientations", "Fiche d'orientation médicale"),
+    )
+
+    def _list_documents(self, case):
+        """Inspecte MEDIA_ROOT et renvoie les documents existants pour ce cas."""
+        from django.conf import settings
+        from django.core.files.storage import default_storage
+        from pathlib import Path
+
+        from .models import FollowUpAction, FollowUpActionType
+
+        media_root = Path(getattr(settings, "MEDIA_ROOT", ""))
+        media_url = getattr(settings, "MEDIA_URL", "/media/")
+        case_uuid = str(case.uuid)
+        results = []
+
+        # 1) Documents liés directement à l'UUID du cas
+        for doc_type, folder, label in self._DOC_FOLDERS:
+            folder_path = media_root / folder
+            if not folder_path.exists():
+                continue
+            for p in sorted(folder_path.glob("*.pdf")):
+                if case_uuid not in p.name and doc_type != "sample_report":
+                    continue
+                try:
+                    stat = p.stat()
+                except OSError:
+                    continue
+                rel = str(p.relative_to(media_root))
+                results.append({
+                    "id": f"{doc_type}:{p.name}",
+                    "type": doc_type,
+                    "label": label,
+                    "filename": p.name,
+                    "url": media_url + rel,
+                    "generated_at": timezone.datetime.fromtimestamp(
+                        stat.st_mtime, tz=timezone.get_current_timezone(),
+                    ).isoformat(),
+                    "size_bytes": stat.st_size,
+                })
+
+        # 2) Documents prélèvements : on filtre via les sample_codes du cas
+        sample_codes = list(
+            MedicalSample.objects
+            .filter(followup_case=case)
+            .values_list("sample_code", flat=True)
+        )
+        # Filtrer la liste pré-construite pour ne garder que les samples du cas
+        filtered = []
+        for doc in results:
+            if doc["type"] != "sample_report":
+                filtered.append(doc); continue
+            # Le filename est dérivé du sample_code (cf _sample_report_relative_path)
+            stem = doc["filename"].removesuffix(".pdf")
+            if any(stem == _sanitize_code(c) for c in sample_codes):
+                filtered.append(doc)
+        results = filtered
+
+        # 3) Enrichissement : générateur (lecture FollowUpAction metadata)
+        action_qs = (
+            FollowUpAction.objects
+            .filter(
+                followup_case=case,
+                metadata__kind="document_generated",
+            )
+            .select_related("performed_by")
+            .order_by("-performed_at")
+        )
+        path_to_actor = {}
+        for a in action_qs:
+            p = a.metadata.get("path") if isinstance(a.metadata, dict) else None
+            if not p:
+                continue
+            actor = a.performed_by
+            path_to_actor[p] = {
+                "actor_id": actor.id if actor else None,
+                "actor_name": (
+                    (actor.get_full_name() or actor.email)
+                    if actor else "Système"
+                ),
+            }
+        for doc in results:
+            actor = path_to_actor.get(doc["url"].replace(media_url, "", 1))
+            doc["generated_by"] = actor or {"actor_id": None, "actor_name": "—"}
+
+        results.sort(key=lambda d: d.get("generated_at") or "", reverse=True)
+        return results
 
     @extend_schema(responses={200: dict})
     def get(self, request, traveler_id):
         traveler, case = _resolve_case(traveler_id)
         _check_object_perm(request, self, case, CanViewFollowupDetail)
         return Response({
-            "documents": [],
-            "note": "Génération PDFs disponible en Phase 9E.",
+            "documents": self._list_documents(case),
+            "available_types": [
+                {"code": t, "label": label}
+                for t, _f, label in self._DOC_FOLDERS
+            ],
         })
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("type", str, OpenApiParameter.QUERY, required=True),
+            OpenApiParameter("sample_id", int, OpenApiParameter.QUERY, required=False),
+        ],
+        responses={202: dict, 400: dict},
+    )
+    def post(self, request, traveler_id):
+        """Déclenche la génération asynchrone d'un document."""
+        traveler, case = _resolve_case(traveler_id)
+        _check_object_perm(request, self, case, CanViewFollowupDetail)
+
+        doc_type = (
+            request.query_params.get("type")
+            or request.data.get("type")
+            or ""
+        ).strip().lower()
+
+        from .tasks import (
+            generate_followup_completion_certificate,
+            generate_followup_individual_sheet,
+            generate_medical_orientation_form_task,
+            generate_sample_collection_report_task,
+        )
+
+        agent_id = getattr(request.user, "id", None)
+
+        if doc_type in ("sheet", "individual_sheet"):
+            task = generate_followup_individual_sheet
+            args = (case.pk,)
+            kwargs = {}
+        elif doc_type == "orientation":
+            task = generate_medical_orientation_form_task
+            args = (case.pk,)
+            kwargs = {"agent_id": agent_id}
+        elif doc_type in ("sample", "sample_report"):
+            sample_id = (
+                request.query_params.get("sample_id")
+                or request.data.get("sample_id")
+            )
+            if not sample_id:
+                return Response(
+                    {"detail": "sample_id requis pour type=sample."},
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                sample_id = int(sample_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "sample_id invalide."},
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+            if not MedicalSample.objects.filter(
+                pk=sample_id, followup_case=case,
+            ).exists():
+                return Response(
+                    {"detail": "Prélèvement introuvable pour ce cas."},
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+            task = generate_sample_collection_report_task
+            args = (sample_id,)
+            kwargs = {}
+        elif doc_type == "certificate":
+            task = generate_followup_completion_certificate
+            args = (case.pk,)
+            kwargs = {}
+        else:
+            return Response(
+                {"detail": (
+                    "type invalide. Attendu : "
+                    "sheet | orientation | sample | certificate."
+                )},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Tentative async ; en dev/sync fallback exécution immédiate
+        job_id = None
+        try:
+            async_res = task.delay(*args, **kwargs)
+            job_id = getattr(async_res, "id", None)
+        except Exception:
+            logger.exception("Enqueue Celery KO — fallback sync exec")
+            try:
+                task.run(*args, **kwargs)
+            except Exception:
+                logger.exception("Exécution synchrone KO")
+                return Response(
+                    {"detail": "Génération du document indisponible."},
+                    status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        return Response(
+            {
+                "queued": True,
+                "type": doc_type,
+                "job_id": job_id,
+                "note": (
+                    "La génération est asynchrone — le document apparaîtra "
+                    "dans GET /documents/ dès qu'il sera prêt."
+                ),
+            },
+            status=drf_status.HTTP_202_ACCEPTED,
+        )
+
+
+def _sanitize_code(code: str) -> str:
+    """Reproduit la sanitization de tasks._sample_report_relative_path."""
+    import re as _re
+    return _re.sub(r"[^A-Za-z0-9_-]", "_", code or "")
 
 
 # ============================================================================

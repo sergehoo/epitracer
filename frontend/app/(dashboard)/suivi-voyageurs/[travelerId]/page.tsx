@@ -1,27 +1,43 @@
 'use client';
 
 /**
- * Page détail suivi sanitaire d'un voyageur — Phase 9C (en construction).
+ * Page détail suivi sanitaire d'un voyageur — Phase 9C.
  *
- * Cette page va consommer les 16 endpoints `/api/v1/admin/followups/` livrés
- * en Phase 9B. La structure complète (Header, Progress, Timeline J1-J21,
- * SymptomPanel, SamplePanel, LabAnalysisPanel, NotificationPanel,
- * LocationPanel, DocumentsPanel, AuditPanel + 5 modales) sera livrée
- * dans la prochaine itération.
+ * Architecture :
+ *   - Header voyageur (identité + maladie + statut + classification)
+ *   - Bande de progression J{n}/J{total}
+ *   - 4 KPIs (jours complétés, manqués, symptômes, prélèvements)
+ *   - Alerte géolocalisation manquante (si applicable)
+ *   - <FollowupTimeline /> — J1 → JN, cards repliables
+ *   - <SymptomPanel /> + <SamplePanel /> + <LabAnalysisPanel />
+ *   - Actions globales : Envoyer notification (SendMessageModal) + Clôturer
  *
- * En attendant, on offre une vue minimale fonctionnelle qui appelle déjà
- * l'endpoint /detail/ et affiche les KPIs principaux + un bouton de retour.
+ * Le panneau LocationPanel, AuditPanel et DocumentsPanel restent à livrer
+ * en itération suivante (Phase 9E).
+ *
+ * NOTE : le backend Phase 9B n'expose pas (encore) de GET listes paginées
+ * pour les symptômes, prélèvements et analyses — on maintient donc l'état
+ * localement à partir des réponses POST (les comptes globaux côté KPIs
+ * proviennent de l'endpoint /detail/ qui agrège). Une itération future
+ * pourra brancher des endpoints GET dédiés (samples/, lab-results/).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Activity, Calendar, MapPin, AlertTriangle,
-  CheckCircle2, Construction, RefreshCcw, User as UserIcon,
+  CheckCircle2, RefreshCcw, User as UserIcon, Send, ShieldOff,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extractApiError } from '@/lib/api';
+import { SendMessageModal, type SendMessageTarget } from '@/components/notifications/SendMessageModal';
+import { FollowupTimeline } from '@/components/followup/FollowupTimeline';
+import { SymptomPanel, type SymptomReport } from '@/components/followup/SymptomPanel';
+import { SamplePanel, type MedicalSample } from '@/components/followup/SamplePanel';
+import { LabAnalysisPanel, type LabAnalysis } from '@/components/followup/LabAnalysisPanel';
+import { CloseFollowupModal } from '@/components/followup/modals/CloseFollowupModal';
+import { CaseClassificationBadge } from '@/components/followup/CaseClassificationBadge';
 
 interface FollowupCaseDetail {
   id: number;
@@ -32,11 +48,12 @@ interface FollowupCaseDetail {
     nationality: string; entry_point: string;
   };
   disease: { code: string; name: string; color: string };
-  status: 'active' | 'completed' | 'broken' | 'extended' | 'cancelled';
+  status: 'active' | 'completed' | 'broken' | 'extended' | 'cancelled' | string;
   started_on: string;
   expected_end_on: string;
   day_index: number;
   total_days: number;
+  current_classification: string;
   current_classification_label: string;
   days_completed: number;
   days_missed: number;
@@ -44,7 +61,7 @@ interface FollowupCaseDetail {
   symptoms_count: number;
   critical_symptoms_count: number;
   alerts_count: number;
-  last_location_ping: { latitude: number; longitude: number; captured_at: string } | null;
+  last_location_ping: { latitude?: number; longitude?: number; lat?: number; lon?: number; captured_at: string } | null;
   closure_reason: string;
   geolocation_alert_raised_at: string | null;
 }
@@ -68,15 +85,26 @@ const STATUS_TONE: Record<string, string> = {
 export default function FollowupDetailPage() {
   const params = useParams<{ travelerId: string }>();
   const travelerId = params?.travelerId;
+
   const [data, setData] = useState<FollowupCaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // États locaux des panels (mis à jour après chaque POST réussi)
+  const [symptoms, setSymptoms] = useState<SymptomReport[]>([]);
+  const [samples, setSamples] = useState<MedicalSample[]>([]);
+  const [analyses, setAnalyses] = useState<LabAnalysis[]>([]);
+
+  // UI state — modales globales
+  const [msgTarget, setMsgTarget] = useState<SendMessageTarget | null>(null);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
 
   const load = () => {
     if (!travelerId) return;
     setLoading(true);
     setError(null);
-    api.get(`/admin/followups/${travelerId}/`)
+    api.get<FollowupCaseDetail>(`/admin/followups/${travelerId}/`)
       .then((r) => setData(r.data))
       .catch((e) => {
         const msg = extractApiError(e);
@@ -92,9 +120,23 @@ export default function FollowupDetailPage() {
     ? Math.min(100, Math.round(((data.day_index + 1) / Math.max(1, data.total_days + 1)) * 100))
     : 0;
 
+  const sendTarget: SendMessageTarget | null = useMemo(() => {
+    if (!data) return null;
+    const t = data.traveler;
+    const first = (t.full_name || '').split(' ')[0] || '';
+    return {
+      traveler_id: t.id,
+      traveler_public_id: t.public_id,
+      traveler_name: t.full_name,
+      phone: t.phone,
+      email: t.email,
+      first_name: first,
+    };
+  }, [data]);
+
   return (
     <div data-theme="light" className="light space-y-6">
-      {/* Fil d'Ariane + retour */}
+      {/* Fil d'Ariane + actualisation */}
       <div className="flex items-center justify-between">
         <Link
           href="/suivi-voyageurs"
@@ -111,19 +153,22 @@ export default function FollowupDetailPage() {
         </button>
       </div>
 
-      {/* Bandeau "en construction" */}
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
-        <Construction className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-        <div className="text-sm text-amber-900">
-          <div className="font-bold mb-1">Page détail en cours de finalisation</div>
-          <p className="text-xs leading-relaxed">
-            La page complète (timeline J1-J21, prélèvements, analyses labo, notifications,
-            géolocalisation, audit) arrive prochainement. Vous voyez actuellement le
-            résumé minimal du suivi. Toutes les actions médicales restent accessibles
-            depuis les pages dédiées.
-          </p>
+      {/*
+        Bandeau "page en construction" — masqué depuis Phase 9C livrée.
+        Conservé en commentaire pour rollback rapide si besoin.
+
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+          <Construction className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-sm text-amber-900">
+            <div className="font-bold mb-1">Page détail en cours de finalisation</div>
+            <p className="text-xs leading-relaxed">
+              La page complète (timeline J1-J21, prélèvements, analyses labo, notifications,
+              géolocalisation, audit) arrive prochainement. Vous voyez actuellement le
+              résumé minimal du suivi.
+            </p>
+          </div>
         </div>
-      </div>
+      */}
 
       {/* Contenu */}
       {loading && !data ? (
@@ -158,17 +203,18 @@ export default function FollowupDetailPage() {
                     {data.traveler.email && <span>{data.traveler.email}</span>}
                     <span>{data.traveler.nationality}</span>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap gap-2 items-center">
                     <span className="px-2 py-1 rounded-md bg-sky-50 text-sky-700 text-xs font-bold border border-sky-200">
                       {data.disease.name}
                     </span>
                     <span className={`px-2 py-1 rounded-md text-xs font-bold border ${STATUS_TONE[data.status] ?? STATUS_TONE.active}`}>
                       {STATUS_LABEL[data.status] ?? data.status}
                     </span>
-                    {data.current_classification_label && (
-                      <span className="px-2 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">
-                        {data.current_classification_label}
-                      </span>
+                    {data.current_classification && (
+                      <CaseClassificationBadge
+                        classification={data.current_classification}
+                        label={data.current_classification_label}
+                      />
                     )}
                     {data.critical_symptoms_count > 0 && (
                       <span className="px-2 py-1 rounded-md bg-rose-100 text-rose-700 text-xs font-bold border border-rose-300 inline-flex items-center gap-1">
@@ -192,9 +238,33 @@ export default function FollowupDetailPage() {
                 )}
               </div>
             </div>
+
+            {/* Actions globales */}
+            <div className="mt-4 flex flex-wrap gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => sendTarget && setMsgTarget(sendTarget)}
+                disabled={!sendTarget}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-xs font-bold hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <Send className="h-3.5 w-3.5" /> Envoyer notification
+              </button>
+              <Link
+                href={`/voyageurs/${data.traveler.public_id}`}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50"
+              >
+                Fiche voyageur complète
+              </Link>
+              <Link
+                href={`/alertes?traveler=${data.traveler.public_id}`}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50"
+              >
+                Alertes liées
+              </Link>
+            </div>
           </header>
 
-          {/* Progress */}
+          {/* Progress + KPIs */}
           <section className="rounded-2xl border border-slate-200 bg-white p-5">
             <div className="flex items-end justify-between gap-4 flex-wrap">
               <div>
@@ -216,15 +286,23 @@ export default function FollowupDetailPage() {
               </div>
             </div>
 
-            {/* KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
               <KpiCard label="Jours complétés" value={data.days_completed} tone="emerald" icon={<CheckCircle2 />} />
               <KpiCard label="Jours manqués" value={data.days_missed} tone={data.days_missed > 0 ? 'rose' : 'slate'} icon={<AlertTriangle />} />
-              <KpiCard label="Symptômes" value={data.symptoms_count} tone={data.critical_symptoms_count > 0 ? 'rose' : 'slate'} icon={<Activity />} />
-              <KpiCard label="Prélèvements" value={data.samples_count} tone="sky" icon={<Activity />} />
+              <KpiCard
+                label="Symptômes"
+                value={Math.max(data.symptoms_count, symptoms.length)}
+                tone={data.critical_symptoms_count > 0 ? 'rose' : 'slate'}
+                icon={<Activity />}
+              />
+              <KpiCard
+                label="Prélèvements"
+                value={Math.max(data.samples_count, samples.length)}
+                tone="sky"
+                icon={<Activity />}
+              />
             </div>
 
-            {/* Alerte géoloc */}
             {data.geolocation_alert_raised_at && (
               <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
                 <strong>Géolocalisation absente</strong> — dernière alerte déclenchée le{' '}
@@ -234,40 +312,85 @@ export default function FollowupDetailPage() {
             )}
           </section>
 
-          {/* Liens vers actions */}
-          <section className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-3">
-              Actions rapides (page complète en préparation)
+          {/* Timeline J1 → JN */}
+          <FollowupTimeline
+            travelerId={travelerId!}
+            refreshKey={timelineRefreshKey}
+          />
+
+          {/* Panels médicaux */}
+          <SymptomPanel
+            travelerId={travelerId!}
+            symptoms={symptoms}
+            onCreated={(s) => {
+              setSymptoms((prev) => [s, ...prev]);
+              setTimelineRefreshKey((k) => k + 1);
+              load();
+            }}
+          />
+
+          <SamplePanel
+            travelerId={travelerId!}
+            samples={samples}
+            onCreated={(s) => {
+              setSamples((prev) => [s, ...prev]);
+              setTimelineRefreshKey((k) => k + 1);
+              load();
+            }}
+          />
+
+          <LabAnalysisPanel
+            travelerId={travelerId!}
+            analyses={analyses}
+            samples={samples}
+            onCreated={(a) => {
+              setAnalyses((prev) => [a, ...prev]);
+              setTimelineRefreshKey((k) => k + 1);
+            }}
+          />
+
+          {/* Bouton clôture en bas */}
+          {data.status !== 'completed' && data.status !== 'cancelled' && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="font-display text-sm font-bold text-slate-700">Clôturer le suivi</div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  À effectuer quand le voyageur est suivi à son terme, perdu de vue,
+                  ou orienté vers une prise en charge hospitalière.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCloseOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50"
+              >
+                <ShieldOff className="h-3.5 w-3.5" /> Clôturer
+              </button>
             </div>
-            <div className="flex flex-wrap gap-2 text-sm">
-              <Link
-                href={`/voyageurs/${data.traveler.public_id}`}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 inline-flex items-center gap-1"
-              >
-                Fiche voyageur complète →
-              </Link>
-              <Link
-                href={`/voyageurs/${data.traveler.public_id}/itineraire`}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 inline-flex items-center gap-1"
-              >
-                Itinéraire & contacts →
-              </Link>
-              <Link
-                href={`/alertes?traveler=${data.traveler.public_id}`}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 inline-flex items-center gap-1"
-              >
-                Alertes liées →
-              </Link>
-              <Link
-                href="/notifications"
-                className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 inline-flex items-center gap-1"
-              >
-                Centre notifications →
-              </Link>
-            </div>
-          </section>
+          )}
         </>
       ) : null}
+
+      {/* Modales globales */}
+      {sendTarget && (
+        <SendMessageModal
+          open={!!msgTarget}
+          target={msgTarget ?? sendTarget}
+          onClose={() => setMsgTarget(null)}
+        />
+      )}
+      {data && (
+        <CloseFollowupModal
+          open={closeOpen}
+          travelerId={travelerId!}
+          travelerName={data.traveler.full_name}
+          onClose={() => setCloseOpen(false)}
+          onSuccess={() => {
+            setCloseOpen(false);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }
