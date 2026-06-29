@@ -11,6 +11,12 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+# Phase 9B — suivi médical (API DRF)
+from apps.medical.urls import (
+    admin_urlpatterns as medical_admin_urls,
+    public_urlpatterns as medical_public_urls,
+)
+
 
 def healthcheck(_request):
     """Health probe : utilisée par K8s liveness/readiness et Traefik."""
@@ -57,6 +63,16 @@ api_v1_patterns = [
 
     # --- Companion ADMIN (suivi voyageurs, itinéraire, carte) ---
     path("admin/companion/", include("apps.companion.admin_urls")),
+
+    # --- Suivi médical (Phase 9B) ---
+    path(
+        "admin/followups/",
+        include((medical_admin_urls, "medical-admin"), namespace="medical-admin"),
+    ),
+    path(
+        "public/followup/",
+        include((medical_public_urls, "medical-public"), namespace="medical-public"),
+    ),
 
     # --- Centre de rapports (exports CSV / PDF) ---
     path("reports/", include("apps.reports.urls")),

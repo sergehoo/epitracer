@@ -101,6 +101,9 @@ LOCAL_APPS = [
     "apps.mobile_api",
     "apps.companion",
     "apps.reports",
+    # Phase 9A — fondation du suivi médical complet (protocoles, prélèvements,
+    # analyses labo, classifications, timeline d'actions, géoloc obligatoire).
+    "apps.medical",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -282,6 +285,9 @@ REST_FRAMEWORK = {
         # Companion : limites généreuses pour la PWA, plus serrées
         # sur les pings de localisation pour éviter le tracking abusif.
         "companion_checkin": "12/hour",
+        # Phase 9B — endpoints publics suivi médical (PWA + Flutter).
+        "mobile_followup": "10/min",
+       
         "companion_location": "60/hour",
         "companion_consent": "30/hour",
         "companion_push": "30/hour",
@@ -438,6 +444,8 @@ CELERY_TASK_ROUTES = {
     "surveillance.*": {"queue": "surveillance"},
     "companion.*": {"queue": "notifications"},  # purge/cleanup → queue notifications
     "core.*": {"queue": "default"},
+    # Phase 9A — `medical.*` partage la queue quarantaine (workflow proche).
+    "medical.*": {"queue": "quarantine"},
     # Patterns module path conservés en filet de sécurité si une tâche n'a
     # pas de `name=` explicite.
     "apps.notifications.tasks.*": {"queue": "notifications"},
@@ -740,6 +748,27 @@ APP_METADATA = {
     "INHP_ORG_NAME": env("INHP_ORG_NAME", default="Institut National d'Hygiène Publique"),
     "DEFAULT_QUARANTINE_DAYS": env.int("DEFAULT_QUARANTINE_DAYS", default=21),
 }
+
+# ---------------------------------------------------------------------------
+# Phase 9A — Texte de consentement géolocalisation (Option 3, RGPD-safe).
+#
+# À présenter au voyageur dans la PWA (page /voyageur/suivi) et stocké dans
+# `PrivacyConsent.consent_text_excerpt` au moment du recueil. Le texte
+# explicite que désactiver le partage déclenche une alerte (et non un
+# tracking caché — c'est conforme RGPD car le consentement reste révocable
+# et la révocation n'entraîne PAS de sanction automatisée mais une décision
+# humaine d'un agent INHP).
+# ---------------------------------------------------------------------------
+GEOLOCATION_CONSENT_TEXT = env(
+    "GEOLOCATION_CONSENT_TEXT",
+    default=(
+        "Pendant les 21 jours de surveillance, votre position est partagée "
+        "avec l'INHP toutes les 4 heures. Vous pouvez désactiver le partage "
+        "à tout moment, mais cela déclenchera une alerte qui pourra "
+        "entraîner une visite d'un agent sanitaire. Vos données sont "
+        "supprimées 90 jours après la fin du suivi (politique RGPD)."
+    ),
+)
 
 # ---------------------------------------------------------------------------
 # Logging (structlog-ready, JSON en prod)
