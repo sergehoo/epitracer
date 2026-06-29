@@ -408,7 +408,12 @@ export default function SuiviVoyageursPage() {
                     />
                   </td>
                   <Td>
-                    <div className="font-semibold">{r.full_name}</div>
+                    <Link
+                      href={`/suivi-voyageurs/${r.public_id}`}
+                      className="font-semibold hover:text-ciOrange transition"
+                    >
+                      {r.full_name}
+                    </Link>
                     <div className="text-xs text-slate-500">{r.public_id} · {r.phone || '—'}</div>
                   </Td>
                   <Td>
@@ -437,7 +442,14 @@ export default function SuiviVoyageursPage() {
                     {r.last_location_at ? formatDateTime(r.last_location_at) : '—'}
                   </Td>
                   <Td>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Link
+                        href={`/suivi-voyageurs/${r.public_id}`}
+                        className="inline-flex items-center gap-1 text-xs text-sky-700 hover:underline font-semibold"
+                        title="Voir le détail du suivi"
+                      >
+                        <Eye className="h-3 w-3" /> Détail
+                      </Link>
                       <Link
                         href={`/voyageurs/${r.public_id}/itineraire`}
                         className="text-xs text-ciOrange hover:underline font-semibold"
