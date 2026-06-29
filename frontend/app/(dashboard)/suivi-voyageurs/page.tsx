@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Activity, AlertTriangle, Bell, ChevronLeft, ChevronRight,
-  MapPin, Search, Send, Users,
+  Eye, MapPin, Search, Send, Users,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
