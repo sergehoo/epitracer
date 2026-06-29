@@ -30,6 +30,7 @@ from .views import (
     FollowupSamplesView,
     FollowupSymptomsView,
     FollowupTimelineView,
+    FollowupUnmaskPhoneView,
     PublicAssistanceView,
     PublicFollowupStatusView,
     PublicSymptomReportView,
@@ -71,6 +72,11 @@ admin_urlpatterns = [
         "<str:traveler_id>/location-history/",
         FollowupLocationHistoryView.as_view(),
         name="medical-followup-location-history",
+    ),
+    path(
+        "<str:traveler_id>/unmask-phone/",
+        FollowupUnmaskPhoneView.as_view(),
+        name="medical-followup-unmask-phone",
     ),
 ]
 

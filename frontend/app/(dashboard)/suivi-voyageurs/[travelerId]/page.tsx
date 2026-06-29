@@ -12,14 +12,15 @@
  *   - <SymptomPanel /> + <SamplePanel /> + <LabAnalysisPanel />
  *   - Actions globales : Envoyer notification (SendMessageModal) + Clôturer
  *
- * Le panneau LocationPanel, AuditPanel et DocumentsPanel restent à livrer
- * en itération suivante (Phase 9E).
+ * Les panneaux LocationPanel, AuditPanel et DocumentsPanel sont branchés
+ * (Phase 9F) ainsi que les boutons "Reclasser le cas" et "Assigner agent"
+ * dans le header.
  *
- * NOTE : le backend Phase 9B n'expose pas (encore) de GET listes paginées
- * pour les symptômes, prélèvements et analyses — on maintient donc l'état
- * localement à partir des réponses POST (les comptes globaux côté KPIs
- * proviennent de l'endpoint /detail/ qui agrège). Une itération future
- * pourra brancher des endpoints GET dédiés (samples/, lab-results/).
+ * Persistance refresh : les listes symptômes / prélèvements / analyses
+ * sont fetchées via les GET liste paginées (Phase 9F) au montage de la
+ * page, puis mises à jour localement après chaque POST. En cas d'échec
+ * des endpoints (déploiement progressif), on retombe silencieusement
+ * sur les comptes agrégés de /detail/.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -28,6 +29,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Activity, Calendar, MapPin, AlertTriangle,
   CheckCircle2, RefreshCcw, User as UserIcon, Send, ShieldOff,
+  Tag, UserCheck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extractApiError } from '@/lib/api';
@@ -36,7 +38,12 @@ import { FollowupTimeline } from '@/components/followup/FollowupTimeline';
 import { SymptomPanel, type SymptomReport } from '@/components/followup/SymptomPanel';
 import { SamplePanel, type MedicalSample } from '@/components/followup/SamplePanel';
 import { LabAnalysisPanel, type LabAnalysis } from '@/components/followup/LabAnalysisPanel';
+import { LocationPanel } from '@/components/followup/LocationPanel';
+import { DocumentsPanel } from '@/components/followup/DocumentsPanel';
+import { AuditPanel } from '@/components/followup/AuditPanel';
 import { CloseFollowupModal } from '@/components/followup/modals/CloseFollowupModal';
+import { ReclassifyCaseModal } from '@/components/followup/modals/ReclassifyCaseModal';
+import { AssignAgentModal } from '@/components/followup/modals/AssignAgentModal';
 import { CaseClassificationBadge } from '@/components/followup/CaseClassificationBadge';
 
 interface FollowupCaseDetail {
@@ -98,6 +105,8 @@ export default function FollowupDetailPage() {
   // UI state — modales globales
   const [msgTarget, setMsgTarget] = useState<SendMessageTarget | null>(null);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [reclassifyOpen, setReclassifyOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
 
   const load = () => {
@@ -114,7 +123,26 @@ export default function FollowupDetailPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [travelerId]);
+  /** Charge les 3 listes (symptômes / prélèvements / analyses) — persistance refresh. */
+  const loadLists = () => {
+    if (!travelerId) return;
+    // Tous les fetchs sont best-effort : un échec n'empêche pas la page.
+    api.get<{ results: SymptomReport[] }>(`/admin/followups/${travelerId}/symptoms/`)
+      .then((r) => setSymptoms(r.data?.results ?? []))
+      .catch(() => { /* silent — backend déploiement progressif */ });
+    api.get<{ results: MedicalSample[] }>(`/admin/followups/${travelerId}/samples/`)
+      .then((r) => setSamples(r.data?.results ?? []))
+      .catch(() => { /* silent */ });
+    api.get<{ results: LabAnalysis[] }>(`/admin/followups/${travelerId}/lab-results/`)
+      .then((r) => setAnalyses(r.data?.results ?? []))
+      .catch(() => { /* silent */ });
+  };
+
+  useEffect(() => {
+    load();
+    loadLists();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [travelerId]);
 
   const progressPct = data
     ? Math.min(100, Math.round(((data.day_index + 1) / Math.max(1, data.total_days + 1)) * 100))
@@ -249,6 +277,20 @@ export default function FollowupDetailPage() {
               >
                 <Send className="h-3.5 w-3.5" /> Envoyer notification
               </button>
+              <button
+                type="button"
+                onClick={() => setReclassifyOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 text-white px-3 py-1.5 text-xs font-bold hover:bg-amber-700"
+              >
+                <Tag className="h-3.5 w-3.5" /> Reclasser le cas
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 text-white px-3 py-1.5 text-xs font-bold hover:bg-sky-700"
+              >
+                <UserCheck className="h-3.5 w-3.5" /> Assigner agent
+              </button>
               <Link
                 href={`/voyageurs/${data.traveler.public_id}`}
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50"
@@ -349,6 +391,23 @@ export default function FollowupDetailPage() {
             }}
           />
 
+          {/* Géolocalisation — carte + historique sous raison RGPD */}
+          <LocationPanel
+            travelerId={travelerId!}
+            lastPing={data.last_location_ping}
+            geolocationAlertAt={data.geolocation_alert_raised_at}
+          />
+
+          {/* Documents PDF (Phase 9E + 9F) */}
+          <DocumentsPanel
+            travelerId={travelerId!}
+            caseStatus={data.status}
+            samples={samples}
+          />
+
+          {/* Audit & traçabilité (RGPD) */}
+          <AuditPanel travelerId={travelerId!} />
+
           {/* Bouton clôture en bas */}
           {data.status !== 'completed' && data.status !== 'cancelled' && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 flex items-center justify-between gap-3 flex-wrap">
@@ -387,6 +446,30 @@ export default function FollowupDetailPage() {
           onClose={() => setCloseOpen(false)}
           onSuccess={() => {
             setCloseOpen(false);
+            load();
+          }}
+        />
+      )}
+      {data && (
+        <ReclassifyCaseModal
+          open={reclassifyOpen}
+          travelerId={travelerId!}
+          currentClassification={data.current_classification}
+          onClose={() => setReclassifyOpen(false)}
+          onSuccess={() => {
+            setReclassifyOpen(false);
+            load();
+            setTimelineRefreshKey((k) => k + 1);
+          }}
+        />
+      )}
+      {data && (
+        <AssignAgentModal
+          open={assignOpen}
+          travelerId={travelerId!}
+          onClose={() => setAssignOpen(false)}
+          onSuccess={() => {
+            setAssignOpen(false);
             load();
           }}
         />

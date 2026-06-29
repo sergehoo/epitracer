@@ -64,6 +64,7 @@ from .permissions import (
     CanSendFollowupNotification,
     CanViewFollowupDetail,
     CanViewLocationHistory,
+    CanViewSensitiveMedicalData,
     log_data_access,
 )
 from .serializers import (
@@ -145,6 +146,16 @@ def _check_object_perm(request, view, case, permission_cls):
 
 class _FollowupPagination(PageNumberPagination):
     page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
+class _FollowupListPagination(PageNumberPagination):
+    """Pagination dédiée aux GET liste (symptômes/samples/lab-results).
+
+    Page size = 50 par défaut conformément à la spec Phase 9F.
+    """
+    page_size = 50
     page_size_query_param = "page_size"
     max_page_size = 200
 
@@ -344,7 +355,54 @@ class FollowupActionsView(APIView):
 
 
 class FollowupSymptomsView(APIView):
-    permission_classes = [IsAuthenticated, CanAddMedicalAction]
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method.upper() == "GET":
+            return [IsAuthenticated(), CanViewFollowupDetail()]
+        return [IsAuthenticated(), CanAddMedicalAction()]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("is_critical", bool, OpenApiParameter.QUERY, required=False),
+            OpenApiParameter("source", str, OpenApiParameter.QUERY, required=False),
+        ],
+        responses={200: dict},
+        description="Liste paginée des symptômes déclarés pour ce voyageur.",
+    )
+    def get(self, request, traveler_id):
+        """GET liste paginée — pour persistance au refresh côté frontend.
+
+        Filtres optionnels : ?is_critical=true&source=checkin|visit|call|admin
+        Tri par défaut : -created_at.
+        """
+        traveler, case = _resolve_case(traveler_id)
+        # Permission lecture : CanViewFollowupDetail (plus permissif que add)
+        _check_object_perm(request, self, case, CanViewFollowupDetail)
+
+        qs = (
+            MedicalSymptomReport.objects
+            .filter(followup_case=case)
+            .select_related("reported_by_user")
+            .order_by("-created_at")
+        )
+        params = request.query_params
+        if (val := params.get("is_critical")) is not None:
+            val_low = str(val).strip().lower()
+            if val_low in ("true", "1", "yes"):
+                qs = qs.filter(is_critical=True)
+            elif val_low in ("false", "0", "no"):
+                qs = qs.filter(is_critical=False)
+        if src := params.get("source"):
+            qs = qs.filter(source=src)
+
+        paginator = _FollowupListPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        items = page if page is not None else list(qs[:200])
+        ser = MedicalSymptomReportSerializer(items, many=True)
+        if page is not None:
+            return paginator.get_paginated_response(ser.data)
+        return Response({"results": ser.data, "count": len(ser.data)})
 
     @extend_schema(
         request=MedicalSymptomReportSerializer,
@@ -403,7 +461,41 @@ class FollowupSymptomsView(APIView):
 
 
 class FollowupSamplesView(APIView):
-    permission_classes = [IsAuthenticated, CanRequestSample]
+    # Permissions évaluées par méthode — GET = lecture, POST = ajout.
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method.upper() == "GET":
+            return [IsAuthenticated(), CanViewFollowupDetail()]
+        return [IsAuthenticated(), CanRequestSample()]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("transport_status", str, OpenApiParameter.QUERY, required=False),
+        ],
+        responses={200: dict},
+        description="Liste paginée des prélèvements demandés pour ce voyageur.",
+    )
+    def get(self, request, traveler_id):
+        traveler, case = _resolve_case(traveler_id)
+        _check_object_perm(request, self, case, CanViewFollowupDetail)
+
+        qs = (
+            MedicalSample.objects
+            .filter(followup_case=case)
+            .select_related("collected_by")
+            .order_by("-created_at")
+        )
+        if status_p := request.query_params.get("transport_status"):
+            qs = qs.filter(transport_status=status_p)
+
+        paginator = _FollowupListPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        items = page if page is not None else list(qs[:200])
+        ser = MedicalSampleSerializer(items, many=True)
+        if page is not None:
+            return paginator.get_paginated_response(ser.data)
+        return Response({"results": ser.data, "count": len(ser.data)})
 
     @extend_schema(
         request=FollowupRequestSampleSerializer,
@@ -500,7 +592,44 @@ class FollowupSampleUpdateView(APIView):
 
 
 class FollowupLabResultsView(APIView):
-    permission_classes = [IsAuthenticated, CanAddLabResult]
+    # GET ouvert aux lecteurs (CanViewFollowupDetail) ; POST réservé labo.
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method.upper() == "GET":
+            return [IsAuthenticated(), CanViewFollowupDetail()]
+        return [IsAuthenticated(), CanAddLabResult()]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("result", str, OpenApiParameter.QUERY, required=False),
+            OpenApiParameter("status", str, OpenApiParameter.QUERY, required=False),
+        ],
+        responses={200: dict},
+        description="Liste paginée des analyses labo pour les prélèvements de ce voyageur.",
+    )
+    def get(self, request, traveler_id):
+        traveler, case = _resolve_case(traveler_id)
+        _check_object_perm(request, self, case, CanViewFollowupDetail)
+
+        qs = (
+            LabAnalysis.objects
+            .filter(sample__followup_case=case)
+            .select_related("sample", "validated_by")
+            .order_by("-created_at")
+        )
+        if res := request.query_params.get("result"):
+            qs = qs.filter(result=res)
+        if status_p := request.query_params.get("status"):
+            qs = qs.filter(status=status_p)
+
+        paginator = _FollowupListPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        items = page if page is not None else list(qs[:200])
+        ser = LabAnalysisSerializer(items, many=True)
+        if page is not None:
+            return paginator.get_paginated_response(ser.data)
+        return Response({"results": ser.data, "count": len(ser.data)})
 
     @extend_schema(
         request=FollowupLabAnalysisCreateSerializer,
@@ -1091,6 +1220,61 @@ class FollowupLocationHistoryView(APIView):
                 for p in pings
             ],
             "count": pings.count() if hasattr(pings, "count") else len(pings),
+        })
+
+
+# ============================================================================
+# 17. Dévoiler le numéro de téléphone (sensible — log obligatoire)
+# ============================================================================
+
+
+class FollowupUnmaskPhoneView(APIView):
+    """POST /api/v1/admin/followups/{travelerId}/unmask-phone/
+
+    Renvoie le numéro de téléphone en clair du voyageur et crée
+    systématiquement une entrée DataAccessLog avec ressource IDENTITY
+    et un préfixe `phone_unmask` dans le motif pour pouvoir filtrer
+    précisément ce type d'accès dans l'audit.
+
+    Query/body :
+      - reason (obligatoire) — justification métier
+    """
+
+    permission_classes = [IsAuthenticated, CanViewSensitiveMedicalData]
+
+    @extend_schema(
+        parameters=[OpenApiParameter("reason", str, OpenApiParameter.QUERY, required=True)],
+        responses={200: dict, 400: dict},
+    )
+    def post(self, request, traveler_id):
+        reason = (
+            request.query_params.get("reason")
+            or (request.data or {}).get("reason")
+            or ""
+        ).strip()
+        if not reason:
+            return Response(
+                {"detail": "Reason required for sensitive data access."},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+
+        traveler, case = _resolve_case(traveler_id)
+        _check_object_perm(request, self, case, CanViewSensitiveMedicalData)
+
+        # Préfixe `phone_unmask` pour permettre un filtrage ciblé dans
+        # l'audit. La ressource IDENTITY est la plus proche sémantiquement.
+        log = log_data_access(
+            request=request,
+            traveler=traveler,
+            resource=DataAccessLog.Resource.IDENTITY,
+            reason=f"phone_unmask: {reason}"[:200],
+        )
+
+        phone_raw = traveler.phone_mobile or traveler.whatsapp_phone or ""
+        return Response({
+            "phone": phone_raw,
+            "accessed_at": (log.accessed_at if log else timezone.now()),
+            "reason": reason,
         })
 
 

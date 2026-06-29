@@ -216,3 +216,135 @@ def test_followup_close_updates_case_status(
     active_case.refresh_from_db()
     assert active_case.status == "completed"
     assert active_case.closure_reason == "manual_close"
+
+
+# ============================================================================
+# Phase 9F — GET liste paginée + unmask-phone
+# ============================================================================
+
+
+@pytest.mark.django_db
+def test_symptoms_get_returns_paginated_list_with_filter(
+    auth_client, active_case, ebola_protocol, traveler,
+):
+    """GET /symptoms/ renvoie les rapports triés -created_at avec filtre is_critical."""
+    from apps.medical.models import MedicalSymptomReport, SymptomSource
+    from datetime import date
+
+    MedicalSymptomReport.objects.create(
+        followup_case=active_case, symptom_code="fever",
+        symptom_label="Fièvre", severity="critical",
+        onset_date=date.today(), source=SymptomSource.CHECKIN,
+        is_critical=True,
+    )
+    MedicalSymptomReport.objects.create(
+        followup_case=active_case, symptom_code="cough",
+        symptom_label="Toux", severity="mild",
+        onset_date=date.today(), source=SymptomSource.ADMIN,
+        is_critical=False,
+    )
+
+    url = f"/api/v1/admin/followups/{traveler.public_id}/symptoms/"
+    resp = auth_client.get(url)
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    results = body.get("results", [])
+    assert len(results) == 2
+
+    # Filtre is_critical=true
+    resp_crit = auth_client.get(url + "?is_critical=true")
+    assert resp_crit.status_code == 200
+    body_crit = resp_crit.json()
+    assert all(r["is_critical"] for r in body_crit.get("results", []))
+    assert len(body_crit.get("results", [])) == 1
+
+
+@pytest.mark.django_db
+def test_samples_get_returns_paginated_list(
+    auth_client, active_case, traveler,
+):
+    """GET /samples/ renvoie la liste paginée + filtre transport_status."""
+    from apps.medical.models import MedicalSample, SampleTransportStatus
+
+    MedicalSample.objects.create(
+        followup_case=active_case, sample_code="EBOLA-TEST-001",
+        sample_type="blood",
+        transport_status=SampleTransportStatus.REQUESTED,
+    )
+    MedicalSample.objects.create(
+        followup_case=active_case, sample_code="EBOLA-TEST-002",
+        sample_type="blood",
+        transport_status=SampleTransportStatus.COLLECTED,
+    )
+
+    url = f"/api/v1/admin/followups/{traveler.public_id}/samples/"
+    resp = auth_client.get(url)
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    assert len(body.get("results", [])) == 2
+
+    resp_filt = auth_client.get(url + "?transport_status=requested")
+    assert resp_filt.status_code == 200
+    results = resp_filt.json().get("results", [])
+    assert len(results) == 1
+    assert results[0]["transport_status"] == "requested"
+
+
+@pytest.mark.django_db
+def test_lab_results_get_returns_paginated_list(
+    auth_client, active_case, traveler,
+):
+    """GET /lab-results/ renvoie les analyses des prélèvements du cas."""
+    from apps.medical.models import (
+        LabAnalysis, LabAnalysisStatus, MedicalSample,
+    )
+
+    sample = MedicalSample.objects.create(
+        followup_case=active_case, sample_code="EBOLA-TEST-010",
+        sample_type="blood",
+    )
+    LabAnalysis.objects.create(
+        sample=sample, lab_name="INHP", test_type="PCR",
+        result="positive", status=LabAnalysisStatus.RESULT_AVAILABLE,
+    )
+
+    url = f"/api/v1/admin/followups/{traveler.public_id}/lab-results/"
+    resp = auth_client.get(url)
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    results = body.get("results", [])
+    assert len(results) == 1
+    assert results[0]["result"] == "positive"
+
+    # Filtre par result
+    resp_neg = auth_client.get(url + "?result=negative")
+    assert resp_neg.status_code == 200
+    assert len(resp_neg.json().get("results", [])) == 0
+
+
+@pytest.mark.django_db
+def test_unmask_phone_requires_reason_and_creates_log(
+    auth_client, active_case, traveler,
+):
+    """POST /unmask-phone/ exige reason et crée une entrée DataAccessLog."""
+    url = f"/api/v1/admin/followups/{traveler.public_id}/unmask-phone/"
+    # Sans raison → 400
+    resp_400 = auth_client.post(url, {}, format="json")
+    assert resp_400.status_code == 400
+
+    # Avec raison → 200 + DataAccessLog créé
+    resp = auth_client.post(
+        url + "?reason=Investigation%20HA-9999", {}, format="json",
+    )
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    assert body.get("phone") == traveler.phone_mobile
+    assert body.get("reason") == "Investigation HA-9999"
+
+    # DataAccessLog créé avec préfixe phone_unmask
+    logs = DataAccessLog.objects.filter(
+        traveler=traveler,
+        resource=DataAccessLog.Resource.IDENTITY,
+    )
+    assert logs.exists()
+    assert any("phone_unmask" in log.reason for log in logs)
