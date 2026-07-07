@@ -347,9 +347,15 @@ class GlobalAuditLogView(APIView):
                     "user_label": (r.accessed_by.email if r.accessed_by else "—"),
                     "user_role": r.accessed_by_role or "",
                     "action": r.get_resource_display(),
+                    "action_code": (r.resource or "").lower(),
                     "target": (r.traveler.public_id if r.traveler else "—"),
+                    "target_kind": "traveler",
                     "reason": r.reason or "",
                     "ip_address": r.ip_address,
+                    "user_agent": getattr(r, "user_agent", "") or "",
+                    "payload": {},
+                    "request_id": "",
+                    "severity": "info",
                     "ok": True,
                 })
 
@@ -384,11 +390,17 @@ class GlobalAuditLogView(APIView):
                     "user_label": (r.verified_by.email if r.verified_by else "Agent terrain"),
                     "user_role": "",
                     "action": ("Scan QR valide" if r.is_valid else "Scan QR refusé"),
+                    "action_code": "scan_ok" if r.is_valid else "scan_denied",
                     "target": pid or r.pass_number,
+                    "target_kind": "pass",
                     "reason": r.reason or "",
                     "ip_address": None,
                     "entry_point": (r.entry_point.name if r.entry_point else None),
                     "pass_number": r.pass_number,
+                    "user_agent": getattr(r, "user_agent", "") or "",
+                    "payload": {},
+                    "request_id": "",
+                    "severity": "success" if r.is_valid else "danger",
                     "ok": bool(r.is_valid),
                 })
 
@@ -413,17 +425,40 @@ class GlobalAuditLogView(APIView):
                         | Q(ip_address__icontains=q)
                     )
                 for r in qs[:500]:
+                    action_str = str(r.action or "")
+                    action_lower = action_str.lower()
+                    # Inférence de sévérité pour coloration côté front
+                    if any(k in action_lower for k in ("delete", "revoke", "denied", "fail", "error", "block")):
+                        sev = "danger"
+                    elif any(k in action_lower for k in ("login", "logout", "read", "view", "list", "export")):
+                        sev = "info"
+                    elif any(k in action_lower for k in ("update", "edit", "change", "assign")):
+                        sev = "warning"
+                    elif any(k in action_lower for k in ("create", "add", "send", "issue")):
+                        sev = "success"
+                    else:
+                        sev = "info"
+                    # target: si la cible est référencée
+                    target = ""
+                    if getattr(r, "target_ct_id", None) and getattr(r, "target_id", None):
+                        target = f"{r.target_ct.model}#{r.target_id}"
                     items.append({
                         "id": f"audit_{r.pk}",
                         "source": "admin",
                         "occurred_at": r.created_at,
                         "user_label": (r.actor.email if r.actor else "Système"),
                         "user_role": "",
-                        "action": r.action,
-                        "target": "",
+                        "action": action_str,
+                        "action_code": action_lower,
+                        "target": target,
+                        "target_kind": "generic",
                         "reason": r.summary or "",
                         "ip_address": getattr(r, "ip_address", None),
-                        "ok": True,
+                        "user_agent": getattr(r, "user_agent", "") or "",
+                        "payload": getattr(r, "payload", {}) or {},
+                        "request_id": getattr(r, "request_id", "") or "",
+                        "severity": sev,
+                        "ok": sev != "danger",
                     })
             except Exception:
                 # AuditLog optionnel — l'app peut ne pas être branchée

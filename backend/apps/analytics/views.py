@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from django.core.cache import cache
 from django.db.models import Avg, Count, F, Q
-from django.db.models.functions import ExtractHour, TruncDate
+from django.db.models.functions import ExtractHour, ExtractIsoWeekDay, TruncDate
 from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -643,16 +643,94 @@ class VisitsOverviewView(APIView):
             .values("language").annotate(count=Count("id")).order_by("-count")[:10]
         )
 
+        # Top referrers (nettoyés : on ne garde que host + éventuellement les
+        # sous-arbres critiques). On dédoublonne « (direct) » pour visites sans
+        # referrer.
+        top_referrers_raw = (
+            current_qs.values("referrer")
+            .annotate(count=Count("id")).order_by("-count")[:40]
+        )
+        ref_map: dict[str, int] = {}
+        for row in top_referrers_raw:
+            raw = (row["referrer"] or "").strip()
+            if not raw:
+                key = "(accès direct)"
+            else:
+                # Normalisation : garde host + premier segment de path
+                try:
+                    from urllib.parse import urlparse
+                    p = urlparse(raw if "://" in raw else f"https://{raw}")
+                    host = (p.hostname or raw).replace("www.", "")
+                    key = host if not p.path or p.path in ("/", "") else f"{host}{p.path.rstrip('/')}"
+                    # Filtre auto-referrers internes
+                    if host.endswith(("destinationci.com", "veillesanitaire.com")):
+                        key = "(interne)"
+                except Exception:
+                    key = raw[:60]
+            ref_map[key] = ref_map.get(key, 0) + row["count"]
+        top_referrers = sorted(
+            ({"referrer": k, "count": v} for k, v in ref_map.items()),
+            key=lambda x: x["count"], reverse=True,
+        )[:10]
+
+        # Heatmap : jour de la semaine (1=lundi..7=dimanche) × heure locale
+        # NB : PostgreSQL renvoie ISO DOW (1..7). SQLite renvoie 0..6 avec 0=dimanche.
+        by_hour_dow_qs = (
+            current_qs.annotate(dow=ExtractIsoWeekDay("created_at"), hour=ExtractHour("created_at"))
+            .values("dow", "hour")
+            .annotate(count=Count("id"))
+        )
+        by_hour_dow = [
+            {"dow": row["dow"], "hour": row["hour"], "count": row["count"]}
+            for row in by_hour_dow_qs
+            if row["dow"] is not None and row["hour"] is not None
+        ]
+
+        # Distribution par heure sur la période (0..23)
+        by_hour_qs = (
+            current_qs.annotate(hour=ExtractHour("created_at"))
+            .values("hour").annotate(count=Count("id")).order_by("hour")
+        )
+        hour_map = OrderedDict((h, 0) for h in range(24))
+        for row in by_hour_qs:
+            if row["hour"] is not None:
+                hour_map[row["hour"]] = row["count"]
+        by_hour = [{"hour": h, "count": c} for h, c in hour_map.items()]
+
+        # Bots (dénombrement rapide sur la période — utile pour toggle)
+        bots_count = PageVisit.objects.filter(
+            created_at__gte=start, is_bot=True,
+            **({"portal": portal} if portal else {}),
+        ).count()
+
+        # Utilisateurs "actifs" (proxy : visites dans les 5 dernières minutes)
+        active_now = base_qs.filter(created_at__gte=now - timedelta(minutes=5)) \
+            .values("session_id").distinct().count()
+
+        # Répartition device (mobile / desktop / api) — heuristique user-agent
+        mobile = current_qs.filter(user_agent__iregex=r"(iphone|android|mobile|ipad)").count()
+        api_hits = current_qs.filter(portal=Portal.API).count()
+        desktop = max(0, kpi["period"] - mobile - api_hits)
+        devices = [
+            {"device": "mobile", "count": mobile},
+            {"device": "desktop", "count": desktop},
+            {"device": "api", "count": api_hits},
+        ]
+
         return Response({
             "days": days,
             "exclude_bots": exclude_bots,
             "portal_filter": portal,
-            "kpi": kpi,
+            "kpi": {**kpi, "bots_count": bots_count, "active_now": active_now},
             "by_day": by_day,
+            "by_hour": by_hour,
+            "by_hour_dow": by_hour_dow,
             "top_countries": top_countries,
             "top_cities": top_cities,
             "top_paths": top_paths,
+            "top_referrers": top_referrers,
             "by_portal": by_portal,
             "top_languages": top_languages,
+            "devices": devices,
             "generated_at": now.isoformat(),
         })
