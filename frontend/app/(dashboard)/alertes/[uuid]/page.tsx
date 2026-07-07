@@ -54,6 +54,7 @@ interface AlertDetail {
 }
 
 interface TravelerInfo {
+  id: number;
   public_id: string;
   full_name?: string;
   last_name: string;
@@ -300,6 +301,7 @@ export default function AlertDetailPage() {
                   <button
                     type="button"
                     onClick={() => setMsgTarget({
+                      traveler_id: traveler.id,
                       traveler_public_id: traveler.public_id,
                       traveler_name: `${traveler.last_name} ${traveler.first_name}`,
                       phone: traveler.phone_mobile,

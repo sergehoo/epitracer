@@ -33,8 +33,13 @@ function absUrl(path: string | null | undefined): string {
    Types (depuis /ebola/public/pass/<public_id>/ — endpoint AllowAny)
    ============================================================ */
 interface TravelerLite {
+  id: number;
   public_id: string;
   full_name: string;
+  first_name?: string;
+  last_name?: string;
+  phone_mobile?: string;
+  whatsapp_phone?: string;
   current_health_status: string;
   arrival_date: string | null;
   entry_point: string | null;
@@ -515,6 +520,7 @@ export default function TravelerDetailPage() {
           <button
             type="button"
             onClick={() => setMsgTarget({
+              traveler_id: t.id,
               traveler_public_id: t.public_id,
               traveler_name: `${t.last_name} ${t.first_name}`,
               phone: t.phone_mobile || (t as any).whatsapp_phone || '',

@@ -21,6 +21,7 @@ import { SendMessageModal, SendMessageTarget } from '@/components/notifications/
 import { BulkSendMessageModal, BulkTarget } from '@/components/notifications/BulkSendMessageModal';
 
 interface FollowupRow {
+  id: number;
   public_id: string;
   full_name: string;
   phone: string;
@@ -459,6 +460,7 @@ export default function SuiviVoyageursPage() {
                       <button
                         type="button"
                         onClick={() => setMsgTarget({
+                          traveler_id: r.id,
                           traveler_public_id: r.public_id,
                           traveler_name: r.full_name,
                           phone: r.phone,
