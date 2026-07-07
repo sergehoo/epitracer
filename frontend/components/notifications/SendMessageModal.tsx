@@ -25,7 +25,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  Send, X, MessageCircle, Smartphone, FileText, Pencil, Mail,
+  Send, X, MessageCircle, Smartphone, FileText, Pencil, Mail, BellRing,
   Loader2, Check, AlertCircle, Wifi, WifiOff, ChevronRight,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
@@ -64,7 +64,7 @@ export interface SendMessageTarget {
   first_name?: string;
 }
 
-type ChannelKey = 'sms' | 'whatsapp' | 'email';
+type ChannelKey = 'sms' | 'whatsapp' | 'email' | 'push';
 
 interface Props {
   target: SendMessageTarget;
@@ -77,6 +77,7 @@ const CHANNELS: { value: ChannelKey; label: string; icon: JSX.Element }[] = [
   { value: 'sms', label: 'SMS', icon: <Smartphone className="h-4 w-4" /> },
   { value: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
   { value: 'email', label: 'Email', icon: <Mail className="h-4 w-4" /> },
+  { value: 'push', label: 'App mobile', icon: <BellRing className="h-4 w-4" /> },
 ];
 
 const PROVIDER_LABEL: Record<string, { label: string; color: string }> = {
@@ -100,6 +101,7 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
   const [sending, setSending] = useState(false);
 
   const isEmail = channel === 'email';
+  const isPush = channel === 'push';
 
   // Charge les templates au mount
   useEffect(() => {
@@ -174,7 +176,13 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
   const smsSegments = Math.max(1, Math.ceil(charCount / 160));
 
   const submit = async () => {
-    if (!phone.trim()) {
+    // Push in-app : ne demande pas de destinataire — le backend résout les
+    // MobileDevice actifs du voyageur cible (traveler_id doit être fourni).
+    if (isPush && !target.traveler_id) {
+      toast.error('Un voyageur enregistré est requis pour l\'envoi push in-app.');
+      return;
+    }
+    if (!isPush && !phone.trim()) {
       toast.error(isEmail ? 'Adresse email requise.' : 'Numéro de téléphone requis.');
       return;
     }
@@ -283,28 +291,47 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
             </div>
           </div>
 
-          {/* Destinataire : téléphone OU email selon canal */}
+          {/* Destinataire : téléphone / email / (push = résolution auto) */}
           <div>
             <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
-              {isEmail ? 'Adresse email destinataire' : 'Numéro destinataire'}
+              {isPush ? 'Destinataire (auto)' : isEmail ? 'Adresse email destinataire' : 'Numéro destinataire'}
             </div>
-            <input
-              type={isEmail ? 'email' : 'tel'}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder={isEmail ? 'voyageur@exemple.com' : '+225XXXXXXXXXX'}
-              className="input-base font-mono"
-              autoComplete={isEmail ? 'email' : 'tel'}
-            />
+            {isPush ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs">
+                <div className="flex items-center gap-2 text-emerald-800 font-semibold">
+                  <BellRing className="h-3.5 w-3.5" />
+                  Notification envoyée dans l'app <strong>Mon Pass Sanitaire</strong>
+                </div>
+                <div className="mt-1 text-slate-600">
+                  Cible : {target.traveler_name || target.traveler_public_id || 'voyageur'}
+                  {target.traveler_public_id && (
+                    <span className="font-mono ml-1 text-slate-400">({target.traveler_public_id})</span>
+                  )}
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500">
+                  Résolution automatique vers les appareils mobiles actifs du voyageur (FCM).
+                  Aucun envoi si l'app n'est pas installée / connectée.
+                </div>
+              </div>
+            ) : (
+              <input
+                type={isEmail ? 'email' : 'tel'}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder={isEmail ? 'voyageur@exemple.com' : '+225XXXXXXXXXX'}
+                className="input-base font-mono"
+                autoComplete={isEmail ? 'email' : 'tel'}
+              />
+            )}
             {/* Affichage provider auto-détecté (SMS/WhatsApp seulement) */}
-            {!isEmail && routing && providerInfo && (
+            {!isEmail && !isPush && routing && providerInfo && (
               <div className={`mt-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold border ${providerInfo.color}`}>
                 <Wifi className="h-3 w-3" />
                 <span>Provider auto : <strong>{providerInfo.label}</strong></span>
                 <span className="text-[10px] font-mono opacity-70">{routing.normalized}</span>
               </div>
             )}
-            {!isEmail && routingError && (
+            {!isEmail && !isPush && routingError && (
               <div className="mt-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                 <WifiOff className="h-3 w-3" /> {routingError}
               </div>
@@ -445,13 +472,13 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
                 <span>Aperçu du message</span>
                 <span className="font-mono text-[10px] text-slate-400">
                   {charCount} caractères
-                  {!isEmail && <> · {smsSegments} SMS</>}
+                  {!isEmail && !isPush && <> · {smsSegments} SMS</>}
                 </span>
               </div>
               <div className="rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 p-4 text-sm whitespace-pre-wrap leading-relaxed">
                 {previewBody}
               </div>
-              {!isEmail && smsSegments > 4 && (
+              {!isEmail && !isPush && smsSegments > 4 && (
                 <div className="mt-2 inline-flex items-center gap-1 text-xs text-amber-700">
                   <AlertCircle className="h-3 w-3" /> Message long ({smsSegments} segments SMS) — coût accru.
                 </div>

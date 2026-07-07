@@ -10,7 +10,7 @@
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Mail, MessageCircle, Send, Smartphone, Users, X, XCircle } from 'lucide-react';
+import { BellRing, CheckCircle2, Mail, MessageCircle, Send, Smartphone, Users, X, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extractApiError } from '@/lib/api';
 
@@ -25,7 +25,7 @@ export interface BulkTarget {
   first_name?: string;
 }
 
-type ChannelKey = 'sms' | 'whatsapp' | 'email';
+type ChannelKey = 'sms' | 'whatsapp' | 'email' | 'push';
 
 interface NotificationTemplate {
   id: number;
@@ -63,6 +63,7 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const isEmail = channel === 'email';
+  const isPush = channel === 'push';
 
   // Charge les templates au mount
   useEffect(() => {
@@ -92,7 +93,11 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
   );
 
   // En mode email on compte les emails dispos ; sinon les téléphones.
-  const validRecipients = isEmail
+  const validRecipients = isPush
+    // Push in-app : on considère "valide" tout traveler_id présent — le backend
+    // fera le tri final selon les MobileDevice enregistrés.
+    ? targets.filter((t) => !!t.traveler_id).length
+    : isEmail
     ? targets.filter((t) => !!t.email).length
     : targets.filter((t) => !!t.phone).length;
   const noRecipient = targets.length - validRecipients;
@@ -120,12 +125,28 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
     for (let i = 0; i < updated.length; i++) {
       const r = updated[i];
       // Choisir le destinataire selon le canal
-      const recipient = isEmail
+      // Push : le backend résout MobileDevice via traveler_id — pas besoin
+      // d'un vrai recipient (on envoie le public_id comme placeholder).
+      const recipient = isPush
+        ? (r.target.traveler_public_id || String(r.target.traveler_id ?? ''))
+        : isEmail
         ? (r.target.email || '').trim()
         : (r.target.phone || '').trim();
       if (!recipient) {
         r.status = 'failed';
-        r.error = isEmail ? 'Pas d\'email' : 'Pas de téléphone';
+        r.error = isPush
+          ? 'Voyageur sans ID enregistré'
+          : isEmail
+          ? 'Pas d\'email'
+          : 'Pas de téléphone';
+        failCount++;
+        setRows([...updated]);
+        continue;
+      }
+      // Push exige aussi qu'un traveler_id soit présent
+      if (isPush && !r.target.traveler_id) {
+        r.status = 'failed';
+        r.error = 'Push requiert un voyageur enregistré';
         failCount++;
         setRows([...updated]);
         continue;
@@ -223,6 +244,7 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
                 { value: 'sms', label: 'SMS', icon: <Smartphone className="h-4 w-4" /> },
                 { value: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
                 { value: 'email', label: 'Email', icon: <Mail className="h-4 w-4" /> },
+                { value: 'push', label: 'App mobile', icon: <BellRing className="h-4 w-4" /> },
               ].map((c) => (
                 <button
                   key={c.value}

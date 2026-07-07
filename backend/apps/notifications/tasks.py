@@ -129,9 +129,39 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
             ok, msg_id, err = res.ok, res.provider_id, res.error
 
         elif notif.channel == Channel.PUSH:
-            from .providers import send_push as send_pu
-            res = send_pu(notif.recipient, notif.subject, notif.body)
-            ok, msg_id, err = res.ok, res.provider_id, res.error
+            # Push in-app mobile : on résout les MobileDevice actifs du
+            # voyageur (via son email → User) et on envoie FCM avec un
+            # payload `data` pour permettre au mobile de deep-linker.
+            # Le helper _send_fcm_to_traveler existe déjà dans
+            # apps.companion.tasks (gère fallback stub si FCM_SERVER_KEY
+            # manque, retourne (int_sent, int_failed)).
+            if notif.traveler_id:
+                try:
+                    from apps.companion.tasks import _send_fcm_to_traveler
+                    data_payload = {
+                        "type": "admin_message",
+                        "notification_id": str(notif.id),
+                        "traveler_id": str(
+                            getattr(notif.traveler, "public_id", "") or notif.traveler_id
+                        ),
+                    }
+                    sent, failed = _send_fcm_to_traveler(
+                        notif.traveler,
+                        title=notif.subject or "Message INHP",
+                        body=notif.body,
+                        data=data_payload,
+                    )
+                    ok = sent > 0
+                    msg_id = f"fcm:{sent}sent/{failed}failed"
+                    err = "" if ok else "Aucun appareil FCM actif sur ce voyageur"
+                except Exception as exc:  # noqa: BLE001
+                    ok, msg_id, err = False, "", f"Push failed: {exc}"
+            else:
+                # Fallback historique : envoi direct au token si fourni
+                # dans notif.recipient (utilisé par d'anciens callers).
+                from .providers import send_push as send_pu
+                res = send_pu(notif.recipient, notif.subject, notif.body)
+                ok, msg_id, err = res.ok, res.provider_id, res.error
 
         else:
             ok, msg_id, err = False, "", f"Canal non supporté : {notif.channel}"

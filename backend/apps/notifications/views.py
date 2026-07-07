@@ -100,6 +100,11 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 if channel == "email":
                     # Pour l'email : utiliser l'adresse mail déclarée par le voyageur
                     recipient = (getattr(traveler, "email", "") or "").strip()
+                elif channel == "push":
+                    # Pour la push in-app : on utilise le public_id du voyageur
+                    # comme "recipient" symbolique. Le vrai routage vers les
+                    # MobileDevice actifs se fait dans _execute_send / dispatch.
+                    recipient = getattr(traveler, "public_id", "") or f"traveler:{traveler.pk}"
                 else:
                     recipient = (
                         getattr(traveler, "whatsapp_phone", "") or
@@ -108,12 +113,18 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
                     ).strip()
 
         if not recipient:
-            label = "adresse email" if channel == "email" else "numéro de destinataire"
+            if channel == "email":
+                label = "adresse email"
+            elif channel == "push":
+                label = "appareil mobile enregistré"
+            else:
+                label = "numéro de destinataire"
             return Response({"detail": f"Aucun {label} disponible."}, status=400)
 
         # Pré-validation pour retour 400 propre — uniquement SMS/WhatsApp
         # (les téléphones sont validés/normalisés). Pour email, la validation
-        # de format est déjà faite par le serializer.
+        # de format est déjà faite par le serializer. Pour push, le routage
+        # se fait vers MobileDevice — pas de validation format à ce niveau.
         if channel in ("sms", "whatsapp"):
             try:
                 NotificationProviderRouter.detect(recipient, channel=channel)
