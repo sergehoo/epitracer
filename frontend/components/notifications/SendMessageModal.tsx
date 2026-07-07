@@ -300,7 +300,7 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs">
                 <div className="flex items-center gap-2 text-emerald-800 font-semibold">
                   <BellRing className="h-3.5 w-3.5" />
-                  Notification envoyée dans l'app <strong>Mon Pass Sanitaire</strong>
+                  Notification in-app envoyée à <strong>Mon Pass Sanitaire</strong>
                 </div>
                 <div className="mt-1 text-slate-600">
                   Cible : {target.traveler_name || target.traveler_public_id || 'voyageur'}
@@ -309,8 +309,10 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
                   )}
                 </div>
                 <div className="mt-1 text-[10px] text-slate-500">
-                  Résolution automatique vers les appareils mobiles actifs du voyageur (FCM).
-                  Aucun envoi si l'app n'est pas installée / connectée.
+                  Envoyée <strong>en parallèle</strong> sur les 2 canaux in-app :
+                  <br />• App mobile (Flutter) si installée — FCM
+                  <br />• PWA web (destinationci.com) si abonnée — VAPID Web Push
+                  <br />Aucun SMS de secours (utilisez le canal SMS pour ça).
                 </div>
               </div>
             ) : (
