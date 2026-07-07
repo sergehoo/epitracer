@@ -18,10 +18,18 @@ import '../../features/profile/profile_screen.dart';
 import '../../features/vaccinations/vaccinations_screen.dart';
 import '../../features/followup/followup_screen.dart';
 import '../../features/followup/checkin_screen.dart';
+import '../../features/followup/consent_screen.dart';
 import '../../features/education/stories_screen.dart';
 import '../../features/family/family_screen.dart';
 import '../../features/map/map_screen.dart';
 import '../../features/medical/medical_record_screen.dart';
+import '../../features/registration/registration_picker_screen.dart';
+import '../../features/registration/runner/form_runner_screen.dart';
+import '../../features/registration/runner/form_success_screen.dart';
+import '../../features/registration/runner/runner_models.dart';
+import '../../features/settings/about_screen.dart';
+import '../../features/settings/settings_screen.dart';
+import '../../features/teleconsult/teleconsult_screen.dart';
 import '../storage/secure_storage.dart';
 
 class AppRoutes {
@@ -38,6 +46,7 @@ class AppRoutes {
   static const vaccinations = '/vaccinations';
   static const followup = '/followup';
   static const checkin = '/followup/checkin';
+  static const consent = '/followup/consent';
   static const notifications = '/notifications';
   static const assistance = '/assistance';
   static const profile = '/profile';
@@ -47,6 +56,12 @@ class AppRoutes {
   static const family = '/family';
   static const teleconsult = '/teleconsultation';
   static const quizzes = '/quizzes';
+  static const settings = '/settings';
+  static const about = '/about';
+  static const registration = '/registration';
+  // Phase 8B — runner natif DynamicForm
+  static const registrationRun = '/registration/run/:code';
+  static const registrationSuccess = '/registration/success';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -64,8 +79,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         AppRoutes.login,
         AppRoutes.otp,
         AppRoutes.qrScanner,
+        AppRoutes.registration,
       ];
       if (publicRoutes.contains(state.matchedLocation)) return null;
+      // Phase 8B — le runner natif + l'écran succès sont publics.
+      if (state.matchedLocation.startsWith('/registration/run/')) return null;
+      if (state.matchedLocation == AppRoutes.registrationSuccess) return null;
 
       final hasSession = await storage.hasSession();
       // Redirection par défaut : voyageur (l'app cible le grand public)
@@ -104,6 +123,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.vaccinations, builder: (_, __) => const VaccinationsScreen()),
       GoRoute(path: AppRoutes.followup, builder: (_, __) => const FollowupScreen()),
       GoRoute(path: AppRoutes.checkin, builder: (_, __) => const CheckinScreen()),
+      GoRoute(path: AppRoutes.consent, builder: (_, __) => const ConsentScreen()),
       GoRoute(path: AppRoutes.notifications, builder: (_, __) => const NotificationsScreen()),
       GoRoute(path: AppRoutes.assistance, builder: (_, __) => const AssistanceScreen()),
       GoRoute(path: AppRoutes.profile, builder: (_, __) => const ProfileScreen()),
@@ -114,6 +134,32 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.map, builder: (_, __) => const MapScreen()),
       GoRoute(path: AppRoutes.family, builder: (_, __) => const FamilyScreen()),
       GoRoute(path: AppRoutes.stories, builder: (_, __) => const StoriesScreen()),
+      GoRoute(path: AppRoutes.teleconsult, builder: (_, __) => const TeleconsultScreen()),
+      GoRoute(path: AppRoutes.settings, builder: (_, __) => const SettingsScreen()),
+      GoRoute(path: AppRoutes.about, builder: (_, __) => const AboutScreen()),
+      GoRoute(
+        path: AppRoutes.registration,
+        builder: (_, __) => const RegistrationPickerScreen(),
+      ),
+      // Phase 8B — runner natif DynamicForm
+      GoRoute(
+        path: AppRoutes.registrationRun,
+        builder: (_, state) {
+          final code = state.pathParameters['code'] ?? '';
+          return FormRunnerScreen(code: code);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.registrationSuccess,
+        builder: (_, state) {
+          final extra = state.extra;
+          if (extra is SubmissionResult) {
+            return FormSuccessScreen(result: extra);
+          }
+          // Pas de résultat → on retombe sur le picker, plutôt qu'un crash.
+          return const RegistrationPickerScreen();
+        },
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(

@@ -12,6 +12,7 @@ import 'core/storage/secure_storage.dart';
 import 'core/sync/sync_service.dart';
 import 'core/theme/app_theme.dart';
 import 'shared/widgets/app_lock_gate.dart';
+import 'shared/widgets/staging_banner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -91,8 +92,9 @@ class _MonPassSanitaireAppState extends ConsumerState<MonPassSanitaireApp> {
         GlobalCupertinoLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
       ],
-      builder: (context, child) =>
-          AppLockGate(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => StagingBannerWrapper(
+        child: AppLockGate(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

@@ -10,7 +10,7 @@
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, MessageCircle, Send, Smartphone, Users, X, XCircle } from 'lucide-react';
+import { BellRing, CheckCircle2, Mail, MessageCircle, Send, Smartphone, Users, X, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extractApiError } from '@/lib/api';
 
@@ -18,9 +18,14 @@ export interface BulkTarget {
   traveler_id?: number | null;
   traveler_public_id?: string;
   full_name: string;
+  /** Téléphone — utilisé pour SMS/WhatsApp */
   phone: string;
+  /** Email — utilisé pour le canal Email */
+  email?: string;
   first_name?: string;
 }
+
+type ChannelKey = 'sms' | 'whatsapp' | 'email' | 'push';
 
 interface NotificationTemplate {
   id: number;
@@ -48,14 +53,17 @@ interface Row {
 }
 
 export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) {
-  const [channel, setChannel] = useState<'sms' | 'whatsapp'>('sms');
+  const [channel, setChannel] = useState<ChannelKey>('sms');
   const [mode, setMode] = useState<'free' | 'template'>('template');
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
   const [selectedTplCode, setSelectedTplCode] = useState<string>('');
   const [body, setBody] = useState('');
+  const [subject, setSubject] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
+  const isEmail = channel === 'email';
+  const isPush = channel === 'push';
 
   // Charge les templates au mount
   useEffect(() => {
@@ -69,6 +77,7 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
   useEffect(() => {
     if (open) {
       setBody('');
+      setSubject('');
       setSelectedTplCode('');
       setMode('template');
       setChannel('sms');
@@ -83,8 +92,18 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
     [templates, channel],
   );
 
-  const validPhones = targets.filter((t) => !!t.phone).length;
-  const noPhones = targets.length - validPhones;
+  // En mode email on compte les emails dispos ; sinon les téléphones.
+  const validRecipients = isPush
+    // Push in-app : on considère "valide" tout traveler_id présent — le backend
+    // fera le tri final selon les MobileDevice enregistrés.
+    ? targets.filter((t) => !!t.traveler_id).length
+    : isEmail
+    ? targets.filter((t) => !!t.email).length
+    : targets.filter((t) => !!t.phone).length;
+  const noRecipient = targets.length - validRecipients;
+  // Conserve les anciens noms pour ne pas casser le JSX existant
+  const validPhones = validRecipients;
+  const noPhones = noRecipient;
 
   const send = async () => {
     if (mode === 'free' && !body.trim()) {
@@ -105,9 +124,29 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
 
     for (let i = 0; i < updated.length; i++) {
       const r = updated[i];
-      if (!r.target.phone) {
+      // Choisir le destinataire selon le canal
+      // Push : le backend résout MobileDevice via traveler_id — pas besoin
+      // d'un vrai recipient (on envoie le public_id comme placeholder).
+      const recipient = isPush
+        ? (r.target.traveler_public_id || String(r.target.traveler_id ?? ''))
+        : isEmail
+        ? (r.target.email || '').trim()
+        : (r.target.phone || '').trim();
+      if (!recipient) {
         r.status = 'failed';
-        r.error = 'Pas de téléphone';
+        r.error = isPush
+          ? 'Voyageur sans ID enregistré'
+          : isEmail
+          ? 'Pas d\'email'
+          : 'Pas de téléphone';
+        failCount++;
+        setRows([...updated]);
+        continue;
+      }
+      // Push exige aussi qu'un traveler_id soit présent
+      if (isPush && !r.target.traveler_id) {
+        r.status = 'failed';
+        r.error = 'Push requiert un voyageur enregistré';
         failCount++;
         setRows([...updated]);
         continue;
@@ -118,9 +157,10 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
       try {
         const payload: any = {
           channel,
-          recipient: r.target.phone.trim(),
+          recipient,
         };
         if (r.target.traveler_id) payload.traveler = r.target.traveler_id;
+        if (isEmail) payload.subject = subject.trim();
 
         if (mode === 'template' && selectedTplCode) {
           payload.template_code = selectedTplCode;
@@ -203,11 +243,13 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
               {[
                 { value: 'sms', label: 'SMS', icon: <Smartphone className="h-4 w-4" /> },
                 { value: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
+                { value: 'email', label: 'Email', icon: <Mail className="h-4 w-4" /> },
+                { value: 'push', label: 'App mobile', icon: <BellRing className="h-4 w-4" /> },
               ].map((c) => (
                 <button
                   key={c.value}
                   type="button"
-                  onClick={() => !sending && setChannel(c.value as 'sms' | 'whatsapp')}
+                  onClick={() => !sending && setChannel(c.value as ChannelKey)}
                   className={`px-4 py-1.5 text-sm rounded-lg font-semibold transition inline-flex items-center gap-1.5 ${
                     channel === c.value
                       ? 'bg-emerald-600 text-white'
@@ -220,7 +262,35 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
                 </button>
               ))}
             </div>
+            {isEmail && (
+              <div className="mt-2 text-xs text-slate-500">
+                <Mail className="h-3 w-3 inline mr-1" />
+                Les voyageurs sans email seront ignorés ({noPhones > 0 ? `${noPhones} sans email` : 'tous OK'}).
+                Expéditeur PUBLIC <strong>Destination CI</strong> (imposé).
+              </div>
+            )}
           </div>
+
+          {/* Objet du mail — visible uniquement si canal=email */}
+          {isEmail && (
+            <div>
+              <label className="block text-xs uppercase tracking-widest text-slate-500 font-bold mb-2">
+                Objet du mail
+              </label>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Ex. Information importante — INHP Côte d'Ivoire"
+                maxLength={200}
+                disabled={sending}
+                className="input-base"
+              />
+              <div className="mt-1 text-[10px] text-slate-400">
+                Vide → l'objet du modèle sélectionné sera utilisé.
+              </div>
+            </div>
+          )}
 
           {/* Mode template/libre */}
           <div>

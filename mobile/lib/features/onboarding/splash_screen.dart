@@ -7,6 +7,7 @@ import '../../core/router/app_router.dart';
 import '../../core/storage/secure_storage.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_gradients.dart';
+import '../../shared/widgets/afriq_credit_footer.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -166,10 +167,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   ),
                 ),
               ),
-              const SizedBox(height: 64),
+              const SizedBox(height: 48),
 
               // Loader trois points animés
               const _DotsLoader(),
+
+              const Spacer(),
+
+              // Bandeau logos officiels + crédit AfriqConsulting
+              const OfficialLogosBanner(size: 40),
+              const SizedBox(height: 12),
+              const AfriqCreditFooter(variant: AfriqVariant.dark),
+              const SizedBox(height: 8),
             ],
           ),
         ),

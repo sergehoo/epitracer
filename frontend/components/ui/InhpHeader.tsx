@@ -97,7 +97,9 @@ function PublicHeader({
         </nav>
 
         <div className="hidden md:flex items-center gap-2">
-          <ThemeToggle />
+          {/* ThemeToggle volontairement absent du header PUBLIC : la landing
+              est en light forcé (identité institutionnelle). Le toggle reste
+              actif dans l'admin (cf. AdminHeader). */}
           {/* Le scan du QR code est désormais réservé aux agents et accessible
               uniquement depuis le portail admin (admin.veillesanitaire.com).
               Aucun bouton de vérification n'est exposé au public. */}

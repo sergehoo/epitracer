@@ -48,11 +48,16 @@ dependencies:
   cryptography: ^2.7.0   # Ed25519 verify offline
 
   # ── Files & PDF ──────────────────────────────────────────────────
-  file_picker: ^12.0.0-beta.5
+  # ^8.1.4 — version qui supporte AGP 8+ (namespace dans build.gradle).
+  # Les versions < 8 plantent au build Android avec "Namespace not specified".
+  file_picker: ^8.1.4
   path_provider: ^2.1.5
   flutter_pdfview: ^1.3.4
   url_launcher: ^6.3.1
   share_plus: ^13.1.0
+
+  # ── Form runner Phase 8B ─────────────────────────────────────────
+  signature: ^5.4.0   # pad de signature manuscrite pour DynamicForm
 
   # ── Push notifications ───────────────────────────────────────────
   firebase_core: ^4.10.0

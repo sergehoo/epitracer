@@ -16,15 +16,26 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
-  Activity, AlertTriangle, Bell, HeartPulse, RefreshCcw, ShieldCheck,
+  AlertTriangle, Bell, HeartPulse, RefreshCcw, ShieldCheck,
   TrendingUp, Users,
 } from 'lucide-react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { api } from '@/lib/api';
 
 interface NationalData {
+  filters?: {
+    period_days: number;
+    risk?: string | null;
+    country?: string | null;
+    entry_point?: string | null;
+    followup?: string | null;
+  };
   kpis: {
-    travelers_today: number;
+    travelers_today: number;          // alias historique = registrations_today
+    registrations_today?: number;     // enregistrements du jour (created_at=today)
+    arrivals_today?: number;          // arrivées du jour (arrival_date=today)
+    arrivals_tomorrow?: number;       // arrivées attendues demain
+    travelers_period?: number;
     travelers_total: number;
     active_followups: number;
     passes_issued: number;
@@ -32,20 +43,45 @@ interface NationalData {
     alerts_open: number;
     alerts_critical_24h: number;
     high_risk_travelers: number;
+    cases_critical_period?: number;
+    cases_high_period?: number;
     checkins_today: number;
     checkins_with_symptoms_today: number;
     checkins_missed_48h: number;
+    comparison?: {
+      travelers: { current: number; previous: number; trend_pct: number };
+      cases_critical: { current: number; previous: number; trend_pct: number };
+      cases_high: { current: number; previous: number; trend_pct: number };
+    };
   };
-  timeline: { date: string; travelers: number }[];
+  timeline: {
+    date: string; travelers: number;
+    cases_low?: number; cases_moderate?: number;
+    cases_high?: number; cases_critical?: number;
+  }[];
   top_entry_points: { entry_point__name: string; entry_point__code: string; count: number }[];
   top_origins: { country__code: string; country__name: string; count: number }[];
+  top_nationalities?: { nationality: string; count: number }[];
   statuses: Record<string, number>;
   risk_levels: Record<string, number>;
+  funnel?: { step: string; count: number }[];
+  arrivals_by_hour?: { hour: number; count: number }[];
+  checkin_compliance?: {
+    pct: number; with_recent: number; total_active: number;
+  };
   recent_alerts: {
     id: string; code: string; title: string;
     severity: string; status: string; created_at: string;
   }[];
   generated_at: string;
+}
+
+export interface NationalOverviewFilters {
+  period: number;
+  risk: string;
+  followup: string;
+  country: string;
+  entryPoint: string;
 }
 
 const SEV_STYLES: Record<string, string> = {
@@ -56,25 +92,43 @@ const SEV_STYLES: Record<string, string> = {
   INFO: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
-export function NationalOverview() {
+export function NationalOverview({
+  filters,
+  onData,
+}: {
+  filters?: NationalOverviewFilters;
+  onData?: (d: NationalData) => void;
+} = {}) {
   const [data, setData] = useState<NationalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
 
+  const queryString = useMemo(() => {
+    if (!filters) return '';
+    const p = new URLSearchParams();
+    p.set('period', String(filters.period));
+    if (filters.risk) p.set('risk', filters.risk);
+    if (filters.followup) p.set('followup', filters.followup);
+    if (filters.country) p.set('country', filters.country);
+    if (filters.entryPoint) p.set('entry_point', filters.entryPoint);
+    return `?${p.toString()}`;
+  }, [filters]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get<NationalData>('/analytics/national/');
+      const { data } = await api.get<NationalData>(`/analytics/national/${queryString}`);
       setData(data);
       setLastFetch(new Date());
+      onData?.(data);
     } catch {
       /* silencieux — le dashboard existant continue de marcher */
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryString, onData]);
 
-  // Auto-refresh 60s
+  // Re-fetch quand les filtres changent
   useEffect(() => {
     load();
     const id = window.setInterval(load, 60_000);
@@ -125,9 +179,22 @@ export function NationalOverview() {
         <KpiCard
           icon={<Users className="h-4 w-4" />}
           label="Arrivées aujourd'hui"
-          value={k?.travelers_today}
+          value={k?.arrivals_today ?? 0}
+          sub={
+            (k?.arrivals_tomorrow ?? 0) > 0
+              ? `${k?.arrivals_tomorrow} attendu(s) demain`
+              : 'aucune arrivée demain'
+          }
           tone="orange"
           delay={0}
+        />
+        <KpiCard
+          icon={<Users className="h-4 w-4" />}
+          label="Enregistrements aujourd'hui"
+          value={k?.registrations_today ?? k?.travelers_today ?? 0}
+          sub="formulaires soumis"
+          tone="sky"
+          delay={0.025}
         />
         <KpiCard
           icon={<HeartPulse className="h-4 w-4" />}
@@ -160,13 +227,9 @@ export function NationalOverview() {
           tone={k && k.alerts_open > 0 ? 'rose' : 'slate'}
           delay={0.2}
         />
-        <KpiCard
-          icon={<Activity className="h-4 w-4" />}
-          label="Manqués > 48h"
-          value={k?.checkins_missed_48h}
-          tone={k && k.checkins_missed_48h > 0 ? 'amber' : 'slate'}
-          delay={0.25}
-        />
+        {/* KPI "Manqués > 48h" retiré pour rester aligné sur 6 colonnes après
+            l'ajout de "Enregistrements aujourd'hui". L'info reste accessible
+            dans le tableau de bord Suivi voyageurs. */}
       </div>
 
       {/* Trend + sparkline */}
@@ -265,7 +328,7 @@ interface KpiCardProps {
   label: string;
   value: number | undefined;
   sub?: string;
-  tone: 'orange' | 'emerald' | 'rose' | 'amber' | 'slate';
+  tone: 'orange' | 'emerald' | 'rose' | 'amber' | 'slate' | 'sky';
   delay?: number;
 }
 
@@ -275,6 +338,7 @@ const TONE_STYLES: Record<KpiCardProps['tone'], { bg: string; text: string; ring
   rose: { bg: 'bg-rose-50 dark:bg-rose-950/30', text: 'text-rose-700 dark:text-rose-300', ring: 'ring-rose-200/60' },
   amber: { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-300', ring: 'ring-amber-200/60' },
   slate: { bg: 'bg-slate-50 dark:bg-slate-900', text: 'text-slate-700 dark:text-slate-300', ring: 'ring-slate-200/60' },
+  sky: { bg: 'bg-sky-50 dark:bg-sky-950/30', text: 'text-sky-700 dark:text-sky-300', ring: 'ring-sky-200/60' },
 };
 
 function KpiCard({ icon, label, value, sub, tone, delay = 0 }: KpiCardProps) {

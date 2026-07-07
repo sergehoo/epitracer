@@ -2,8 +2,10 @@ import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../router/app_router.dart';
 import '../../features/notifications/notifications_repository.dart';
 
 /// Handler obligatoire pour les notifications reçues quand l'app est terminée
@@ -19,6 +21,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 ///   - background handler (top-level)
 ///   - foreground listener (log + on peut afficher via SnackBar côté UI)
 ///   - sync du token avec le backend EpiTrace
+///   - deep-link : tap sur une notif `data.type == "daily_checkin"` ouvre
+///     l'écran [AppRoutes.checkin] (rappel sanitaire quotidien).
 ///
 /// Note : pour les notifs in-app riches en foreground, on relancera plus tard
 /// `flutter_local_notifications` quand l'API se sera stabilisée. En l'état,
@@ -53,12 +57,53 @@ class PushService {
       } catch (_) {/* container non prêt */}
     });
 
-    FirebaseMessaging.onMessageOpenedApp.listen((msg) {
-      debugPrint('[FCM tap] ${msg.messageId}');
-    });
+    // App ouverte (background → foreground via tap utilisateur)
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleOpenedMessage);
+
+    // App lancée par le tap sur la notif (état terminated → foreground).
+    // getInitialMessage() retourne le RemoteMessage si l'app a démarré
+    // suite à un tap sur la notif, sinon null. On le traite après le
+    // premier frame pour s'assurer que le GoRouter est prêt.
+    final initial = await FirebaseMessaging.instance.getInitialMessage();
+    if (initial != null) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _handleOpenedMessage(initial);
+      });
+    }
 
     await _syncToken();
     FirebaseMessaging.instance.onTokenRefresh.listen(_registerToken);
+  }
+
+  /// Route le tap sur la notification selon `data.type`.
+  ///
+  /// Pour le moment, un seul deep-link est géré : `daily_checkin` →
+  /// écran de check-in quotidien. Tout autre type tombe sur le simple log
+  /// et l'utilisateur arrive sur le dashboard par défaut.
+  void _handleOpenedMessage(RemoteMessage msg) {
+    debugPrint('[FCM tap] ${msg.messageId} data=${msg.data}');
+    final type = msg.data['type']?.toString() ?? '';
+    if (type == 'daily_checkin') {
+      _goToCheckin();
+    }
+  }
+
+  /// Navigation vers l'écran check-in en utilisant le GoRouter Riverpod.
+  ///
+  /// On utilise un post-frame callback pour ne pas tenter de naviguer
+  /// avant que le widget tree (et donc le routeur) ne soit monté — utile
+  /// quand la notif est ouverte depuis un état "terminated".
+  void _goToCheckin() {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      try {
+        final router = _ref.read(routerProvider);
+        // `go` pousse la destination en remplaçant la pile — l'utilisateur
+        // peut revenir en arrière vers le dashboard normalement.
+        router.go(AppRoutes.checkin);
+      } catch (e) {
+        debugPrint('[FCM tap] navigation error: $e');
+      }
+    });
   }
 
   Future<void> _syncToken() async {

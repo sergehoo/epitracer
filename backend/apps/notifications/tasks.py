@@ -129,9 +129,71 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
             ok, msg_id, err = res.ok, res.provider_id, res.error
 
         elif notif.channel == Channel.PUSH:
-            from .providers import send_push as send_pu
-            res = send_pu(notif.recipient, notif.subject, notif.body)
-            ok, msg_id, err = res.ok, res.provider_id, res.error
+            # Push in-app CUMULATIF : on cible les 2 canaux "in-app" pour
+            # maximiser la délivrabilité tant que la répartition mobile/PWA
+            # n'est pas figée :
+            #   1. FCM mobile → MobileDevice actifs (app Flutter installée)
+            #   2. VAPID Web Push → PushSubscription actives (PWA voyageur
+            #      installée sur navigateur, avec service worker)
+            # Fallback SMS DÉSACTIVÉ ici (l'agent qui a explicitement choisi
+            # "App mobile" n'attend pas un SMS — il utilisera un autre canal
+            # depuis l'UI s'il veut du SMS).
+            if notif.traveler_id:
+                fcm_sent = fcm_failed = 0
+                vapid_result = {}
+                title = notif.subject or "Message INHP"
+                extra_data = {
+                    "type": "admin_message",
+                    "notification_id": str(notif.id),
+                    "traveler_id": str(
+                        getattr(notif.traveler, "public_id", "") or notif.traveler_id
+                    ),
+                }
+
+                # 1) FCM mobile (Flutter Mon Pass Sanitaire)
+                try:
+                    from apps.companion.tasks import _send_fcm_to_traveler
+                    fcm_sent, fcm_failed = _send_fcm_to_traveler(
+                        notif.traveler,
+                        title=title,
+                        body=notif.body,
+                        data=extra_data,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("push mobile FCM failed for notif %s: %s", notif.id, exc)
+
+                # 2) VAPID Web Push (PWA voyageur — /voyageur/suivi, /pass, etc.)
+                try:
+                    from apps.companion.push import push_notify
+                    vapid_result = push_notify(
+                        traveler=notif.traveler,
+                        title=title,
+                        body=notif.body,
+                        url="/voyageur/suivi",
+                        tag=f"epitrace-msg-{notif.id}",
+                        notification_type="admin_message",
+                        extra=extra_data,
+                        fallback_to_sms=False,      # pas de fallback SMS ici
+                        fallback_to_whatsapp=False,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("push VAPID web failed for notif %s: %s", notif.id, exc)
+                    vapid_result = {"sent": 0, "failed": 0}
+
+                vapid_sent = int(vapid_result.get("sent", 0) or 0)
+                vapid_failed = int(vapid_result.get("failed", 0) or 0)
+
+                ok = (fcm_sent + vapid_sent) > 0
+                msg_id = f"fcm:{fcm_sent}/{fcm_failed} vapid:{vapid_sent}/{vapid_failed}"
+                err = "" if ok else (
+                    "Aucun appareil actif (FCM mobile ni PWA web) sur ce voyageur"
+                )
+            else:
+                # Fallback historique : envoi direct au token si fourni
+                # dans notif.recipient (utilisé par d'anciens callers).
+                from .providers import send_push as send_pu
+                res = send_pu(notif.recipient, notif.subject, notif.body)
+                ok, msg_id, err = res.ok, res.provider_id, res.error
 
         else:
             ok, msg_id, err = False, "", f"Canal non supporté : {notif.channel}"

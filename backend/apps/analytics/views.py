@@ -5,8 +5,8 @@ from collections import OrderedDict
 from datetime import timedelta
 
 from django.core.cache import cache
-from django.db.models import Count
-from django.db.models.functions import TruncDate
+from django.db.models import Avg, Count, F, Q
+from django.db.models.functions import ExtractHour, ExtractIsoWeekDay, TruncDate
 from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -105,7 +105,23 @@ class NationalDashboardView(APIView):
     ]
 
     def get(self, request):
-        cache_key = "dashboard:national:v3"
+        # ---- Lecture des filtres ----
+        try:
+            period_days = int(request.query_params.get("period", "30"))
+        except ValueError:
+            period_days = 30
+        period_days = max(1, min(period_days, 365))
+
+        risk_filter = (request.query_params.get("risk") or "").strip().lower()
+        country_filter = (request.query_params.get("country") or "").strip().upper()
+        entry_point_filter = (request.query_params.get("entry_point") or "").strip()
+        followup_filter = (request.query_params.get("followup") or "").strip().lower()
+        compare = (request.query_params.get("compare") or "true").lower() != "false"
+
+        cache_key = (
+            f"dashboard:national:v4:p={period_days}:r={risk_filter}"
+            f":c={country_filter}:e={entry_point_filter}:f={followup_filter}:cmp={compare}"
+        )
         data = cache.get(cache_key)
         if data is not None:
             return Response(data)
@@ -113,29 +129,120 @@ class NationalDashboardView(APIView):
         now = timezone.now()
         today = now.date()
         last_24h = now - timedelta(hours=24)
+        last_48h = now - timedelta(hours=48)
+        period_start = now - timedelta(days=period_days)
+        prev_period_start = now - timedelta(days=period_days * 2)
         last_7d = now - timedelta(days=7)
         last_14d = now - timedelta(days=14)
-        last_48h = now - timedelta(hours=48)
+
+        # Filtre voyageurs partagé selon les query params
+        travelers_qs = Traveler.objects.all()
+        if country_filter:
+            try:
+                from apps.travelers.models import TravelHistoryEntry
+                tids = TravelHistoryEntry.objects.filter(
+                    role="origin", country__code=country_filter,
+                ).values_list("traveler_id", flat=True)
+                travelers_qs = travelers_qs.filter(id__in=tids)
+            except Exception:
+                pass
+        if entry_point_filter and entry_point_filter.isdigit():
+            travelers_qs = travelers_qs.filter(entry_point_id=int(entry_point_filter))
+
+        # Filtre Ebola investigations selon risque
+        invest_qs = EbolaInvestigation.objects.all()
+        if risk_filter in {"low", "moderate", "high", "critical"}:
+            invest_qs = invest_qs.filter(risk_level=risk_filter)
+        # Si on filtre par pays, restreindre aux voyageurs concernés
+        if country_filter:
+            invest_qs = invest_qs.filter(traveler__in=travelers_qs)
+
+        # Filtre quarantaines selon "followup"
+        quars_qs = QuarantineRecord.objects.all()
+        if followup_filter == "active":
+            quars_qs = quars_qs.filter(
+                status__in=[QuarantineStatus.ACTIVE, "EXTENDED"],
+            )
+        elif followup_filter == "missed":
+            quars_qs = quars_qs.filter(
+                status__in=[QuarantineStatus.ACTIVE, "EXTENDED"],
+            ).exclude(daily_checks__check_date__gte=last_48h.date())
+        elif followup_filter == "closed":
+            quars_qs = quars_qs.filter(
+                status__in=["COMPLETED", "CLOSED", "RELEASED"],
+            )
+        if country_filter or entry_point_filter:
+            quars_qs = quars_qs.filter(traveler__in=travelers_qs)
 
         # ------------------------------------------------------------------
-        # KPIs principaux
+        # KPIs principaux (sur la période filtrée)
         # ------------------------------------------------------------------
+        period_travelers = travelers_qs.filter(created_at__gte=period_start)
+        period_invests = invest_qs.filter(created_at__gte=period_start)
+        prev_period_travelers = travelers_qs.filter(
+            created_at__gte=prev_period_start, created_at__lt=period_start,
+        )
+        prev_period_invests = invest_qs.filter(
+            created_at__gte=prev_period_start, created_at__lt=period_start,
+        )
+
+        # Demain pour anticipation opérationnelle (équipes points d'entrée)
+        tomorrow = today + timedelta(days=1)
+
         kpis = {
-            "travelers_today": Traveler.objects.filter(created_at__date=today).count(),
-            "travelers_total": Traveler.objects.count(),
-            "active_followups": QuarantineRecord.objects.filter(
+            # `travelers_today` = enregistrements du jour (formulaires soumis
+            # aujourd'hui, indépendamment de la date d'arrivée déclarée).
+            # Conservé pour compat ascendante avec l'ancien frontend.
+            "travelers_today": travelers_qs.filter(created_at__date=today).count(),
+            # `registrations_today` : alias explicite plus lisible côté UI.
+            "registrations_today": travelers_qs.filter(created_at__date=today).count(),
+            # `arrivals_today` : voyageurs dont la date d'arrivée DÉCLARÉE
+            # tombe aujourd'hui. C'est la métrique pertinente pour préparer
+            # les équipes aux points d'entrée (aéroport / port / frontière).
+            "arrivals_today": travelers_qs.filter(arrival_date=today).count(),
+            # Anticipation J+1 — utile pour le briefing du soir précédent
+            "arrivals_tomorrow": travelers_qs.filter(arrival_date=tomorrow).count(),
+            "travelers_period": period_travelers.count(),
+            "travelers_total": travelers_qs.count(),
+            "active_followups": quars_qs.filter(
                 status__in=[QuarantineStatus.ACTIVE, "EXTENDED"],
             ).count(),
             "passes_issued": HealthPass.objects.count(),
             "passes_active": HealthPass.objects.filter(status="active").count(),
-            "alerts_open": HealthAlert.objects.filter(status__in=["OPEN", "ACK", "INVESTIGATING"]).count(),
+            "alerts_open": HealthAlert.objects.filter(
+                status__in=["OPEN", "ACK", "INVESTIGATING"]
+            ).count(),
             "alerts_critical_24h": HealthAlert.objects.filter(
                 severity__iexact="critical", created_at__gte=last_24h,
             ).count(),
-            "high_risk_travelers": Traveler.objects.filter(
+            "high_risk_travelers": travelers_qs.filter(
                 current_health_status__in=["suspect", "confirmed"],
             ).count(),
+            "cases_critical_period": period_invests.filter(risk_level="critical").count(),
+            "cases_high_period": period_invests.filter(risk_level="high").count(),
         }
+
+        # Comparaison période vs période précédente
+        if compare:
+            def _trend(curr: int, prev: int) -> dict:
+                if prev == 0:
+                    return {"current": curr, "previous": 0, "trend_pct": 100 if curr > 0 else 0}
+                pct = round((curr - prev) / prev * 100, 1)
+                return {"current": curr, "previous": prev, "trend_pct": pct}
+
+            kpis["comparison"] = {
+                "travelers": _trend(
+                    period_travelers.count(), prev_period_travelers.count(),
+                ),
+                "cases_critical": _trend(
+                    period_invests.filter(risk_level="critical").count(),
+                    prev_period_invests.filter(risk_level="critical").count(),
+                ),
+                "cases_high": _trend(
+                    period_invests.filter(risk_level="high").count(),
+                    prev_period_invests.filter(risk_level="high").count(),
+                ),
+            }
 
         # Check-ins (DailyCheck via quarantine)
         try:
@@ -157,57 +264,150 @@ class NationalDashboardView(APIView):
             kpis["checkins_missed_48h"] = 0
 
         # ------------------------------------------------------------------
-        # Série temporelle 14 jours
+        # Série temporelle sur la période choisie
         # ------------------------------------------------------------------
         timeline_raw = (
-            Traveler.objects.filter(created_at__gte=last_14d)
+            period_travelers
             .annotate(d=TruncDate("created_at"))
             .values("d").annotate(count=Count("id")).order_by("d")
         )
         timeline_map = {row["d"].isoformat(): row["count"] for row in timeline_raw}
+
+        # Cas confirmés/suspects par jour (Ebola investigations)
+        cases_raw = (
+            period_invests
+            .annotate(d=TruncDate("created_at"))
+            .values("d", "risk_level").annotate(count=Count("id")).order_by("d")
+        )
+        cases_map: dict[str, dict[str, int]] = {}
+        for row in cases_raw:
+            key = row["d"].isoformat()
+            cases_map.setdefault(key, {"low": 0, "moderate": 0, "high": 0, "critical": 0})
+            cases_map[key][row["risk_level"]] = row["count"]
+
         timeline = []
-        for i in range(14, -1, -1):
+        for i in range(period_days, -1, -1):
             d = (today - timedelta(days=i)).isoformat()
-            timeline.append({"date": d, "travelers": timeline_map.get(d, 0)})
+            row = {
+                "date": d,
+                "travelers": timeline_map.get(d, 0),
+                "cases_low": cases_map.get(d, {}).get("low", 0),
+                "cases_moderate": cases_map.get(d, {}).get("moderate", 0),
+                "cases_high": cases_map.get(d, {}).get("high", 0),
+                "cases_critical": cases_map.get(d, {}).get("critical", 0),
+            }
+            timeline.append(row)
 
         # ------------------------------------------------------------------
-        # Top 5 points d'entrée (7 derniers jours)
+        # Top points d'entrée sur la période
         # ------------------------------------------------------------------
         top_entry_points = list(
-            Traveler.objects.filter(created_at__gte=last_7d, entry_point__isnull=False)
+            period_travelers.filter(entry_point__isnull=False)
             .values("entry_point__name", "entry_point__code")
-            .annotate(count=Count("id")).order_by("-count")[:6]
+            .annotate(count=Count("id")).order_by("-count")[:8]
         )
 
         # ------------------------------------------------------------------
-        # Top pays de provenance (via TravelHistoryEntry role=origin)
+        # Top pays/nationalités sur la période
         # ------------------------------------------------------------------
         try:
             from apps.travelers.models import TravelHistoryEntry
             top_origins = list(
                 TravelHistoryEntry.objects.filter(
-                    role="origin", created_at__gte=last_14d,
+                    role="origin", traveler__in=period_travelers,
                 ).values("country__code", "country__name")
-                .annotate(count=Count("id")).order_by("-count")[:6]
+                .annotate(count=Count("id")).order_by("-count")[:10]
             )
         except Exception:  # noqa: BLE001
             top_origins = []
 
+        # nationality est une FK vers Country — on resort code + name comme top_origins.
+        # .exclude(nationality__isnull=True) suffit ; pas de .exclude(nationality="")
+        # qui castait "" en int et crashait avec ValueError sur FK.
+        top_nationalities = list(
+            period_travelers.exclude(nationality__isnull=True)
+            .values("nationality__code", "nationality__name")
+            .annotate(count=Count("id")).order_by("-count")[:10]
+        )
+
         # ------------------------------------------------------------------
-        # Répartition statuts sanitaires
+        # Répartition statuts sanitaires (sur voyageurs filtrés)
         # ------------------------------------------------------------------
         statuses = dict(
-            Traveler.objects.values_list("current_health_status")
+            travelers_qs.values_list("current_health_status")
             .annotate(c=Count("id")).values_list("current_health_status", "c")
         )
 
         # ------------------------------------------------------------------
-        # Répartition niveau de risque (Ebola)
+        # Répartition niveau de risque (Ebola, filtré période)
         # ------------------------------------------------------------------
         risk_levels = dict(
-            EbolaInvestigation.objects.values_list("risk_level")
+            period_invests.values_list("risk_level")
             .annotate(c=Count("id")).values_list("risk_level", "c")
         )
+
+        # ------------------------------------------------------------------
+        # Funnel : arrivées → pass émis → suivi actif → check-in fait → clôturé
+        # ------------------------------------------------------------------
+        funnel_total_arrivals = period_travelers.count()
+        funnel_with_pass = HealthPass.objects.filter(
+            traveler__in=period_travelers,
+        ).count()
+        funnel_followup = quars_qs.filter(traveler__in=period_travelers).count()
+        try:
+            from apps.quarantine.models import DailyCheck
+            funnel_checked = DailyCheck.objects.filter(
+                quarantine__traveler__in=period_travelers,
+            ).values("quarantine_id").distinct().count()
+        except Exception:
+            funnel_checked = 0
+        funnel_closed = quars_qs.filter(
+            traveler__in=period_travelers,
+            status__in=["COMPLETED", "CLOSED", "RELEASED"],
+        ).count()
+        funnel = [
+            {"step": "Arrivées", "count": funnel_total_arrivals},
+            {"step": "Pass émis", "count": funnel_with_pass},
+            {"step": "Suivi enregistré", "count": funnel_followup},
+            {"step": "Au moins 1 check-in", "count": funnel_checked},
+            {"step": "Clôturé", "count": funnel_closed},
+        ]
+
+        # ------------------------------------------------------------------
+        # Heatmap arrivées par heure de la journée (24 buckets)
+        # ------------------------------------------------------------------
+        try:
+            hourly_raw = (
+                period_travelers
+                .annotate(h=ExtractHour("created_at"))
+                .values("h").annotate(c=Count("id")).order_by("h")
+            )
+            hourly_map = {row["h"]: row["c"] for row in hourly_raw}
+            arrivals_by_hour = [
+                {"hour": h, "count": hourly_map.get(h, 0)} for h in range(24)
+            ]
+        except Exception:
+            arrivals_by_hour = [{"hour": h, "count": 0} for h in range(24)]
+
+        # ------------------------------------------------------------------
+        # Observance check-in : % de quarantaines actives avec check-in <48h
+        # ------------------------------------------------------------------
+        try:
+            from apps.quarantine.models import DailyCheck
+            active_q = quars_qs.filter(
+                status__in=[QuarantineStatus.ACTIVE, "EXTENDED"],
+            )
+            total_active = active_q.count()
+            with_recent = active_q.filter(
+                daily_checks__check_date__gte=last_48h.date(),
+            ).distinct().count()
+            checkin_compliance_pct = round(
+                (with_recent / total_active * 100) if total_active else 0, 1,
+            )
+        except Exception:
+            checkin_compliance_pct = 0
+            total_active = 0
+            with_recent = 0
 
         # ------------------------------------------------------------------
         # Alertes récentes (10 dernières non clôturées)
@@ -227,12 +427,27 @@ class NationalDashboardView(APIView):
         ]
 
         data = {
+            "filters": {
+                "period_days": period_days,
+                "risk": risk_filter or None,
+                "country": country_filter or None,
+                "entry_point": entry_point_filter or None,
+                "followup": followup_filter or None,
+            },
             "kpis": kpis,
             "timeline": timeline,
             "top_entry_points": top_entry_points,
             "top_origins": top_origins,
+            "top_nationalities": top_nationalities,
             "statuses": statuses,
             "risk_levels": risk_levels,
+            "funnel": funnel,
+            "arrivals_by_hour": arrivals_by_hour,
+            "checkin_compliance": {
+                "pct": checkin_compliance_pct,
+                "with_recent": with_recent,
+                "total_active": total_active,
+            },
             "recent_alerts": recent_alerts,
             "generated_at": now.isoformat(),
         }
@@ -428,16 +643,94 @@ class VisitsOverviewView(APIView):
             .values("language").annotate(count=Count("id")).order_by("-count")[:10]
         )
 
+        # Top referrers (nettoyés : on ne garde que host + éventuellement les
+        # sous-arbres critiques). On dédoublonne « (direct) » pour visites sans
+        # referrer.
+        top_referrers_raw = (
+            current_qs.values("referrer")
+            .annotate(count=Count("id")).order_by("-count")[:40]
+        )
+        ref_map: dict[str, int] = {}
+        for row in top_referrers_raw:
+            raw = (row["referrer"] or "").strip()
+            if not raw:
+                key = "(accès direct)"
+            else:
+                # Normalisation : garde host + premier segment de path
+                try:
+                    from urllib.parse import urlparse
+                    p = urlparse(raw if "://" in raw else f"https://{raw}")
+                    host = (p.hostname or raw).replace("www.", "")
+                    key = host if not p.path or p.path in ("/", "") else f"{host}{p.path.rstrip('/')}"
+                    # Filtre auto-referrers internes
+                    if host.endswith(("destinationci.com", "veillesanitaire.com")):
+                        key = "(interne)"
+                except Exception:
+                    key = raw[:60]
+            ref_map[key] = ref_map.get(key, 0) + row["count"]
+        top_referrers = sorted(
+            ({"referrer": k, "count": v} for k, v in ref_map.items()),
+            key=lambda x: x["count"], reverse=True,
+        )[:10]
+
+        # Heatmap : jour de la semaine (1=lundi..7=dimanche) × heure locale
+        # NB : PostgreSQL renvoie ISO DOW (1..7). SQLite renvoie 0..6 avec 0=dimanche.
+        by_hour_dow_qs = (
+            current_qs.annotate(dow=ExtractIsoWeekDay("created_at"), hour=ExtractHour("created_at"))
+            .values("dow", "hour")
+            .annotate(count=Count("id"))
+        )
+        by_hour_dow = [
+            {"dow": row["dow"], "hour": row["hour"], "count": row["count"]}
+            for row in by_hour_dow_qs
+            if row["dow"] is not None and row["hour"] is not None
+        ]
+
+        # Distribution par heure sur la période (0..23)
+        by_hour_qs = (
+            current_qs.annotate(hour=ExtractHour("created_at"))
+            .values("hour").annotate(count=Count("id")).order_by("hour")
+        )
+        hour_map = OrderedDict((h, 0) for h in range(24))
+        for row in by_hour_qs:
+            if row["hour"] is not None:
+                hour_map[row["hour"]] = row["count"]
+        by_hour = [{"hour": h, "count": c} for h, c in hour_map.items()]
+
+        # Bots (dénombrement rapide sur la période — utile pour toggle)
+        bots_count = PageVisit.objects.filter(
+            created_at__gte=start, is_bot=True,
+            **({"portal": portal} if portal else {}),
+        ).count()
+
+        # Utilisateurs "actifs" (proxy : visites dans les 5 dernières minutes)
+        active_now = base_qs.filter(created_at__gte=now - timedelta(minutes=5)) \
+            .values("session_id").distinct().count()
+
+        # Répartition device (mobile / desktop / api) — heuristique user-agent
+        mobile = current_qs.filter(user_agent__iregex=r"(iphone|android|mobile|ipad)").count()
+        api_hits = current_qs.filter(portal=Portal.API).count()
+        desktop = max(0, kpi["period"] - mobile - api_hits)
+        devices = [
+            {"device": "mobile", "count": mobile},
+            {"device": "desktop", "count": desktop},
+            {"device": "api", "count": api_hits},
+        ]
+
         return Response({
             "days": days,
             "exclude_bots": exclude_bots,
             "portal_filter": portal,
-            "kpi": kpi,
+            "kpi": {**kpi, "bots_count": bots_count, "active_now": active_now},
             "by_day": by_day,
+            "by_hour": by_hour,
+            "by_hour_dow": by_hour_dow,
             "top_countries": top_countries,
             "top_cities": top_cities,
             "top_paths": top_paths,
+            "top_referrers": top_referrers,
             "by_portal": by_portal,
             "top_languages": top_languages,
+            "devices": devices,
             "generated_at": now.isoformat(),
         })

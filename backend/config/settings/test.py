@@ -22,3 +22,15 @@ CELERY_TASK_EAGER_PROPAGATES = True
 
 # Hashers rapides pour tests
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# CSP en mode report-only en tests (n'impacte pas les tests fonctionnels)
+CSP_REPORT_ONLY = True
+
+# Plafond upload pour le test du validator (cf. tests/core/test_validators.py)
+MAX_UPLOAD_SIZE_MB = 5
+ALLOWED_UPLOAD_MIMES = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+]

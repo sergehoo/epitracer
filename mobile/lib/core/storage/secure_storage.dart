@@ -14,6 +14,7 @@ class SecureStorageService {
   static const _userIdKey = 'user_id';
   static const _userEmailKey = 'user_email';
   static const _userFullNameKey = 'user_full_name';
+  static const _publicIdKey = 'traveler_public_id';
   static const _pinKey = 'app_pin_hash';
   static const _biometricKey = 'biometric_enabled';
 
@@ -31,17 +32,29 @@ class SecureStorageService {
     required String id,
     required String email,
     String fullName = '',
+    String? publicId,
   }) async {
     await _storage.write(key: _userIdKey, value: id);
     await _storage.write(key: _userEmailKey, value: email);
     await _storage.write(key: _userFullNameKey, value: fullName);
+    if (publicId != null && publicId.isNotEmpty) {
+      await _storage.write(key: _publicIdKey, value: publicId);
+    }
   }
 
   Future<Map<String, String?>> getUser() async => {
         'id': await _storage.read(key: _userIdKey),
         'email': await _storage.read(key: _userEmailKey),
         'full_name': await _storage.read(key: _userFullNameKey),
+        'public_id': await _storage.read(key: _publicIdKey),
       };
+
+  /// Identifiant public TRV-XXXX du voyageur (utilisé par les endpoints
+  /// publics /api/v1/public/*). Disponible après vérification OTP.
+  Future<String?> getPublicId() => _storage.read(key: _publicIdKey);
+
+  Future<void> savePublicId(String publicId) =>
+      _storage.write(key: _publicIdKey, value: publicId);
 
   Future<bool> hasSession() async {
     final access = await getAccessToken();

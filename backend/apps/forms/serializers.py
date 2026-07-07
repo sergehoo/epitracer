@@ -52,13 +52,19 @@ class FormSectionSerializer(serializers.ModelSerializer):
 class DynamicFormSerializer(serializers.ModelSerializer):
     sections = FormSectionSerializer(many=True, read_only=True)
     disease_code = serializers.CharField(source="disease.code", read_only=True)
+    submissions_count = serializers.SerializerMethodField()
 
     class Meta:
         model = DynamicForm
         fields = [
             "id", "uuid", "disease", "disease_code", "code", "title", "description",
-            "version", "is_active", "is_default", "sections",
+            "version", "is_active", "is_default", "sections", "submissions_count",
         ]
+
+    def get_submissions_count(self, obj):
+        # Compte les FormSubmission liées à ce formulaire — pratique sur la
+        # liste admin pour identifier les formulaires les plus utilisés.
+        return getattr(obj, "submissions", None).count() if hasattr(obj, "submissions") else 0
 
 
 class FormAnswerSerializer(serializers.ModelSerializer):

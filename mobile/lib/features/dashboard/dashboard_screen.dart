@@ -7,6 +7,7 @@ import '../../core/router/app_router.dart';
 import '../../core/storage/secure_storage.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_gradients.dart';
+import '../../shared/widgets/afriq_credit_footer.dart';
 import '../../shared/widgets/animated_ring.dart';
 import '../../shared/widgets/followup_chart.dart';
 import '../../shared/widgets/glass_card.dart';
@@ -133,6 +134,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      const Divider(color: AppColors.slate200, height: 1),
+                      const AfriqCreditFooter(),
                     ],
                   ),
                 ),
@@ -560,7 +564,7 @@ class _ServicesGrid extends StatelessWidget {
         icon: Icons.video_call_outlined,
         label: 'Téléconsultation',
         color: dark,
-        snackbar: 'Téléconsultation — bientôt disponible',
+        route: AppRoutes.teleconsult,
       ),
     ];
     return GridView.builder(

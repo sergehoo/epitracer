@@ -152,26 +152,41 @@ def enqueue_notification(
         SendResult avec l'ID de notification créée et le statut initial.
     """
     channel = (channel or "").lower()
-    if channel not in {Channel.SMS, Channel.WHATSAPP}:
+    if channel not in {Channel.SMS, Channel.WHATSAPP, Channel.EMAIL, Channel.PUSH}:
         return SendResult(ok=False, error=f"Canal non supporté : {channel!r}")
 
-    # 1) Détection provider (avec validation du numéro)
-    try:
-        decision = NotificationProviderRouter.detect(recipient, channel=channel)
-    except PhoneValidationError as exc:
-        return SendResult(ok=False, error=str(exc))
-    except Exception as exc:  # noqa: BLE001
-        return SendResult(ok=False, error=f"Erreur de routage : {exc}")
+    # Routage téléphone : uniquement pour les canaux qui utilisent un MSISDN
+    # (SMS et WhatsApp). Pour EMAIL/PUSH on court-circuite proprement :
+    #   - EMAIL → provider forcé SMTP, pas de normalized_phone
+    #   - PUSH  → provider forcé FCM, pas de normalized_phone (résolution
+    #             vers MobileDevice + PushSubscription dans _execute_send)
+    if channel in {Channel.SMS, Channel.WHATSAPP}:
+        try:
+            decision = NotificationProviderRouter.detect(recipient, channel=channel)
+        except PhoneValidationError as exc:
+            return SendResult(ok=False, error=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return SendResult(ok=False, error=f"Erreur de routage : {exc}")
 
-    # 2) Application forced_provider — interdit de contourner la règle CI→OrangeCI
-    final_provider = decision.provider
-    if force_provider and force_provider != final_provider:
-        if decision.is_ivoirian and force_provider != Provider.ORANGE_CI:
-            return SendResult(
-                ok=False,
-                error="Numéro ivoirien : envoi Twilio refusé (politique nationale).",
-            )
-        final_provider = force_provider
+        # 2) Application forced_provider — interdit de contourner CI→OrangeCI
+        final_provider = decision.provider
+        if force_provider and force_provider != final_provider:
+            if decision.is_ivoirian and force_provider != Provider.ORANGE_CI:
+                return SendResult(
+                    ok=False,
+                    error="Numéro ivoirien : envoi Twilio refusé (politique nationale).",
+                )
+            final_provider = force_provider
+    else:
+        # Email / Push : pas de validation MSISDN. On construit un `decision`
+        # léger juste pour homogénéiser le code aval (final_provider + metadata).
+        class _NoDecision:
+            normalized = ""
+            country_code = ""
+            is_ivoirian = False
+            provider = Provider.SMTP if channel == Channel.EMAIL else Provider.FCM
+        decision = _NoDecision()
+        final_provider = decision.provider
 
     # 3) Construction du body final + rendu des placeholders.
     # Le body est TOUJOURS passé au moteur de rendu pour substituer les `{var}`
@@ -264,10 +279,12 @@ def send_manual_message(
     channel: str = Channel.SMS,
     sent_by,
     request=None,
+    subject: str = "",
 ) -> SendResult:
     """Envoi manuel d'un message libre depuis le dashboard admin.
 
     Tracé avec sent_by (obligatoire) et message_type = MANUAL_MESSAGE.
+    `subject` est utilisé uniquement pour le canal email (objet du mail).
     """
     if sent_by is None or not getattr(sent_by, "is_authenticated", False):
         return SendResult(ok=False, error="Utilisateur non authentifié.")
@@ -276,6 +293,7 @@ def send_manual_message(
         channel=channel,
         recipient=recipient,
         body=body,
+        subject=subject,
         traveler=traveler,
         message_type=MessageType.MANUAL_MESSAGE,
         sent_by=sent_by,
@@ -293,8 +311,13 @@ def send_template_message(
     sent_by=None,
     request=None,
     message_type: str = MessageType.MANUAL_MESSAGE,
+    subject: str = "",
 ) -> SendResult:
-    """Envoi depuis un template prédéfini (avec rendu de variables)."""
+    """Envoi depuis un template prédéfini (avec rendu de variables).
+
+    `subject` (param) override le subject du template si fourni — utile
+    quand l'agent veut customiser l'objet email à l'envoi.
+    """
     template = NotificationTemplate.objects.filter(code=template_code, is_active=True).first()
     if not template:
         return SendResult(ok=False, error=f"Template introuvable : {template_code}")
@@ -305,7 +328,7 @@ def send_template_message(
         channel=channel,
         recipient=recipient,
         body=template.body,
-        subject=template.subject,
+        subject=subject or template.subject,
         traveler=traveler,
         template=template,
         context=context or {},

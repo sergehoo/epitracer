@@ -25,10 +25,13 @@ backend/keys/*.key
 # Migrations (we keep them but ignore *.pyc)
 **/migrations/__pycache__/
 
-# Env
+# Env — on ignore les .env réels ; on garde uniquement les *.example
 .env
 .env.*
 !.env.example
+!.env.production.example
+!.env.staging.example
+!.env.local.example
 
 # Editors / OS
 .idea/
@@ -52,6 +55,7 @@ coverage.xml
 node_modules/
 .next/
 out/
+**/tsconfig.tsbuildinfo
 
 # Flutter
 mobile/.dart_tool/

@@ -65,6 +65,7 @@ class VoyageurAuthRepository {
           id: traveler['id']?.toString() ?? '',
           email: traveler['phone_masked']?.toString() ?? '',
           fullName: traveler['full_name']?.toString() ?? '',
+          publicId: traveler['public_id']?.toString(),
         );
       }
       return (ok: true, error: null, traveler: traveler);

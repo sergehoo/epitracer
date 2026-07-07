@@ -37,15 +37,66 @@ class QuarantineRecord(BaseModel):
         on_delete=models.SET_NULL, related_name="opened_quarantines",
     )
 
+    # ----- Phase 9A : suivi médical complet (apps.medical) ----------------
+    assigned_district = models.ForeignKey(
+        "geo.HealthZone", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="assigned_quarantines",
+        verbose_name=_("District sanitaire assigné"),
+    )
+    assigned_team = models.CharField(
+        _("Équipe assignée"), max_length=120, blank=True,
+    )
+    assigned_agent = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="quarantines_assigned",
+        verbose_name=_("Agent assigné"),
+    )
+    # Cache de la classification active courante (CaseClassification.is_current).
+    # Permet d'afficher la classification dans une liste sans JOIN supplémentaire.
+    # Synchronisé par signals.py côté apps.medical.
+    current_classification = models.CharField(
+        _("Classification courante"), max_length=30, blank=True, db_index=True,
+    )
+    closure_reason = models.CharField(
+        _("Motif de clôture"), max_length=80, blank=True,
+        help_text=_("auto_completed / escalated / manual_close / lost_to_followup."),
+    )
+    # Anti-spam alerte géoloc (Option 3, RGPD-safe).
+    geolocation_alert_raised_at = models.DateTimeField(
+        _("Dernière alerte géoloc levée"), null=True, blank=True,
+    )
+
     class Meta(BaseModel.Meta):
         verbose_name = _("Quarantaine")
         verbose_name_plural = _("Quarantaines")
         indexes = [
             models.Index(fields=["status", "expected_end_on"]),
+            models.Index(fields=["assigned_agent", "status"]),
+            models.Index(fields=["current_classification", "status"]),
         ]
 
     def __str__(self) -> str:
         return f"Quarantaine {self.traveler.public_id} ({self.status})"
+
+
+class DailyCheckStatus(models.TextChoices):
+    """Statut élargi d'une journée de suivi (Phase 9A).
+
+    Le statut historique était implicite (pending vs done via has_symptoms +
+    presence du record). On l'explicite ici pour pouvoir piloter le workflow
+    journalier (visite programmée, prélèvement demandé, escalade…).
+    """
+
+    PLANNED = "planned", _("Planifié")
+    PENDING = "pending", _("En attente")
+    COMPLETED = "completed", _("Effectué")
+    MISSED = "missed", _("Manqué")
+    ALERT = "alert", _("Alerte")
+    VISIT_SCHEDULED = "visit_scheduled", _("Visite programmée")
+    SAMPLE_REQUESTED = "sample_requested", _("Prélèvement demandé")
+    ANALYSIS_IN_PROGRESS = "analysis_in_progress", _("Analyse en cours")
+    ESCALATED = "escalated", _("Escaladé")
+    CLOSED = "closed", _("Clôturé")
 
 
 class DailyCheck(BaseModel):
@@ -64,6 +115,31 @@ class DailyCheck(BaseModel):
     is_self_reported = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
     alert_raised = models.BooleanField(default=False)
+
+    # ----- Phase 9A : suivi médical complet (apps.medical) ----------------
+    agent_responsible = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="daily_checks_managed",
+        verbose_name=_("Agent responsable"),
+    )
+    decision = models.CharField(
+        _("Décision du jour"), max_length=200, blank=True,
+    )
+    status = models.CharField(
+        _("Statut journée"), max_length=24,
+        choices=DailyCheckStatus.choices,
+        default=DailyCheckStatus.PENDING,
+        db_index=True,
+    )
+    # Snapshot : voyageur a-t-il partagé sa position ce jour-là ?
+    # Pas un consentement (cf. apps.companion.PrivacyConsent) — juste un
+    # snapshot opérationnel pour la timeline.
+    location_shared = models.BooleanField(
+        _("Position partagée"), default=False,
+    )
+    notification_sent = models.BooleanField(
+        _("Notification envoyée"), default=False,
+    )
 
     class Meta(BaseModel.Meta):
         verbose_name = _("Suivi quotidien")

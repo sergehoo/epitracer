@@ -23,10 +23,15 @@ app.autodiscover_tasks()
 # Fuseau : Africa/Abidjan (= UTC) — voir DJANGO_TIME_ZONE.
 # ----------------------------------------------------------------------------
 app.conf.beat_schedule = {
-    # Rappel quotidien à 08:00 heure locale Abidjan (= 08:00 UTC).
-    "companion-daily-followup-reminders": {
-        "task": "companion.send_daily_followup_reminders",
+    # Rappel quotidien check-in à 08:00 heure locale Abidjan (= 08:00 UTC).
+    # NB : ce job remplace l'ancien `send_daily_followup_reminders`, qui
+    # subsiste comme alias pour ne pas casser les anciennes PeriodicTask
+    # en base. Tous les nouveaux déploiements pointent sur le nom
+    # `send_daily_checkin_reminders`.
+    "companion-daily-checkin": {
+        "task": "companion.send_daily_checkin_reminders",
         "schedule": crontab(hour=8, minute=0),
+        "options": {"queue": "notifications"},
     },
     # Détection des check-ins manqués toutes les 6 heures (à xx:15 pour
     # éviter le congestion à l'heure pile).
@@ -62,6 +67,50 @@ app.conf.beat_schedule = {
     "core-rotate-audit-logs": {
         "task": "core.rotate_old_audit_logs",
         "schedule": crontab(day_of_month=1, hour=4, minute=0),
+    },
+    # ---- Phase 9A : suivi médical complet ----
+    # Vérifie toutes les 6 h que les voyageurs en suivi actif partagent
+    # bien leur géoloc (Option 3 — RGPD-safe). Déclenche une `HealthAlert`
+    # si absence de ping > N heures (N = protocol.geolocation_alert_after_hours,
+    # 24 h par défaut), avec anti-spam de 24 h via
+    # QuarantineRecord.geolocation_alert_raised_at.
+    "medical-check-geolocation-compliance": {
+        "task": "medical.check_geolocation_compliance_all",
+        "schedule": crontab(minute=20, hour="*/6"),
+        "options": {"queue": "quarantine"},
+    },
+    # ---- Phase 9D : automatisation du suivi sanitaire ----
+    # Rappel quotidien protocole-aware à 08:00 — délègue à companion pour
+    # les canaux et enrichit la timeline médicale (FollowUpAction +
+    # DailyCheck.notification_sent). Tourne 5 minutes après companion pour
+    # éviter une race condition sur l'horaire pile.
+    "medical-send-daily-followup-reminders": {
+        "task": "medical.send_daily_followup_reminders",
+        "schedule": crontab(hour=8, minute=5),
+        "options": {"queue": "quarantine"},
+    },
+    # Détection des check-ins manqués (statut MISSED) tous les soirs 23:00.
+    # Déclenche l'escalade si N missed consécutifs (selon protocol).
+    "medical-mark-missed-checkins": {
+        "task": "medical.mark_missed_checkins",
+        "schedule": crontab(hour=23, minute=0),
+        "options": {"queue": "quarantine"},
+    },
+    # Filet de sécurité de l'escalade symptômes critiques : toutes les 30 min
+    # en backup du signal `post_save MedicalSymptomReport(is_critical=True)`.
+    # Re-scanne la dernière heure et ré-essaie les cas qui n'auraient pas
+    # été escaladés par le signal (worker indisponible, etc.).
+    "medical-escalate-critical-symptoms-backup": {
+        "task": "medical.escalate_critical_symptoms",
+        "schedule": crontab(minute="*/30"),
+        "options": {"queue": "quarantine"},
+    },
+    # Clôture automatique des suivis arrivés à terme sans incident à 00:10.
+    # Génère le PDF d'attestation MSHPCMU/INHP et notifie le voyageur.
+    "medical-auto-close-completed-followups": {
+        "task": "medical.auto_close_completed_followups",
+        "schedule": crontab(hour=0, minute=10),
+        "options": {"queue": "quarantine"},
     },
 }
 
