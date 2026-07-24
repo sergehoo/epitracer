@@ -109,6 +109,22 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
   const validPhones = validRecipients;
   const noPhones = noRecipient;
 
+  // ── Split lié/non-lié Telegram — récupéré au changement de canal ──
+  const [tgStatus, setTgStatus] = useState<{
+    linked: number; unlinked: number; total: number; linked_ids: number[];
+    bot_configured: boolean;
+  } | null>(null);
+  const [tgInviteUnlinked, setTgInviteUnlinked] = useState(true);
+
+  useEffect(() => {
+    if (!isTelegram || !open) { setTgStatus(null); return; }
+    const ids = targets.map((t) => t.traveler_id).filter(Boolean) as number[];
+    if (ids.length === 0) { setTgStatus(null); return; }
+    api.post('/notifications/telegram/link-status/', { traveler_ids: ids })
+      .then((r) => setTgStatus(r.data))
+      .catch(() => setTgStatus(null));
+  }, [isTelegram, open, targets]);
+
   const send = async () => {
     if (mode === 'free' && !body.trim()) {
       toast.error('Message vide.');
@@ -126,19 +142,39 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
     let okCount = 0;
     let failCount = 0;
 
+    // Pour Telegram : identifier les non-liés → ils recevront une invitation SMS
+    // au lieu du vrai message Telegram (le vrai message ne leur arriverait pas
+    // de toute façon car le bot ne peut pas initier une conv sans opt-in).
+    const linkedTgSet = new Set(tgStatus?.linked_ids || []);
+    const shouldInviteUnlinked = isTelegram && tgInviteUnlinked && tgStatus && tgStatus.unlinked > 0;
+
     for (let i = 0; i < updated.length; i++) {
       const r = updated[i];
-      // Choisir le destinataire selon le canal
+
+      // Si Telegram + non-lié + fallback activé → SMS d'invitation à la place
+      const isTgUnlinked =
+        isTelegram && r.target.traveler_id && !linkedTgSet.has(r.target.traveler_id);
+      const useInviteFallback = isTgUnlinked && shouldInviteUnlinked;
+
+      // Canal effectif pour ce destinataire
+      const effChannel = useInviteFallback ? 'sms' : channel;
+
+      // Choisir le destinataire selon le canal effectif
       // Push / Telegram : le backend résout via traveler_id — pas besoin
       // d'un vrai recipient (on envoie le public_id comme placeholder).
-      const recipient = isTravelerBound
+      const recipient = useInviteFallback
+        ? (r.target.phone || '').trim()
+        : isTravelerBound
         ? (r.target.traveler_public_id || String(r.target.traveler_id ?? ''))
         : isEmail
         ? (r.target.email || '').trim()
         : (r.target.phone || '').trim();
+
       if (!recipient) {
         r.status = 'failed';
-        r.error = isTravelerBound
+        r.error = useInviteFallback
+          ? 'Non-lié Telegram : pas de téléphone pour SMS d\'invitation'
+          : isTravelerBound
           ? 'Voyageur sans ID enregistré'
           : isEmail
           ? 'Pas d\'email'
@@ -157,18 +193,33 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
         setRows([...updated]);
         continue;
       }
+      // Skip silencieux si Telegram + non-lié + fallback désactivé
+      if (isTgUnlinked && !shouldInviteUnlinked) {
+        r.status = 'failed';
+        r.error = 'Voyageur non-lié Telegram (fallback SMS désactivé)';
+        failCount++;
+        setRows([...updated]);
+        continue;
+      }
+
       r.status = 'sending';
       setRows([...updated]);
 
       try {
         const payload: any = {
-          channel,
+          channel: effChannel,
           recipient,
         };
         if (r.target.traveler_id) payload.traveler = r.target.traveler_id;
-        if (isEmail) payload.subject = subject.trim();
+        if (effChannel === 'email') payload.subject = subject.trim();
 
-        if (mode === 'template' && selectedTplCode) {
+        if (useInviteFallback) {
+          // Forcé sur le template TELEGRAM_INVITE_SMS
+          payload.template_code = 'TELEGRAM_INVITE_SMS';
+          payload.context = {
+            first_name: r.target.first_name || r.target.full_name.split(' ')[0] || '',
+          };
+        } else if (mode === 'template' && selectedTplCode) {
           payload.template_code = selectedTplCode;
           payload.context = {
             first_name: r.target.first_name || r.target.full_name.split(' ')[0] || '',
@@ -183,6 +234,10 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
         const resp = await api.post('/notifications/send/', payload);
         r.status = 'ok';
         r.notificationId = resp.data?.id;
+        // Note visuelle pour l'agent : distinguer envoi vrai vs invitation
+        if (useInviteFallback) {
+          r.error = '📧 SMS d\'invitation Telegram envoyé';
+        }
         okCount++;
       } catch (e: any) {
         r.status = 'failed';
@@ -274,6 +329,59 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
                 <Mail className="h-3 w-3 inline mr-1" />
                 Les voyageurs sans email seront ignorés ({noPhones > 0 ? `${noPhones} sans email` : 'tous OK'}).
                 Expéditeur PUBLIC <strong>Destination CI</strong> (imposé).
+              </div>
+            )}
+
+            {/* Panneau Telegram : split lié/non-lié + fallback SMS invitation */}
+            {isTelegram && (
+              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 dark:bg-sky-950/30 dark:border-sky-900 p-3 text-xs space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-sky-800 dark:text-sky-200">
+                  <Bot className="h-3.5 w-3.5" />
+                  Canal additionnel Telegram (opt-in, gratuit)
+                </div>
+                {!tgStatus ? (
+                  <div className="text-slate-500">Analyse des voyageurs sélectionnés…</div>
+                ) : !tgStatus.bot_configured ? (
+                  <div className="text-rose-700">
+                    ⚠ Bot Telegram non configuré côté backend. Envoi impossible.
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-lg bg-white dark:bg-slate-900 p-2 text-center">
+                        <div className="text-lg font-black text-emerald-600">{tgStatus.linked}</div>
+                        <div className="text-[10px] uppercase text-slate-500">Liés au bot</div>
+                      </div>
+                      <div className="rounded-lg bg-white dark:bg-slate-900 p-2 text-center">
+                        <div className="text-lg font-black text-amber-600">{tgStatus.unlinked}</div>
+                        <div className="text-[10px] uppercase text-slate-500">Non-liés</div>
+                      </div>
+                      <div className="rounded-lg bg-white dark:bg-slate-900 p-2 text-center">
+                        <div className="text-lg font-black text-slate-700 dark:text-slate-200">{tgStatus.total}</div>
+                        <div className="text-[10px] uppercase text-slate-500">Total sélection</div>
+                      </div>
+                    </div>
+                    <div className="text-slate-600 dark:text-slate-400">
+                      Le message Telegram sera livré aux <strong>{tgStatus.linked}</strong> voyageurs liés.
+                      Les <strong>{tgStatus.unlinked}</strong> autres ne recevront rien via Telegram.
+                    </div>
+                    {tgStatus.unlinked > 0 && (
+                      <label className="flex items-start gap-2 cursor-pointer pt-1 border-t border-sky-200 dark:border-sky-900">
+                        <input
+                          type="checkbox"
+                          checked={tgInviteUnlinked}
+                          onChange={(e) => setTgInviteUnlinked(e.target.checked)}
+                          className="mt-0.5 accent-sky-600"
+                        />
+                        <span>
+                          <strong>Inviter les {tgStatus.unlinked} non-liés par SMS</strong> (envoi
+                          d'un SMS d'invitation avec leur lien personnel — 1 clic pour rejoindre le bot).
+                          Utilise le template <code className="font-mono">TELEGRAM_INVITE_SMS</code>.
+                        </span>
+                      </label>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -145,3 +145,60 @@ class TelegramConfigView(APIView):
                 if getattr(_s, "SITE_URL_API", None) else ""
             ),
         })
+
+
+class TelegramLinkStatusView(APIView):
+    """POST admin — pour une liste de traveler_ids, retourne combien sont
+    liés Telegram (au moins 1 chat actif) vs non-liés.
+
+    Utilisé par la modale d'envoi groupé pour afficher :
+      "27 sur 100 voyageurs ont Telegram activé — 73 recevront un SMS d'invitation"
+
+    Body : { "traveler_ids": [1, 2, 3, ...] }
+    Response : {
+        "total": 100,
+        "linked": 27,
+        "unlinked": 73,
+        "linked_ids": [2, 5, 8, ...],   // Pour segmentation front
+        "bot_configured": true,
+    }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        raw_ids = request.data.get("traveler_ids") or []
+        if not isinstance(raw_ids, list):
+            return Response({"detail": "'traveler_ids' doit être une liste."}, status=400)
+
+        ids = []
+        for v in raw_ids:
+            try:
+                ids.append(int(v))
+            except (TypeError, ValueError):
+                continue
+
+        if not ids:
+            return Response({
+                "total": 0, "linked": 0, "unlinked": 0,
+                "linked_ids": [],
+                "bot_configured": is_configured(),
+            })
+
+        # Borne défensive : max 5000 ids par requête (~500 KB, très large)
+        ids = ids[:5000]
+
+        linked_ids = list(
+            TelegramSubscription.objects
+            .filter(traveler_id__in=ids, is_active=True)
+            .values_list("traveler_id", flat=True)
+            .distinct()
+        )
+        linked_set = set(linked_ids)
+
+        return Response({
+            "total": len(ids),
+            "linked": len(linked_set),
+            "unlinked": len(ids) - len(linked_set),
+            "linked_ids": sorted(linked_set),
+            "bot_configured": is_configured(),
+        })

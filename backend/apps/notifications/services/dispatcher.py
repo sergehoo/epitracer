@@ -73,6 +73,19 @@ def _enrich_context(context: Optional[dict], traveler=None, body: str = "") -> d
     enriched.setdefault("phone", getattr(traveler, "phone_mobile", "") or "")
     enriched.setdefault("email", getattr(traveler, "email", "") or "")
 
+    # ── Deep link Telegram (canal additionnel opt-in) ───────────────────
+    # Si le bot est configuré, on injecte automatiquement l'URL de liaison
+    # 1-clic pour ce voyageur. Utilisable dans tout template avec la variable
+    # {telegram_link}. Ne fait aucune requête réseau — pure concaténation.
+    if "telegram_link" not in enriched:
+        try:
+            from apps.notifications.services.telegram import build_deep_link
+            link = build_deep_link(enriched["traveler_id"])
+            if link:
+                enriched["telegram_link"] = link
+        except Exception:  # noqa: BLE001
+            pass
+
     # ── Lookup pass actif uniquement si le body en a besoin ─────────────
     needs_pass = body and ("{pass_number}" in body or "{expires_at}" in body)
     if needs_pass and "pass_number" not in enriched:

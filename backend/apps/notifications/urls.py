@@ -18,8 +18,8 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .telegram_views import (
-    MyTelegramStatusView, TelegramConfigView, TelegramUnlinkView,
-    TelegramWebhookView,
+    MyTelegramStatusView, TelegramConfigView, TelegramLinkStatusView,
+    TelegramUnlinkView, TelegramWebhookView,
 )
 from .views import (
     AwsSesEventWebhookView, EmailLogViewSet, EmailSmtpTestView,
@@ -82,6 +82,7 @@ urlpatterns = [
     path("telegram/webhook/", TelegramWebhookView.as_view(), name="telegram-webhook"),
     path("telegram/unlink/", TelegramUnlinkView.as_view(), name="telegram-unlink"),
     path("telegram/config/", TelegramConfigView.as_view(), name="telegram-config"),
+    path("telegram/link-status/", TelegramLinkStatusView.as_view(), name="telegram-link-status"),
     path("me/telegram/", MyTelegramStatusView.as_view(), name="me-telegram-status"),
 ]
 

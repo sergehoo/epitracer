@@ -82,6 +82,47 @@ TEMPLATES = [
             "message": "string",
         },
     },
+    # ── TELEGRAM — invitations à rejoindre le bot (canal opt-in) ────────
+    # Ces templates NE remplacent PAS SMS/Email/WhatsApp — ils invitent
+    # simplement le voyageur à activer Telegram comme canal additionnel gratuit.
+    {
+        "code": "TELEGRAM_INVITE_SMS",
+        "name": "Invitation Telegram (SMS)",
+        "description": "Invite le voyageur à activer le canal Telegram en 1 clic.",
+        "channels": ["sms", "whatsapp"],
+        "subject": "Notifications Telegram (optionnel)",
+        "body": (
+            "Bonjour {first_name}, activez les notifications Telegram (gratuit) "
+            "en cliquant sur ce lien : {telegram_link} — INHP"
+        ),
+        "variables_schema": {
+            "first_name": "string",
+            "telegram_link": "url",
+        },
+    },
+    {
+        "code": "TELEGRAM_INVITE_EMAIL",
+        "name": "Invitation Telegram (Email)",
+        "description": "Version email de l'invitation à activer le canal Telegram.",
+        "channels": ["email"],
+        "subject": "Activez Telegram pour vos notifications INHP (optionnel)",
+        "body": (
+            "Bonjour {first_name},\n\n"
+            "Le dispositif Mon Pass Sanitaire propose désormais un canal "
+            "supplémentaire pour recevoir ses notifications : Telegram.\n\n"
+            "Avantages : gratuit, instantané, riche (formatting, PDF joignables).\n"
+            "Ne remplace pas les SMS/Email — c'est un canal additionnel.\n\n"
+            "Pour l'activer en 1 clic (aucune saisie) :\n"
+            "{telegram_link}\n\n"
+            "Votre voyageur reste identifié : {traveler_id}\n\n"
+            "— INHP / Mon Pass Sanitaire"
+        ),
+        "variables_schema": {
+            "first_name": "string",
+            "traveler_id": "string",
+            "telegram_link": "url",
+        },
+    },
     {
         "code": "EBOLA_PREVENTION_SMS",
         "name": "Rappel de prévention Ebola",

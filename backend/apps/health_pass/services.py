@@ -214,6 +214,47 @@ def render_pass_pdf(hp: HealthPass, token: str) -> bytes:
     c.drawCentredString(qr_x + qr_size / 2, qr_y - 8,
                         "Vérification cryptographique Ed25519")
 
+    # 5.b) Mini QR Telegram (canal additionnel opt-in — silencieux si bot non
+    # configuré). Placé sous le QR principal, taille réduite pour rester
+    # discret. 1 scan → ouvre Telegram déjà pré-authentifié pour ce voyageur.
+    try:
+        from apps.notifications.services.telegram import build_deep_link
+        tg_link = build_deep_link(hp.traveler.public_id)
+    except Exception:  # noqa: BLE001
+        tg_link = ""
+
+    if tg_link:
+        tg_size = 20 * mm
+        tg_x = qr_x + (qr_size - tg_size) / 2
+        tg_y = qr_y - tg_size - 14 * mm
+
+        # Cadre bleu Telegram
+        c.setFillColor(colors.HexColor("#0088cc"))
+        c.roundRect(tg_x - 2, tg_y - 2, tg_size + 4, tg_size + 4, 2, stroke=0, fill=1)
+        c.setFillColor(CI_WHITE)
+        c.roundRect(tg_x - 1, tg_y - 1, tg_size + 2, tg_size + 2, 2, stroke=0, fill=1)
+
+        # Génération du QR Telegram
+        tg_qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=4, border=1,
+        )
+        tg_qr.add_data(tg_link)
+        tg_qr.make(fit=True)
+        tg_img = tg_qr.make_image(fill_color="#0088cc", back_color="white")
+        tg_buf = BytesIO()
+        tg_img.save(tg_buf, format="PNG")
+        tg_buf.seek(0)
+        c.drawImage(ImageReader(tg_buf), tg_x, tg_y, tg_size, tg_size,
+                    preserveAspectRatio=True, mask="auto")
+
+        # Label court sous le QR
+        c.setFillColor(colors.HexColor("#0088cc"))
+        c.setFont("Helvetica-Bold", 6.5)
+        c.drawCentredString(qr_x + qr_size / 2, tg_y - 5,
+                            "Scan → Notifications Telegram (optionnel)")
+
     # 6) Encadré "Informations utiles"
     box_y = 18 * mm
     box_h = 28 * mm
