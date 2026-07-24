@@ -112,6 +112,32 @@ app.conf.beat_schedule = {
         "schedule": crontab(hour=0, minute=10),
         "options": {"queue": "quarantine"},
     },
+    # ─── Rapports hebdomadaires automatisés (apps.reports) ─────────────
+    # Lundi 08:00 heure Africa/Abidjan (= UTC, cf. DJANGO_TIME_ZONE).
+    # Génère + envoie par email + SMS aux destinataires actifs.
+    # Idempotent : safe même si Beat déclenche 2x le même schedule.
+    # Superadmin peut désactiver via AutomatedReportSchedule.is_active=False
+    # (le task dispatch skip s'il n'y a pas de schedule actif).
+    "reports-weekly-dispatch": {
+        "task": "reports.dispatch_weekly_report",
+        "schedule": crontab(hour=8, minute=0, day_of_week=1),
+        "options": {"queue": "reports"},
+    },
+    # Retry des envois FAILED toutes les 15 minutes (backoff exponentiel
+    # géré dans le task lui-même : 5min → 10min → 20min → PERMANENT).
+    "reports-retry-failed-deliveries": {
+        "task": "reports.retry_failed_weekly_reports",
+        "schedule": crontab(minute="*/15"),
+        "options": {"queue": "notifications"},
+    },
+    # Purge des fichiers PDF/Excel > 90 jours chaque dimanche 04:00.
+    # Garde la ligne GeneratedReport + summary_data — libère uniquement
+    # le stockage FileField.
+    "reports-cleanup-expired-files": {
+        "task": "reports.cleanup_expired_report_files",
+        "schedule": crontab(hour=4, minute=0, day_of_week=0),
+        "options": {"queue": "reports"},
+    },
 }
 
 
