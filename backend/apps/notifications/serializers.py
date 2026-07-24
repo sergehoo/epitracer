@@ -83,7 +83,9 @@ class SendNotificationSerializer(serializers.Serializer):
     #   email          — routé via EmailRouter (PUBLIC SES pour voyageurs)
     #   push           — notification in-app mobile (FCM) sur les MobileDevice
     #                    actifs liés au voyageur cible (via son email).
-    channel = serializers.ChoiceField(choices=["sms", "whatsapp", "email", "push"])
+    channel = serializers.ChoiceField(
+        choices=["sms", "whatsapp", "email", "push", "telegram"],
+    )
     traveler = serializers.IntegerField(required=False, allow_null=True)
     recipient = serializers.CharField(required=False, allow_blank=True)
     template_code = serializers.CharField(required=False, allow_blank=True)

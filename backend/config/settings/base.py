@@ -711,6 +711,21 @@ NOTIFICATIONS = {
 }
 
 # ---------------------------------------------------------------------------
+# Telegram Bot API — canal notifications direct (voyageur ↔ bot INHP)
+# ---------------------------------------------------------------------------
+# Configuration :
+#   1. @BotFather → /newbot → récupérer le HTTP token (63 chars) → TELEGRAM_BOT_TOKEN
+#   2. Choisir un nom d'utilisateur ex. @MonPassSanitaireINHP_bot → TELEGRAM_BOT_USERNAME
+#   3. Générer un secret random ≥ 32 chars → TELEGRAM_WEBHOOK_SECRET
+#   4. Lancer : python manage.py telegram_setup --set
+#
+# Le token du bot est un secret : ne JAMAIS le logger en clair.
+# ---------------------------------------------------------------------------
+TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_BOT_USERNAME = env("TELEGRAM_BOT_USERNAME", default="")
+TELEGRAM_WEBHOOK_SECRET = env("TELEGRAM_WEBHOOK_SECRET", default="")
+
+# ---------------------------------------------------------------------------
 # Web Push (VAPID) — utilisé par apps.companion pour notifier la PWA voyageur
 # ---------------------------------------------------------------------------
 # Générer la paire de clés une fois via la commande :

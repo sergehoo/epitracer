@@ -152,14 +152,17 @@ def enqueue_notification(
         SendResult avec l'ID de notification créée et le statut initial.
     """
     channel = (channel or "").lower()
-    if channel not in {Channel.SMS, Channel.WHATSAPP, Channel.EMAIL, Channel.PUSH}:
+    if channel not in {
+        Channel.SMS, Channel.WHATSAPP, Channel.EMAIL, Channel.PUSH, Channel.TELEGRAM,
+    }:
         return SendResult(ok=False, error=f"Canal non supporté : {channel!r}")
 
     # Routage téléphone : uniquement pour les canaux qui utilisent un MSISDN
-    # (SMS et WhatsApp). Pour EMAIL/PUSH on court-circuite proprement :
-    #   - EMAIL → provider forcé SMTP, pas de normalized_phone
-    #   - PUSH  → provider forcé FCM, pas de normalized_phone (résolution
-    #             vers MobileDevice + PushSubscription dans _execute_send)
+    # (SMS et WhatsApp). Pour EMAIL/PUSH/TELEGRAM on court-circuite proprement :
+    #   - EMAIL    → provider forcé SMTP, pas de normalized_phone
+    #   - PUSH     → provider forcé FCM, pas de normalized_phone (résolution
+    #                vers MobileDevice + PushSubscription dans _execute_send)
+    #   - TELEGRAM → provider TELEGRAM_BOT, résolution vers TelegramSubscription
     if channel in {Channel.SMS, Channel.WHATSAPP}:
         try:
             decision = NotificationProviderRouter.detect(recipient, channel=channel)
@@ -178,13 +181,21 @@ def enqueue_notification(
                 )
             final_provider = force_provider
     else:
-        # Email / Push : pas de validation MSISDN. On construit un `decision`
-        # léger juste pour homogénéiser le code aval (final_provider + metadata).
+        # Email / Push / Telegram : pas de validation MSISDN. On construit un
+        # `decision` léger juste pour homogénéiser le code aval (final_provider
+        # + metadata).
+        if channel == Channel.EMAIL:
+            _prov = Provider.SMTP
+        elif channel == Channel.PUSH:
+            _prov = Provider.FCM
+        else:  # Channel.TELEGRAM
+            _prov = Provider.TELEGRAM_BOT
+
         class _NoDecision:
             normalized = ""
             country_code = ""
             is_ivoirian = False
-            provider = Provider.SMTP if channel == Channel.EMAIL else Provider.FCM
+            provider = _prov
         decision = _NoDecision()
         final_provider = decision.provider
 

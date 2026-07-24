@@ -25,7 +25,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  Send, X, MessageCircle, Smartphone, FileText, Pencil, Mail, BellRing,
+  Send, X, MessageCircle, Smartphone, FileText, Pencil, Mail, BellRing, Bot,
   Loader2, Check, AlertCircle, Wifi, WifiOff, ChevronRight,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
@@ -64,7 +64,7 @@ export interface SendMessageTarget {
   first_name?: string;
 }
 
-type ChannelKey = 'sms' | 'whatsapp' | 'email' | 'push';
+type ChannelKey = 'sms' | 'whatsapp' | 'email' | 'push' | 'telegram';
 
 interface Props {
   target: SendMessageTarget;
@@ -78,6 +78,7 @@ const CHANNELS: { value: ChannelKey; label: string; icon: JSX.Element }[] = [
   { value: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle className="h-4 w-4" /> },
   { value: 'email', label: 'Email', icon: <Mail className="h-4 w-4" /> },
   { value: 'push', label: 'App mobile', icon: <BellRing className="h-4 w-4" /> },
+  { value: 'telegram', label: 'Telegram', icon: <Bot className="h-4 w-4" /> },
 ];
 
 const PROVIDER_LABEL: Record<string, { label: string; color: string }> = {
@@ -102,6 +103,7 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
 
   const isEmail = channel === 'email';
   const isPush = channel === 'push';
+  const isTelegram = channel === 'telegram';
 
   // Charge les templates au mount
   useEffect(() => {
@@ -139,7 +141,7 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
 
   // Détection provider — UNIQUEMENT pour SMS/WhatsApp (l'email a un sender imposé backend)
   useEffect(() => {
-    if (isEmail || !phone || !open) return;
+    if (isEmail || isPush || isTelegram || !phone || !open) return;
     const t = setTimeout(() => {
       api.post('/notifications/preview-routing/', { phone, channel })
         .then((r) => { setRouting(r.data); setRoutingError(null); })
@@ -149,7 +151,7 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
         });
     }, 300);
     return () => clearTimeout(t);
-  }, [phone, channel, open, isEmail]);
+  }, [phone, channel, open, isEmail, isPush, isTelegram]);
 
   // Templates filtrés selon le canal
   const channelTemplates = useMemo(
@@ -176,13 +178,18 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
   const smsSegments = Math.max(1, Math.ceil(charCount / 160));
 
   const submit = async () => {
-    // Push in-app : ne demande pas de destinataire — le backend résout les
-    // MobileDevice actifs du voyageur cible (traveler_id doit être fourni).
-    if (isPush && !target.traveler_id) {
-      toast.error('Un voyageur enregistré est requis pour l\'envoi push in-app.');
+    // Push in-app / Telegram : ne demandent pas de destinataire — le backend
+    // résout les MobileDevice actifs / TelegramSubscription du voyageur cible
+    // (traveler_id doit être fourni).
+    if ((isPush || isTelegram) && !target.traveler_id) {
+      toast.error(
+        isTelegram
+          ? "Un voyageur enregistré est requis pour l'envoi Telegram."
+          : "Un voyageur enregistré est requis pour l'envoi push in-app.",
+      );
       return;
     }
-    if (!isPush && !phone.trim()) {
+    if (!isPush && !isTelegram && !phone.trim()) {
       toast.error(isEmail ? 'Adresse email requise.' : 'Numéro de téléphone requis.');
       return;
     }
@@ -294,7 +301,9 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
           {/* Destinataire : téléphone / email / (push = résolution auto) */}
           <div>
             <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
-              {isPush ? 'Destinataire (auto)' : isEmail ? 'Adresse email destinataire' : 'Numéro destinataire'}
+              {isPush || isTelegram
+                ? 'Destinataire (auto)'
+                : isEmail ? 'Adresse email destinataire' : 'Numéro destinataire'}
             </div>
             {isPush ? (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs">
@@ -315,6 +324,25 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
                   <br />Aucun SMS de secours (utilisez le canal SMS pour ça).
                 </div>
               </div>
+            ) : isTelegram ? (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs">
+                <div className="flex items-center gap-2 text-sky-800 font-semibold">
+                  <Bot className="h-3.5 w-3.5" />
+                  Message Telegram envoyé au bot INHP
+                </div>
+                <div className="mt-1 text-slate-600">
+                  Cible : {target.traveler_name || target.traveler_public_id || 'voyageur'}
+                  {target.traveler_public_id && (
+                    <span className="font-mono ml-1 text-slate-400">({target.traveler_public_id})</span>
+                  )}
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500">
+                  Envoyée à <strong>tous les chats Telegram liés</strong> à ce voyageur.
+                  <br />Si le voyageur n'a jamais démarré le bot, l'envoi échouera —
+                  invitez-le à ouvrir <span className="font-mono">t.me/&lt;bot&gt;?start=&lt;TRV-XXX&gt;</span>
+                  depuis son espace voyageur.
+                </div>
+              </div>
             ) : (
               <input
                 type={isEmail ? 'email' : 'tel'}
@@ -326,14 +354,14 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
               />
             )}
             {/* Affichage provider auto-détecté (SMS/WhatsApp seulement) */}
-            {!isEmail && !isPush && routing && providerInfo && (
+            {!isEmail && !isPush && !isTelegram && routing && providerInfo && (
               <div className={`mt-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold border ${providerInfo.color}`}>
                 <Wifi className="h-3 w-3" />
                 <span>Provider auto : <strong>{providerInfo.label}</strong></span>
                 <span className="text-[10px] font-mono opacity-70">{routing.normalized}</span>
               </div>
             )}
-            {!isEmail && !isPush && routingError && (
+            {!isEmail && !isPush && !isTelegram && routingError && (
               <div className="mt-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                 <WifiOff className="h-3 w-3" /> {routingError}
               </div>
@@ -474,7 +502,7 @@ export function SendMessageModal({ target, open, onClose, onSent }: Props) {
                 <span>Aperçu du message</span>
                 <span className="font-mono text-[10px] text-slate-400">
                   {charCount} caractères
-                  {!isEmail && !isPush && <> · {smsSegments} SMS</>}
+                  {!isEmail && !isPush && !isTelegram && <> · {smsSegments} SMS</>}
                 </span>
               </div>
               <div className="rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 p-4 text-sm whitespace-pre-wrap leading-relaxed">

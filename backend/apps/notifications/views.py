@@ -100,10 +100,11 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 if channel == "email":
                     # Pour l'email : utiliser l'adresse mail déclarée par le voyageur
                     recipient = (getattr(traveler, "email", "") or "").strip()
-                elif channel == "push":
-                    # Pour la push in-app : on utilise le public_id du voyageur
+                elif channel in ("push", "telegram"):
+                    # Push / Telegram : on utilise le public_id du voyageur
                     # comme "recipient" symbolique. Le vrai routage vers les
-                    # MobileDevice actifs se fait dans _execute_send / dispatch.
+                    # MobileDevice actifs / TelegramSubscription se fait dans
+                    # _execute_send.
                     recipient = getattr(traveler, "public_id", "") or f"traveler:{traveler.pk}"
                 else:
                     recipient = (
@@ -117,6 +118,8 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 label = "adresse email"
             elif channel == "push":
                 label = "appareil mobile enregistré"
+            elif channel == "telegram":
+                label = "abonnement Telegram lié au voyageur"
             else:
                 label = "numéro de destinataire"
             return Response({"detail": f"Aucun {label} disponible."}, status=400)

@@ -17,6 +17,10 @@ Endpoints exposés (préfixés par /api/v1/notifications/) :
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
+from .telegram_views import (
+    MyTelegramStatusView, TelegramConfigView, TelegramUnlinkView,
+    TelegramWebhookView,
+)
 from .views import (
     AwsSesEventWebhookView, EmailLogViewSet, EmailSmtpTestView,
     EmailTemplateViewSet, MetaWhatsAppWebhookView,
@@ -74,6 +78,11 @@ urlpatterns = [
         TravelerNotificationsView.as_view(),
         name="traveler-notifications",
     ),
+    # Telegram — webhook (public, signature validée) + endpoints admin/voyageur
+    path("telegram/webhook/", TelegramWebhookView.as_view(), name="telegram-webhook"),
+    path("telegram/unlink/", TelegramUnlinkView.as_view(), name="telegram-unlink"),
+    path("telegram/config/", TelegramConfigView.as_view(), name="telegram-config"),
+    path("me/telegram/", MyTelegramStatusView.as_view(), name="me-telegram-status"),
 ]
 
 # Important : enregistrer NotificationViewSet en LAST avec préfixe vide

@@ -195,6 +195,47 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
                 res = send_pu(notif.recipient, notif.subject, notif.body)
                 ok, msg_id, err = res.ok, res.provider_id, res.error
 
+        elif notif.channel == Channel.TELEGRAM:
+            # Telegram : on résout les TelegramSubscription actifs du voyageur
+            # et on envoie à tous ses chats liés (téléphone + tablette). Le
+            # recipient de la Notification peut aussi être directement un chat_id
+            # (cas des envois techniques hors flow voyageur).
+            from .services.telegram import send_message as tg_send
+            from .models import TelegramSubscription
+
+            chat_ids: list[str] = []
+            if notif.traveler_id:
+                chat_ids = list(
+                    TelegramSubscription.objects
+                    .filter(traveler_id=notif.traveler_id, is_active=True)
+                    .values_list("chat_id", flat=True)
+                )
+            if not chat_ids and notif.recipient:
+                # Cas dev / envoi direct par chat_id
+                chat_ids = [notif.recipient.strip()]
+
+            if not chat_ids:
+                ok, msg_id, err = False, "", (
+                    "Aucun abonnement Telegram actif pour ce voyageur "
+                    "(le voyageur doit d'abord scanner le lien /voyageur/suivi)."
+                )
+            else:
+                sent = 0
+                failed = 0
+                last_msg_id = None
+                errors: list[str] = []
+                for cid in chat_ids:
+                    r = tg_send(cid, notif.body)
+                    if r.ok:
+                        sent += 1
+                        last_msg_id = r.message_id
+                    else:
+                        failed += 1
+                        errors.append(f"{cid}:{r.error[:80]}")
+                ok = sent > 0
+                msg_id = f"telegram:{sent}/{sent + failed} last={last_msg_id or '-'}"
+                err = "" if ok else " ; ".join(errors)[:400]
+
         else:
             ok, msg_id, err = False, "", f"Canal non supporté : {notif.channel}"
 

@@ -16,6 +16,7 @@ class Channel(models.TextChoices):
     EMAIL = "email", _("Email")
     WHATSAPP = "whatsapp", _("WhatsApp")
     PUSH = "push", _("Push notification")
+    TELEGRAM = "telegram", _("Telegram")
     INTERNAL = "internal", _("Notification interne")
 
 
@@ -27,6 +28,7 @@ class Provider(models.TextChoices):
     SYSTEM = "system", _("Système (stub)")
     SMTP = "smtp", _("SMTP / Email")
     FCM = "fcm", _("Firebase Cloud Messaging")
+    TELEGRAM_BOT = "telegram_bot", _("Telegram Bot API")
 
 
 class NotificationStatus(models.TextChoices):
@@ -271,6 +273,55 @@ class NotificationAuditLog(BaseModel):
     def __str__(self) -> str:
         actor = self.actor.email if self.actor_id else "system"
         return f"[{self.action}] notif#{self.notification_id} by {actor}"
+
+
+# ---------------------------------------------------------------------------
+# Telegram — abonnement chat_id ↔ traveler
+# ---------------------------------------------------------------------------
+class TelegramSubscription(BaseModel):
+    """Association entre un compte Telegram (chat_id) et un voyageur.
+
+    Cycle de vie :
+      1. Le voyageur ouvre `t.me/<bot>?start=<TRV-XXX>` (deep link).
+      2. Le webhook Telegram reçoit `/start TRV-XXX` avec le chat_id.
+      3. On crée/met à jour cet objet (unique par chat_id).
+      4. À la désinscription (message `/stop`) → is_active=False.
+
+    Note : `chat_id` est unique — un compte Telegram ne peut être lié qu'à
+    un seul voyageur. Un voyageur peut par contre avoir plusieurs chats
+    (téléphone + tablette) — chaque `chat_id` distinct = ligne distincte.
+    """
+    traveler = models.ForeignKey(
+        "travelers.Traveler",
+        on_delete=models.CASCADE,
+        related_name="telegram_subs",
+    )
+    chat_id = models.CharField(
+        max_length=64, unique=True, db_index=True,
+        help_text=_("ID de chat Telegram (int stocké en str pour éviter la limite bigint)."),
+    )
+    username = models.CharField(
+        max_length=64, blank=True,
+        help_text=_("@username Telegram du voyageur, s'il en a un."),
+    )
+    first_name = models.CharField(max_length=120, blank=True)
+    last_name = models.CharField(max_length=120, blank=True)
+    language_code = models.CharField(max_length=8, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    linked_at = models.DateTimeField(auto_now_add=True)
+    last_message_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("Abonnement Telegram")
+        verbose_name_plural = _("Abonnements Telegram")
+        ordering = ["-linked_at"]
+        indexes = [
+            models.Index(fields=["traveler", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        tag = f"@{self.username}" if self.username else self.chat_id
+        return f"Telegram {tag} → {self.traveler_id}"
 
 
 # ---------------------------------------------------------------------------
