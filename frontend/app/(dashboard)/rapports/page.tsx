@@ -8,12 +8,14 @@
  * téléchargement direct CSV ou PDF généré côté backend (apps.reports).
  */
 
-import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import {
-  AlertTriangle, BarChart3, Building2, CalendarDays, ClipboardCheck,
-  Download, FileSpreadsheet, FileText, Globe2, HeartPulse, Users,
+  AlertTriangle, BarChart3, Building2, CalendarDays, CheckCircle2,
+  ClipboardCheck, Clock3, Cog, Download, FileSpreadsheet, FileText,
+  Globe2, HeartPulse, Mail, PlayCircle, RefreshCw, Send, Users, XCircle,
 } from 'lucide-react';
 import { api, extractApiError, API_URL } from '@/lib/api';
 
@@ -124,25 +126,304 @@ const TONE_TEXT: Record<Tone, string> = {
 };
 
 // =========================================================================
+// Rapports hebdo automatisés (Phase 4 backend)
+// =========================================================================
+interface WeeklyReport {
+  id: number;
+  report_code: string;
+  report_type: string;
+  report_type_label: string;
+  period_start: string;
+  period_end: string;
+  status: string;
+  status_label: string;
+  generated_at: string | null;
+  duration_ms: number | null;
+  has_pdf: boolean;
+  has_excel: boolean;
+  delivery_count: number;
+  summary_data?: Record<string, unknown>;
+}
+
+const STATUS_STYLE: Record<string, { bg: string; icon: React.ReactNode }> = {
+  ready: { bg: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+           icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  generating: { bg: 'bg-sky-100 text-sky-800 border-sky-300',
+                icon: <RefreshCw className="h-3.5 w-3.5 animate-spin" /> },
+  pending: { bg: 'bg-slate-100 text-slate-700 border-slate-300',
+             icon: <Clock3 className="h-3.5 w-3.5" /> },
+  failed: { bg: 'bg-rose-100 text-rose-800 border-rose-300',
+            icon: <XCircle className="h-3.5 w-3.5" /> },
+  archived: { bg: 'bg-slate-100 text-slate-600 border-slate-300',
+              icon: <FileText className="h-3.5 w-3.5" /> },
+};
+
+
+// =========================================================================
 // Page principale
 // =========================================================================
 export default function RapportsPage() {
   const [openReport, setOpenReport] = useState<ReportDef | null>(null);
+  const [weeklyList, setWeeklyList] = useState<WeeklyReport[]>([]);
+  const [latestDetail, setLatestDetail] = useState<WeeklyReport | null>(null);
+  const [loadingWeekly, setLoadingWeekly] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [sending, setSending] = useState<number | null>(null);
+  const [recipientsCount, setRecipientsCount] = useState<{ total: number; active: number } | null>(null);
+
+  // Chargement des rapports hebdo
+  const loadWeekly = async () => {
+    setLoadingWeekly(true);
+    try {
+      const [reports, recipients] = await Promise.all([
+        api.get<{ results?: WeeklyReport[] } | WeeklyReport[]>('/reports/weekly/?report_type=weekly'),
+        api.get<{ results?: unknown[]; count?: number } | unknown[]>('/reports/recipients/?page_size=1'),
+      ]);
+      const data = Array.isArray(reports.data) ? reports.data : (reports.data.results || []);
+      setWeeklyList(data.slice(0, 20));
+      // Détail du plus récent READY pour les KPI (light serializer n'a pas summary_data)
+      const firstReady = data.find(r => r.status === 'ready');
+      if (firstReady) {
+        try {
+          const { data: detail } = await api.get<WeeklyReport>(`/reports/weekly/${firstReady.id}/`);
+          setLatestDetail(detail);
+        } catch {
+          setLatestDetail(null);
+        }
+      }
+      // recipients count from pagination
+      const rec = recipients.data as { count?: number };
+      setRecipientsCount({ total: rec.count ?? 0, active: rec.count ?? 0 });
+    } catch (e) {
+      toast.error(extractApiError(e));
+    } finally {
+      setLoadingWeekly(false);
+    }
+  };
+
+  useEffect(() => { loadWeekly(); }, []);
+
+  const generateNow = async () => {
+    setGenerating(true);
+    try {
+      const { data } = await api.post<WeeklyReport>('/reports/weekly/generate/', {});
+      toast.success(`Rapport ${data.report_code} généré.`);
+      await loadWeekly();
+    } catch (e) {
+      toast.error(extractApiError(e));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const sendNow = async (report: WeeklyReport) => {
+    if (!confirm(
+      `Envoyer maintenant le rapport ${report.report_code} à TOUS les destinataires actifs ?\n\n` +
+      `Cela déclenchera des envois SMS + Email réels (avec coût).`,
+    )) return;
+    setSending(report.id);
+    try {
+      const { data } = await api.post(`/reports/weekly/${report.id}/send/`, {});
+      toast.success(
+        `Envoi lancé. Email : ${data.email?.sent ?? 0} · SMS : ${data.sms?.sent ?? 0}`,
+      );
+      await loadWeekly();
+    } catch (e) {
+      toast.error(extractApiError(e));
+    } finally {
+      setSending(null);
+    }
+  };
+
+  const downloadFile = (report: WeeklyReport, format: 'pdf' | 'xlsx') => {
+    const url = `${API_URL}/api/v1/reports/weekly/${report.id}/download/?format=${format}`;
+    window.open(url, '_blank');
+  };
+
+  // KPI de la semaine — latestDetail chargé séparément (light serializer
+  // n'expose pas summary_data pour économiser la bande passante en liste).
 
   return (
     <div className="space-y-6">
-      <header>
-        <span className="text-xs uppercase tracking-widest text-ciOrange font-bold">
-          Exports & rapports
-        </span>
-        <h1 className="font-display text-2xl md:text-3xl font-black text-ciDark dark:text-emerald-100 mt-1">
-          Centre de rapports
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-3xl mt-1">
-          Générez et téléchargez les rapports opérationnels. CSV ouvrable directement dans
-          Excel, PDF prêt à imprimer pour le comité de pilotage MSHPCMU / INHP.
-        </p>
+      <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+        <div>
+          <span className="text-xs uppercase tracking-widest text-ciOrange font-bold">
+            Exports & rapports
+          </span>
+          <h1 className="font-display text-2xl md:text-3xl font-black text-ciDark dark:text-emerald-100 mt-1">
+            Centre de rapports
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-3xl mt-1">
+            Générez et téléchargez les rapports opérationnels. CSV ouvrable directement dans
+            Excel, PDF prêt à imprimer pour le comité de pilotage MSHPCMU / INHP.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/rapports/destinataires"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Users className="h-3.5 w-3.5" /> Gérer les destinataires
+          </Link>
+          <Link
+            href="/rapports/planification"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Cog className="h-3.5 w-3.5" /> Planification
+          </Link>
+        </div>
       </header>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          BLOC 1 : Rapports hebdo automatisés
+          ═══════════════════════════════════════════════════════════════════ */}
+      <section className="card p-6 border-l-4 border-l-ciOrange">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-ciOrange" />
+              <h2 className="font-display text-xl font-black text-ciDark dark:text-emerald-100">
+                Rapports hebdomadaires automatisés
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+              Généré automatiquement chaque lundi 08h00 (Africa/Abidjan) sur la semaine
+              précédente (lun. → dim.). Envoyé par email + SMS aux destinataires actifs.
+            </p>
+          </div>
+          <button
+            onClick={generateNow}
+            disabled={generating}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-ciOrange text-white px-4 py-2 text-sm font-bold shadow hover:bg-orange-600 disabled:opacity-50 transition"
+          >
+            {generating ? (
+              <><RefreshCw className="h-4 w-4 animate-spin" /> Génération…</>
+            ) : (
+              <><PlayCircle className="h-4 w-4" /> Générer maintenant</>
+            )}
+          </button>
+        </div>
+
+        {/* KPI de la semaine (dérivés du dernier rapport READY) */}
+        {latestDetail && (
+          <WeeklyKpiRow report={latestDetail} recipientsCount={recipientsCount?.total ?? 0} />
+        )}
+
+        {/* Historique des rapports */}
+        <div className="mt-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              Historique — {weeklyList.length} rapport{weeklyList.length > 1 ? 's' : ''}
+            </h3>
+            <button
+              onClick={loadWeekly}
+              className="text-xs text-slate-500 hover:text-ciOrange inline-flex items-center gap-1"
+            >
+              <RefreshCw className={`h-3 w-3 ${loadingWeekly ? 'animate-spin' : ''}`} />
+              Actualiser
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-900 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Code</th>
+                  <th className="px-3 py-2">Période</th>
+                  <th className="px-3 py-2">Statut</th>
+                  <th className="px-3 py-2">Généré</th>
+                  <th className="px-3 py-2">Envois</th>
+                  <th className="px-3 py-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingWeekly && (
+                  <tr><td colSpan={6} className="p-8 text-center text-slate-400">Chargement…</td></tr>
+                )}
+                {!loadingWeekly && weeklyList.length === 0 && (
+                  <tr><td colSpan={6} className="p-8 text-center text-slate-400">
+                    Aucun rapport encore généré — cliquez sur « Générer maintenant » pour créer le premier.
+                  </td></tr>
+                )}
+                {!loadingWeekly && weeklyList.map(r => {
+                  const style = STATUS_STYLE[r.status] || STATUS_STYLE.pending;
+                  return (
+                    <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="px-3 py-2.5 font-mono text-xs">{r.report_code}</td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {new Date(r.period_start).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                        {' → '}
+                        {new Date(r.period_end).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border ${style.bg}`}>
+                          {style.icon} {r.status_label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-slate-500">
+                        {r.generated_at
+                          ? new Date(r.generated_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+                          : '—'}
+                        {r.duration_ms ? (
+                          <span className="ml-1 text-slate-400">({r.duration_ms} ms)</span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">
+                        <span className="font-bold">{r.delivery_count}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          {r.has_pdf && (
+                            <button
+                              onClick={() => downloadFile(r, 'pdf')}
+                              title="Télécharger PDF"
+                              className="inline-flex items-center gap-1 rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold hover:border-rose-400"
+                            >
+                              <FileText className="h-3 w-3 text-rose-600" /> PDF
+                            </button>
+                          )}
+                          {r.has_excel && (
+                            <button
+                              onClick={() => downloadFile(r, 'xlsx')}
+                              title="Télécharger Excel"
+                              className="inline-flex items-center gap-1 rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold hover:border-emerald-400"
+                            >
+                              <FileSpreadsheet className="h-3 w-3 text-emerald-600" /> XLSX
+                            </button>
+                          )}
+                          {r.status === 'ready' && (
+                            <button
+                              onClick={() => sendNow(r)}
+                              disabled={sending === r.id}
+                              title="Envoyer maintenant"
+                              className="inline-flex items-center gap-1 rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold hover:border-ciOrange disabled:opacity-50"
+                            >
+                              {sending === r.id ? (
+                                <RefreshCw className="h-3 w-3 animate-spin text-ciOrange" />
+                              ) : (
+                                <Send className="h-3 w-3 text-ciOrange" />
+                              )}
+                              Envoyer
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          BLOC 2 : Exports à la volée (legacy)
+          ═══════════════════════════════════════════════════════════════════ */}
+      <div className="pt-4">
+        <h2 className="font-display text-lg font-bold text-slate-700 dark:text-slate-300 mb-3">
+          Exports à la volée
+        </h2>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {REPORTS.map((r, idx) => (
@@ -203,9 +484,45 @@ export default function RapportsPage() {
         )}
       </div>
 
+      </div>{/* /BLOC 2 */}
+
       {openReport && (
         <ReportParamsModal report={openReport} onClose={() => setOpenReport(null)} />
       )}
+    </div>
+  );
+}
+
+// =========================================================================
+// KPI de la semaine — dérivés du dernier rapport READY
+// =========================================================================
+function WeeklyKpiRow({ report, recipientsCount }: { report: WeeklyReport; recipientsCount: number }) {
+  const s = report.summary_data as {
+    travelers?: { registered?: number; active_followup?: number };
+    followups?: { new?: number; completed?: number };
+    checkins?: { received?: number; missed?: number };
+    alerts?: { open?: number };
+    risk_levels?: { critical?: { count?: number }; high?: { count?: number } };
+  } | undefined;
+
+  const kpis = [
+    { label: 'Voyageurs semaine', value: s?.travelers?.registered ?? 0, tone: 'text-ciOrange' },
+    { label: 'Suivi actif', value: s?.travelers?.active_followup ?? 0, tone: 'text-ciGreen' },
+    { label: 'Check-ins reçus', value: s?.checkins?.received ?? 0, tone: 'text-emerald-600' },
+    { label: 'Alertes ouvertes', value: s?.alerts?.open ?? 0, tone: 'text-rose-600' },
+    { label: 'Cas critiques', value: s?.risk_levels?.critical?.count ?? 0, tone: 'text-rose-700' },
+    { label: 'Destinataires', value: recipientsCount, tone: 'text-slate-700 dark:text-slate-300' },
+  ];
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-3">
+      {kpis.map((k) => (
+        <div key={k.label} className="rounded-xl bg-slate-50 dark:bg-slate-900 p-3">
+          <div className="text-[10px] uppercase tracking-wide text-slate-500 font-bold">{k.label}</div>
+          <div className={`mt-1 font-display text-2xl font-black ${k.tone}`}>
+            {Number(k.value).toLocaleString('fr-FR')}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
