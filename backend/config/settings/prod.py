@@ -63,3 +63,32 @@ if OTEL_EXPORTER_OTLP_ENDPOINT:
         DjangoInstrumentor().instrument()
     except Exception:  # pragma: no cover - opt-in best effort
         pass
+
+
+# ---------------------------------------------------------------------------
+# Hard checks Telegram — D-01 (ostack:challenge)
+# ---------------------------------------------------------------------------
+# Refuse le boot en prod si TELEGRAM_BOT_TOKEN est configuré mais que le
+# secret webhook est vide. Sans ce secret, N'IMPORTE QUI peut POST au webhook
+# et créer/rebrander des TelegramSubscription frauduleuses (hijacking).
+#
+# Politique : soit le bot est totalement désactivé (token vide → pas de webhook
+# exposé), soit il est activé ET protégé par un secret ≥ 32 caractères.
+# ---------------------------------------------------------------------------
+from django.core.exceptions import ImproperlyConfigured  # noqa: E402
+
+if TELEGRAM_BOT_TOKEN:
+    if not TELEGRAM_WEBHOOK_SECRET:
+        raise ImproperlyConfigured(
+            "TELEGRAM_WEBHOOK_SECRET est obligatoire en production dès lors que "
+            "TELEGRAM_BOT_TOKEN est défini. Sans lui, le webhook /api/v1/telegram/"
+            "webhook/ accepte n'importe quel POST — risque de hijacking des "
+            "abonnements voyageur. Générer un secret : "
+            "python -c \"import secrets;print(secrets.token_urlsafe(48))\" "
+            "puis l'ajouter au .env de prod."
+        )
+    if len(TELEGRAM_WEBHOOK_SECRET) < 32:
+        raise ImproperlyConfigured(
+            f"TELEGRAM_WEBHOOK_SECRET trop court ({len(TELEGRAM_WEBHOOK_SECRET)} "
+            "caractères). Minimum 32 recommandé (48+ optimal)."
+        )

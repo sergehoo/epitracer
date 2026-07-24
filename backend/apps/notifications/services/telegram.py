@@ -69,6 +69,26 @@ def _mask_token(token: str) -> str:
     return f"{token[:8]}…{token[-4:]}"
 
 
+def _scrub(text: str) -> str:
+    """D-04 : Retire toute occurrence du token bot du texte AVANT log.
+
+    Utilisé sur les messages d'exception ou d'erreur qui pourraient contenir
+    l'URL complète (ex: ``ConnectionError: HTTPSConnectionPool(host='api.telegram.org',
+    port=443): Read timed out. (POST https://api.telegram.org/bot<TOKEN>/sendMessage)``).
+
+    Toujours appeler cette fonction sur ``str(exc)`` avant tout ``logger.xxx()``.
+    """
+    if not text:
+        return text
+    try:
+        token = getattr(settings, "TELEGRAM_BOT_TOKEN", "") or ""
+    except Exception:  # noqa: BLE001
+        return text
+    if token and len(token) >= 20 and token in text:
+        return text.replace(token, _mask_token(token))
+    return text
+
+
 def is_configured() -> bool:
     """True si le token bot est présent — utilisable en check-list admin."""
     return bool(getattr(settings, "TELEGRAM_BOT_TOKEN", ""))
@@ -136,8 +156,10 @@ def send_message(
     except TelegramNotConfigured as exc:
         return TelegramSendResult(ok=False, error=str(exc))
     except requests.RequestException as exc:
-        logger.warning("Telegram network error chat=%s : %s", chat_id, exc)
-        return TelegramSendResult(ok=False, error=f"Erreur réseau : {exc}")
+        # D-04 : scrub token de l'exception AVANT log et retour
+        safe_msg = _scrub(str(exc))
+        logger.warning("Telegram network error chat=%s : %s", chat_id, safe_msg)
+        return TelegramSendResult(ok=False, error=f"Erreur réseau : {safe_msg}")
 
     if r.status_code != 200:
         # Les codes 403/400 typiques : bot bloqué, chat introuvable, etc.
@@ -146,11 +168,13 @@ def send_message(
         except Exception:  # noqa: BLE001
             body = {"raw": r.text[:200]}
         desc = body.get("description") if isinstance(body, dict) else str(body)
+        # D-04 : scrub par précaution (description peut refléter l'URL)
+        safe_desc = _scrub(str(desc))
         logger.info(
             "Telegram sendMessage rejected chat=%s status=%s desc=%s",
-            chat_id, r.status_code, desc,
+            chat_id, r.status_code, safe_desc,
         )
-        return TelegramSendResult(ok=False, error=f"Telegram {r.status_code} : {desc}")
+        return TelegramSendResult(ok=False, error=f"Telegram {r.status_code} : {safe_desc}")
 
     data = r.json() or {}
     result = data.get("result") or {}
@@ -274,6 +298,12 @@ def handle_incoming_update(update: dict) -> dict:
             result["public_id"] = public_id
             return result
 
+        # D-02 : détecter un rebranding (chat_id déjà lié à un AUTRE traveler)
+        # AVANT l'update_or_create → on capture l'ancienne valeur pour audit.
+        existing = TelegramSubscription.objects.filter(chat_id=chat_id).first()
+        previous_traveler_id = existing.traveler_id if existing else None
+        is_rebranding = existing is not None and existing.traveler_id != traveler.pk
+
         sub, created = TelegramSubscription.objects.update_or_create(
             chat_id=chat_id,
             defaults={
@@ -286,6 +316,36 @@ def handle_incoming_update(update: dict) -> dict:
                 "last_message_at": timezone.now(),
             },
         )
+
+        # D-02 : log l'événement de sécurité si rebranding (bascule d'un
+        # chat_id d'un voyageur A vers un voyageur B). Cas légitime possible
+        # (voyageur qui a saisi le mauvais TRV la première fois) mais aussi
+        # signal d'attaque (hijacking d'abonnement). AuditLog trace tout.
+        if is_rebranding:
+            try:
+                from django.contrib.contenttypes.models import ContentType
+                from apps.audit.models import AuditLog
+                AuditLog.objects.create(
+                    actor=None,  # webhook Telegram = système
+                    action="telegram.subscription.rebrand",
+                    summary=(
+                        f"chat_id {chat_id} re-lié : traveler #{previous_traveler_id} "
+                        f"→ #{traveler.pk} ({traveler.public_id})"
+                    ),
+                    target_ct=ContentType.objects.get_for_model(TelegramSubscription),
+                    target_id=sub.pk,
+                    payload={
+                        "chat_id": chat_id,
+                        "previous_traveler_id": previous_traveler_id,
+                        "new_traveler_id": traveler.pk,
+                        "new_public_id": traveler.public_id,
+                        "username": (from_user.get("username") or "")[:64],
+                    },
+                    ip_address=None,
+                    user_agent="telegram-webhook",
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Audit log telegram rebrand failed : %s", _scrub(str(exc)))
         send_message(
             chat_id,
             (

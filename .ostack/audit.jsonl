@@ -1,0 +1,2 @@
+{"id":"208a3e07-7eb7-47e0-a232-0d864dfb8e2a","timestamp":"2026-07-24T14:02:14.050Z","actorId":"ogahserge","action":"framework.install","projectId":"epidemitracker","outcome":"succeeded","details":{"assistant":"claude","version":"0.2.0","installed":76,"skipped":0,"learningHook":true}}
+{"id":"825b9a22-b770-4bcc-afbb-795d0c3b8bec","timestamp":"2026-07-24T14:02:29.451Z","actorId":"ogahserge","action":"framework.install","projectId":"epidemitracker","outcome":"succeeded","details":{"assistant":"codex","version":"0.2.0","installed":9,"skipped":46,"learningHook":false}}

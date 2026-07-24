@@ -65,12 +65,36 @@ class Command(BaseCommand):
             action="store_true",
             help="Prévisualise combien seraient invités sans rien envoyer.",
         )
+        parser.add_argument(
+            "--i-confirm-massive-send",
+            action="store_true",
+            help=(
+                "Obligatoire dès que --limit > MASSIVE_SEND_THRESHOLD (500). "
+                "Garde-fou D-08 pour éviter l'envoi accidentel de milliers de SMS "
+                "coûteux."
+            ),
+        )
+
+    # D-08 : au-delà de ce seuil, exige un flag de confirmation explicite.
+    # 500 SMS ≈ 10 000 FCFA — ordre de grandeur "erreur récupérable".
+    # 5000 SMS ≈ 100 000 FCFA — ordre de grandeur "coupure de crédit Orange CI".
+    MASSIVE_SEND_THRESHOLD = 500
 
     def handle(self, *args, **opts):
         channel = opts["channel"]
         limit = max(1, int(opts["limit"]))
         since_days = opts.get("since_days")
         dry_run = opts["dry_run"]
+        confirmed_massive = opts.get("i_confirm_massive_send", False)
+
+        # D-08 : garde-fou envoi massif (bypass en dry-run — safe par nature)
+        if not dry_run and limit > self.MASSIVE_SEND_THRESHOLD and not confirmed_massive:
+            raise CommandError(
+                f"⚠  --limit={limit} dépasse le seuil de sécurité ({self.MASSIVE_SEND_THRESHOLD}). "
+                f"Coût estimé SMS Orange CI : ~{limit * 20:,} FCFA. "
+                "Pour confirmer, relancer avec --i-confirm-massive-send. "
+                "Ou faites --dry-run pour prévisualiser sans envoyer."
+            )
 
         # Sanity checks
         if not get_bot_username():

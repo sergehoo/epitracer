@@ -138,6 +138,26 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
     setSending(true);
     setDone(false);
 
+    // D-11 : recharger le split Telegram JUSTE AVANT la boucle. Sans ça, si
+    // un voyageur s'est lié entre l'ouverture de la modale et le clic
+    // "Envoyer", il reçoit un SMS d'invitation alors qu'il est déjà lié.
+    let freshTgStatus = tgStatus;
+    if (isTelegram) {
+      try {
+        const ids = targets.map((t) => t.traveler_id).filter(Boolean) as number[];
+        if (ids.length > 0) {
+          const resp = await api.post('/notifications/telegram/link-status/', {
+            traveler_ids: ids,
+          });
+          freshTgStatus = resp.data;
+          setTgStatus(resp.data);
+        }
+      } catch {
+        // Best-effort : si l'endpoint échoue, on continue avec le split
+        // en cache (moins optimal mais pas bloquant).
+      }
+    }
+
     const updated = [...rows];
     let okCount = 0;
     let failCount = 0;
@@ -145,8 +165,8 @@ export function BulkSendMessageModal({ open, targets, onClose, onSent }: Props) 
     // Pour Telegram : identifier les non-liés → ils recevront une invitation SMS
     // au lieu du vrai message Telegram (le vrai message ne leur arriverait pas
     // de toute façon car le bot ne peut pas initier une conv sans opt-in).
-    const linkedTgSet = new Set(tgStatus?.linked_ids || []);
-    const shouldInviteUnlinked = isTelegram && tgInviteUnlinked && tgStatus && tgStatus.unlinked > 0;
+    const linkedTgSet = new Set(freshTgStatus?.linked_ids || []);
+    const shouldInviteUnlinked = isTelegram && tgInviteUnlinked && freshTgStatus && freshTgStatus.unlinked > 0;
 
     for (let i = 0; i < updated.length; i++) {
       const r = updated[i];
