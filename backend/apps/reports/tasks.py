@@ -25,6 +25,13 @@ from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from .metrics import (
+    REPORT_DELIVERY_FAILED_TOTAL, REPORT_EMAIL_SENT_TOTAL,
+    REPORT_GENERATION_DURATION, REPORT_SMS_SENT_TOTAL,
+    REPORTS_FAILED_TOTAL, REPORTS_GENERATED_TOTAL,
+    refresh_recipients_gauge,
+)
+
 logger = logging.getLogger("epidemitracker.reports.tasks")
 
 
@@ -142,12 +149,23 @@ def generate_weekly_report(self, period_start_iso: Optional[str] = None,
         logger.info("[reports] rapport %s généré (%s ms, %s KB PDF)",
                     report.report_code, report.duration_ms,
                     round(len(pdf_bytes) / 1024))
+
+        # Métriques Prometheus
+        REPORTS_GENERATED_TOTAL.labels(report_type=str(report.report_type)).inc()
+        REPORT_GENERATION_DURATION.labels(
+            report_type=str(report.report_type),
+        ).observe(report.duration_ms / 1000.0)
+
     except Exception as exc:
         logger.exception("[reports] génération %s a échoué : %s",
                          report.report_code, exc)
         report.status = ReportStatus.FAILED
         report.error_message = str(exc)[:1000]
         report.save(update_fields=["status", "error_message", "updated_at"])
+        REPORTS_FAILED_TOTAL.labels(
+            report_type=str(report.report_type),
+            reason=type(exc).__name__,
+        ).inc()
         raise
 
     return report.pk
@@ -219,16 +237,27 @@ def send_weekly_report_email(self, report_id: int) -> dict:
                 log.provider = result.provider
                 log.notification_id = result.notification_id
                 sent += 1
+                REPORT_EMAIL_SENT_TOTAL.labels(
+                    report_type=str(report.report_type),
+                ).inc()
             else:
                 log.status = DeliveryStatus.FAILED
                 log.error_message = result.error[:500]
                 failed += 1
+                REPORT_DELIVERY_FAILED_TOTAL.labels(
+                    report_type=str(report.report_type),
+                    channel="email", reason="provider_error",
+                ).inc()
         except Exception as exc:  # noqa: BLE001
             log.status = DeliveryStatus.FAILED
             log.error_message = str(exc)[:500]
             failed += 1
             logger.exception("[reports] email failed for %s: %s",
                              log.destination_masked, exc)
+            REPORT_DELIVERY_FAILED_TOTAL.labels(
+                report_type=str(report.report_type),
+                channel="email", reason=type(exc).__name__,
+            ).inc()
         log.save()
 
     logger.info("[reports] email %s : %s sent / %s failed",
@@ -309,14 +338,26 @@ def send_weekly_report_sms(self, report_id: int) -> dict:
                 log.provider = result.provider  # orange_ci ou twilio
                 log.notification_id = result.notification_id
                 sent += 1
+                REPORT_SMS_SENT_TOTAL.labels(
+                    report_type=str(report.report_type),
+                    provider=str(result.provider or "unknown"),
+                ).inc()
             else:
                 log.status = DeliveryStatus.FAILED
                 log.error_message = result.error[:500]
                 failed += 1
+                REPORT_DELIVERY_FAILED_TOTAL.labels(
+                    report_type=str(report.report_type),
+                    channel="sms", reason="provider_error",
+                ).inc()
         except Exception as exc:  # noqa: BLE001
             log.status = DeliveryStatus.FAILED
             log.error_message = str(exc)[:500]
             failed += 1
+            REPORT_DELIVERY_FAILED_TOTAL.labels(
+                report_type=str(report.report_type),
+                channel="sms", reason=type(exc).__name__,
+            ).inc()
         log.save()
 
     logger.info("[reports] SMS %s : %s sent / %s failed",
@@ -476,6 +517,9 @@ def cleanup_expired_report_files(days_to_keep: int = 90) -> dict:
             report.excel_file.delete(save=False)
             freed_excel += 1
         report.save(update_fields=["pdf_file", "excel_file", "updated_at"])
+
+    # Rafraîchit la Gauge des destinataires (une fois par semaine suffit)
+    refresh_recipients_gauge()
 
     logger.info("[reports] cleanup : %s PDFs + %s Excel supprimés (>%s j)",
                 freed_pdf, freed_excel, days_to_keep)
