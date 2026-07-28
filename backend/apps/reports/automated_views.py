@@ -162,12 +162,22 @@ class WeeklyReportViewSet(
     # ---------------------------------------------------------------- download
     @action(detail=True, methods=["get"], url_path="download")
     def download(self, request, pk=None):
-        """GET /weekly/{id}/download/?format=pdf|xlsx
+        """GET /weekly/{id}/download/?fmt=pdf|xlsx
 
         Retourne un fichier signé + tracé.
+
+        NB : le query param est ``fmt=`` et non ``format=`` pour éviter la
+        collision avec DRF ``URL_FORMAT_OVERRIDE`` (content negotiation) qui
+        intercepte ``?format=X`` et provoque un 404 quand aucun renderer
+        n'accepte ``X`` (voir tâche #129 pour la même collision sur les
+        exports legacy).
         """
         report = self.get_object()
-        fmt = (request.query_params.get("format") or "pdf").lower()
+        fmt = (
+            request.query_params.get("fmt")
+            or request.query_params.get("format")  # tolérant, mais peut échouer
+            or "pdf"
+        ).lower()
         if fmt == "pdf":
             f = report.pdf_file
             missing_msg = (
@@ -217,9 +227,13 @@ class WeeklyReportViewSet(
     # ------------------------------------------------------ signed_download_url
     @action(detail=True, methods=["get"], url_path="signed-url")
     def signed_download_url(self, request, pk=None):
-        """GET /weekly/{id}/signed-url/?format=pdf → URL signée 7j."""
+        """GET /weekly/{id}/signed-url/?fmt=pdf → URL signée 7j."""
         report = self.get_object()
-        fmt = (request.query_params.get("format") or "pdf").lower()
+        fmt = (
+            request.query_params.get("fmt")
+            or request.query_params.get("format")
+            or "pdf"
+        ).lower()
         if fmt not in ("pdf", "xlsx"):
             return Response({"detail": "format invalide"}, status=400)
 

@@ -240,9 +240,12 @@ export default function RapportsPage() {
     // ne peut pas envoyer le header Authorization stocké en localStorage,
     // donc window.open produit un 404/401. Solution : fetch blob puis
     // trigger le download via un ObjectURL.
+    // NB : query param `fmt` (pas `format`) — évite la collision avec
+    // DRF URL_FORMAT_OVERRIDE qui intercepte ?format=X pour la content
+    // negotiation et provoque un 404 (voir tâche #129).
     try {
       const response = await api.get(`/reports/weekly/${report.id}/download/`, {
-        params: { format },
+        params: { fmt: format },
         responseType: 'blob',
       });
       const blob = response.data as Blob;
