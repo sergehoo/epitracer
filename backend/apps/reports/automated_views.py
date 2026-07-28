@@ -28,10 +28,12 @@ import logging
 from datetime import datetime, timedelta
 
 from django.core import signing
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
@@ -148,6 +150,15 @@ class WeeklyReportViewSet(
 
         return Response({"ok": True, "report_id": report.pk, **results})
 
+    def get_object(self):
+        """Override pour 404 plus explicite : 'Rapport #X introuvable'."""
+        try:
+            return super().get_object()
+        except Http404:
+            pk = self.kwargs.get("pk")
+            raise NotFound(f"Rapport hebdomadaire #{pk} introuvable "
+                           "(peut-être supprimé ou pas encore généré).")
+
     # ---------------------------------------------------------------- download
     @action(detail=True, methods=["get"], url_path="download")
     def download(self, request, pk=None):
@@ -159,17 +170,25 @@ class WeeklyReportViewSet(
         fmt = (request.query_params.get("format") or "pdf").lower()
         if fmt == "pdf":
             f = report.pdf_file
+            missing_msg = (
+                f"Le rapport {report.report_code} n'a pas de fichier PDF disponible. "
+                "Régénérer via le bouton « Générer maintenant »."
+            )
         elif fmt in ("xlsx", "excel", "csv"):
             f = report.excel_file
+            missing_msg = (
+                f"Le rapport {report.report_code} n'a pas de fichier Excel/CSV disponible. "
+                "Régénérer via le bouton « Générer maintenant »."
+            )
         else:
             return Response(
-                {"detail": "format doit être 'pdf' ou 'xlsx'."},
+                {"detail": "Format invalide — utiliser 'pdf' ou 'xlsx'."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not f:
             return Response(
-                {"detail": f"Fichier {fmt} non disponible pour ce rapport."},
+                {"detail": missing_msg},
                 status=status.HTTP_404_NOT_FOUND,
             )
 

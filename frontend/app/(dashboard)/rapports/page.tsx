@@ -235,9 +235,47 @@ export default function RapportsPage() {
     }
   };
 
-  const downloadFile = (report: WeeklyReport, format: 'pdf' | 'xlsx') => {
-    const url = `${API_URL}/api/v1/reports/weekly/${report.id}/download/?format=${format}`;
-    window.open(url, '_blank');
+  const downloadFile = async (report: WeeklyReport, format: 'pdf' | 'xlsx') => {
+    // Utilise api.get (avec JWT) au lieu de window.open : le nouvel onglet
+    // ne peut pas envoyer le header Authorization stocké en localStorage,
+    // donc window.open produit un 404/401. Solution : fetch blob puis
+    // trigger le download via un ObjectURL.
+    try {
+      const response = await api.get(`/reports/weekly/${report.id}/download/`, {
+        params: { format },
+        responseType: 'blob',
+      });
+      const blob = response.data as Blob;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+      a.download = `${report.report_code}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Libère l'ObjectURL après le tick de download
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e: unknown) {
+      // Le responseType='blob' fait qu'un 400/404 renvoie une erreur dont
+      // response.data est un Blob (pas du JSON parsé). On tente de lire
+      // le blob pour extraire le message d'erreur backend.
+      const err = e as { response?: { data?: Blob | { error?: { message?: string } } } };
+      const data = err?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          const parsed = JSON.parse(text);
+          const msg = parsed?.error?.message || parsed?.detail || 'Téléchargement échoué.';
+          toast.error(msg);
+          return;
+        } catch {
+          toast.error('Téléchargement échoué.');
+          return;
+        }
+      }
+      toast.error(extractApiError(e));
+    }
   };
 
   // KPI de la semaine — latestDetail chargé séparément (light serializer
