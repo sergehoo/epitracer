@@ -70,13 +70,36 @@ def send_email(recipient: str, subject: str, body: str) -> SendResult:
         from .email_models import EmailType
         from .services.email_router import send_email_by_type
 
-        result = send_email_by_type(
-            email_type=EmailType.HEALTH_NOTIFICATION,
-            recipient=recipient,
-            subject=subject or "Notification — EpiTrace / INHP",
-            body_text=body,
-            # Pas de template_code → on envoie en plain text avec layout par défaut
-        )
+        # Détecte si le body est HTML (commence par <!DOCTYPE ou <html)
+        # → on passe alors comme body_html pour que EmailMultiAlternatives
+        # ajoute la partie text/html en plus du text/plain fallback.
+        stripped = (body or "").lstrip()
+        is_html = stripped.startswith(("<!DOCTYPE", "<!doctype", "<html", "<HTML"))
+
+        if is_html:
+            # Fallback texte minimal (extrait du <title> ou 1re ligne visible)
+            # pour les clients qui n'affichent que text/plain.
+            import re
+            m = re.search(r"<title[^>]*>([^<]+)</title>", body, re.IGNORECASE)
+            plain_fallback = (m.group(1) if m else subject or "Rapport EpiTrace").strip()
+            result = send_email_by_type(
+                email_type=EmailType.HEALTH_NOTIFICATION,
+                recipient=recipient,
+                subject=subject or "Notification — EpiTrace / INHP",
+                body_html=body,
+                body_text=(
+                    f"{plain_fallback}\n\n"
+                    "Ce message est au format HTML. Ouvrez-le dans un client "
+                    "compatible pour voir le contenu formaté."
+                ),
+            )
+        else:
+            result = send_email_by_type(
+                email_type=EmailType.HEALTH_NOTIFICATION,
+                recipient=recipient,
+                subject=subject or "Notification — EpiTrace / INHP",
+                body_text=body,
+            )
         if result.ok:
             return SendResult(
                 ok=True,
