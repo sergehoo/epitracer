@@ -219,9 +219,14 @@ class WeeklyReportViewSet(
 # 2. AutomatedReportRecipient — CRUD complet + actions
 # ============================================================================
 class ReportRecipientViewSet(viewsets.ModelViewSet):
-    """CRUD des destinataires + import/export CSV + test-envoi."""
+    """CRUD des destinataires + import/export CSV + test-envoi.
+
+    Note parser_classes : on garde les defaults DRF (JSONParser + FormParser
+    + MultiPartParser) au niveau de la classe pour que POST/PATCH en JSON
+    fonctionnent. L'action ``import_csv`` re-déclare explicitement les parsers
+    dont elle a besoin (MultiPart + Form uniquement).
+    """
     queryset = AutomatedReportRecipient.objects.all()
-    parser_classes = (MultiPartParser, FormParser)
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
@@ -313,7 +318,10 @@ class ReportRecipientViewSet(viewsets.ModelViewSet):
         )
 
     # ---------------------------------------------------------------- import CSV
-    @action(detail=False, methods=["post"], url_path="import-csv")
+    @action(
+        detail=False, methods=["post"], url_path="import-csv",
+        parser_classes=[MultiPartParser, FormParser],
+    )
     def import_csv(self, request):
         """POST /recipients/import-csv/ — import bulk depuis un CSV.
 
