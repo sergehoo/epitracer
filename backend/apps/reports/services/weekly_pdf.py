@@ -14,6 +14,26 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
+# Réutilise les helpers logos officiels de apps.health_pass.branding
+# (mêmes fichiers static/branding/{mshpcmu,inhp,armoirie}.png)
+try:
+    from apps.health_pass.branding import (
+        draw_ci_emblem, draw_ci_flag_band,
+        get_armoirie_logo, get_inhp_logo, get_mshpcmu_logo,
+    )
+except Exception:  # noqa: BLE001
+    # Fallback safe : si l'app health_pass est absente, on désactive les logos
+    get_mshpcmu_logo = get_inhp_logo = get_armoirie_logo = lambda: None
+    def draw_ci_flag_band(c, x, y, w, h):
+        c.setFillColor(colors.HexColor("#F77F00"))
+        c.rect(x, y, w / 3, h, stroke=0, fill=1)
+        c.setFillColor(colors.HexColor("#FFFFFF"))
+        c.rect(x + w / 3, y, w / 3, h, stroke=0, fill=1)
+        c.setFillColor(colors.HexColor("#009E60"))
+        c.rect(x + 2 * w / 3, y, w / 3, h, stroke=0, fill=1)
+    def draw_ci_emblem(c, cx, cy, r):
+        pass
+
 
 CI_ORANGE = colors.HexColor("#F77F00")
 CI_GREEN = colors.HexColor("#009E60")
@@ -45,22 +65,73 @@ def render_weekly_pdf(agg: dict) -> bytes:
     meta = agg.get("meta", {})
     label = period.get("label", "Semaine")
 
-    # ─── Bandeau tricolore ──────────────────────────────────────────
-    c.setFillColor(CI_ORANGE); c.rect(0, H - 3, W / 3, 3, stroke=0, fill=1)
-    c.setFillColor(CI_WHITE);  c.rect(W / 3, H - 3, W / 3, 3, stroke=0, fill=1)
-    c.setFillColor(CI_GREEN);  c.rect(2 * W / 3, H - 3, W / 3, 3, stroke=0, fill=1)
+    # ─── Bandeau tricolore CI ───────────────────────────────────────
+    draw_ci_flag_band(c, 0, H - 5, W, 5)
 
-    # ─── En-tête institutionnel ─────────────────────────────────────
+    # ─── Zone institutionnelle blanche avec 3 logos officiels ───────
+    inst_h = 30 * mm
+    inst_top = H - 5
+    c.setFillColor(CI_WHITE); c.rect(0, inst_top - inst_h, W, inst_h, stroke=0, fill=1)
+    c.setStrokeColor(colors.HexColor("#E2E8F0")); c.setLineWidth(0.5)
+    c.line(0, inst_top - inst_h, W, inst_top - inst_h)
+
+    logo_size = 22 * mm
+    logo_y = inst_top - inst_h / 2 - logo_size / 2
+
+    # MSHPCMU (gauche)
+    mshpcmu = get_mshpcmu_logo()
+    if mshpcmu:
+        c.drawImage(mshpcmu, 10 * mm, logo_y, logo_size, logo_size,
+                    preserveAspectRatio=True, mask="auto")
+
+    # Armoirie de la République (droite)
+    armoirie = get_armoirie_logo()
+    if armoirie:
+        c.drawImage(armoirie, W - 10 * mm - logo_size, logo_y,
+                    logo_size, logo_size, preserveAspectRatio=True, mask="auto")
+    else:
+        draw_ci_emblem(c, W - 10 * mm - logo_size / 2,
+                       logo_y + logo_size / 2, logo_size / 2)
+
+    # Texte institutionnel au centre
+    text_cx = W / 2
+    text_top = inst_top - 8 * mm
+    c.setFillColor(CI_ORANGE); c.setFont("Helvetica-Bold", 8)
+    c.drawCentredString(text_cx, text_top, "RÉPUBLIQUE DE CÔTE D'IVOIRE")
+    c.setFillColor(colors.HexColor("#64748B")); c.setFont("Helvetica-Oblique", 7)
+    c.drawCentredString(text_cx, text_top - 4 * mm, "Union • Discipline • Travail")
+    c.setFillColor(CI_DARK); c.setFont("Helvetica-Bold", 8.5)
+    c.drawCentredString(text_cx, text_top - 10 * mm,
+                        "Ministère de la Santé, de l'Hygiène Publique")
+    c.drawCentredString(text_cx, text_top - 13.5 * mm,
+                        "et de la Couverture Maladie Universelle")
+    c.setFillColor(colors.HexColor("#64748B")); c.setFont("Helvetica", 7.5)
+    c.drawCentredString(text_cx, text_top - 18 * mm,
+                        "Institut National d'Hygiène Publique — INHP")
+
+    # ─── Bandeau titre du rapport ───────────────────────────────────
+    title_h = 20 * mm
+    title_top = inst_top - inst_h
     c.setFillColor(CI_DARK)
-    c.rect(0, H - 32 * mm, W, 29 * mm, stroke=0, fill=1)
-    c.setFillColor(CI_GOLD); c.setFont("Helvetica-Bold", 8)
-    c.drawCentredString(W / 2, H - 12 * mm, "MSHPCMU · INHP · République de Côte d'Ivoire")
-    c.setFillColor(CI_WHITE); c.setFont("Helvetica-Bold", 15)
-    c.drawCentredString(W / 2, H - 20 * mm, "Rapport hebdomadaire de surveillance sanitaire")
-    c.setFont("Helvetica-Oblique", 10)
-    c.drawCentredString(W / 2, H - 27 * mm, f"{label} — Fuseau {meta.get('tz', 'Africa/Abidjan')}")
+    c.rect(0, title_top - title_h, W, title_h, stroke=0, fill=1)
 
-    y = H - 42 * mm
+    # Logo INHP à gauche du titre
+    inhp = get_inhp_logo()
+    inhp_size = 14 * mm
+    if inhp:
+        c.drawImage(inhp, 12 * mm, title_top - title_h / 2 - inhp_size / 2,
+                    inhp_size, inhp_size, preserveAspectRatio=True, mask="auto")
+
+    c.setFillColor(CI_GOLD); c.setFont("Helvetica-Bold", 8)
+    c.drawString(30 * mm, title_top - 7 * mm, "VEILLE SANITAIRE NATIONALE")
+    c.setFillColor(CI_WHITE); c.setFont("Helvetica-Bold", 15)
+    c.drawString(30 * mm, title_top - 13 * mm,
+                 "Rapport hebdomadaire de surveillance")
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawString(30 * mm, title_top - 18 * mm,
+                 f"{label} · Fuseau {meta.get('tz', 'Africa/Abidjan')}")
+
+    y = title_top - title_h - 10 * mm
 
     # ─── Section : Résumé ───────────────────────────────────────────
     y = _section_title(c, "Résumé exécutif", y, W)
@@ -280,13 +351,33 @@ def _draw_breakdown_list(c, title: str, items: list, y: float, W: float) -> floa
 
 
 def _draw_footer(c, W: float, meta: dict, agg: dict):
-    c.setFillColor(SLATE_100); c.rect(0, 0, W, 12 * mm, stroke=0, fill=1)
+    # Bande tricolore CI en pied de page
+    draw_ci_flag_band(c, 0, 0, W, 4 * mm)
+
+    # Footer principal
+    footer_h = 15 * mm
+    c.setFillColor(SLATE_100); c.rect(0, 4 * mm, W, footer_h, stroke=0, fill=1)
+    c.setStrokeColor(colors.HexColor("#E2E8F0")); c.setLineWidth(0.4)
+    c.line(0, 4 * mm + footer_h, W, 4 * mm + footer_h)
+
+    # Gauche : EpiTrace + INHP
+    c.setFillColor(CI_DARK); c.setFont("Helvetica-Bold", 8.5)
+    c.drawString(10 * mm, 4 * mm + footer_h - 5 * mm,
+                 "EpiTrace / Mon Pass Sanitaire — INHP")
     c.setFillColor(SLATE_600); c.setFont("Helvetica", 7)
-    c.drawString(10 * mm, 6 * mm,
-                 "EpiTrace / Mon Pass Sanitaire — Confidentiel INHP · Ne pas rediffuser sans autorisation MSHPCMU")
-    c.drawString(10 * mm, 3 * mm,
-                 f"Contact : inhp@veillesanitaire.com · Assistance : 143")
-    c.setFont("Helvetica-Oblique", 7)
+    c.drawString(10 * mm, 4 * mm + footer_h - 8.5 * mm,
+                 "Ministère de la Santé, de l'Hygiène Publique et de la Couverture Maladie Universelle")
+    c.drawString(10 * mm, 4 * mm + footer_h - 11.5 * mm,
+                 "Contact : inhp@veillesanitaire.com · Assistance : 143 · SAMU : 185")
+
+    # Droite : timestamp + confidentialité
+    c.setFillColor(SLATE_600); c.setFont("Helvetica-Oblique", 7)
     generated = (meta.get("generated_at") or "")[:19].replace("T", " ")
-    c.drawRightString(W - 10 * mm, 3 * mm,
-                      f"Généré le {generated} · durée {meta.get('generation_ms', 0)} ms")
+    c.drawRightString(W - 10 * mm, 4 * mm + footer_h - 5 * mm,
+                      f"Généré le {generated} · {meta.get('generation_ms', 0)} ms")
+    c.setFillColor(colors.HexColor("#DC2626")); c.setFont("Helvetica-Bold", 6.5)
+    c.drawRightString(W - 10 * mm, 4 * mm + footer_h - 8.5 * mm,
+                      "CONFIDENTIEL — Ne pas rediffuser sans autorisation MSHPCMU")
+    c.setFillColor(SLATE_600); c.setFont("Helvetica-Oblique", 6)
+    c.drawRightString(W - 10 * mm, 4 * mm + footer_h - 11.5 * mm,
+                      "Conservation légale 5 ans · Arrêté ministériel MSHPCMU")

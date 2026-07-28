@@ -17,7 +17,35 @@ Contient :
 """
 from __future__ import annotations
 
+import base64
 import html
+from functools import lru_cache
+from pathlib import Path
+
+from django.conf import settings
+
+
+# ---------------------------------------------------------------------------
+# Chargement des logos officiels en base64 (inline dans le HTML email pour
+# compat clients qui bloquent les images externes — Gmail, Outlook, Apple Mail)
+# ---------------------------------------------------------------------------
+@lru_cache(maxsize=8)
+def _logo_data_uri(filename: str) -> str:
+    """Charge backend/static/branding/{filename} en data-URI base64.
+
+    Retourne "" si le fichier n'existe pas → le template dégrade proprement
+    en n'affichant que le nom textuel.
+    """
+    try:
+        base_dir = Path(getattr(settings, "BASE_DIR", "."))
+        path = base_dir / "static" / "branding" / filename
+        if not path.exists():
+            return ""
+        mime = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{encoded}"
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +78,47 @@ def _esc(s) -> str:
     """Échappement HTML de toute chaîne (jamais de HTML injection depuis
     des données remontées de la DB)."""
     return html.escape(str(s or ""), quote=True)
+
+
+def _logo_tag(
+    filename: str,
+    *,
+    alt: str,
+    height: int = 64,
+    bg: str = "",
+    padding: int = 0,
+    radius: int = 0,
+) -> str:
+    """Génère un <img> inline base64 avec fallback texte si le fichier manque.
+
+    Le style est inline (compat email) + limite de hauteur + rendering
+    optimisé pour Outlook/Gmail.
+    """
+    uri = _logo_data_uri(filename)
+    if not uri:
+        # Fallback : bloc texte discret avec les initiales
+        initials = "".join(w[0].upper() for w in alt.split()[:3])[:3]
+        return (
+            f'<div style="display:inline-block;padding:6px 10px;'
+            f'background:{SLATE_100};color:{CI_DARK};font-weight:bold;'
+            f'font-size:12px;letter-spacing:1px;border-radius:6px;">'
+            f'{initials}</div>'
+        )
+    wrapper_style = ""
+    if bg or padding or radius:
+        wrapper_style = (
+            f'style="display:inline-block;background:{bg or "transparent"};'
+            f'padding:{padding}px;border-radius:{radius}px;"'
+        )
+        return (
+            f'<div {wrapper_style}>'
+            f'<img src="{uri}" alt="{_esc(alt)}" height="{height}" '
+            f'style="height:{height}px;width:auto;display:block;" /></div>'
+        )
+    return (
+        f'<img src="{uri}" alt="{_esc(alt)}" height="{height}" '
+        f'style="height:{height}px;width:auto;display:inline-block;" />'
+    )
 
 
 def _fmt_int(n) -> str:
@@ -218,26 +287,68 @@ def render_weekly_email_html(agg: dict, *, download_url: str = "", pdf_attached:
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" cellpadding="0" cellspacing="0" width="640" style="max-width:640px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
 
-<!-- Bandeau tricolore -->
+<!-- Bandeau tricolore CI -->
 <tr><td style="padding:0;">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
-    <td style="background:{CI_ORANGE};height:6px;"></td>
-    <td style="background:#fff;height:6px;"></td>
-    <td style="background:{CI_GREEN};height:6px;"></td>
+    <td style="background:{CI_ORANGE};height:8px;"></td>
+    <td style="background:#fff;height:8px;"></td>
+    <td style="background:{CI_GREEN};height:8px;"></td>
   </tr></table>
 </td></tr>
 
-<!-- Header institutionnel -->
-<tr><td style="background:{CI_DARK};padding:24px 32px;color:#fff;">
-  <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{CI_GOLD};font-weight:bold;">
-    MSHPCMU · INHP · République de Côte d'Ivoire
-  </div>
-  <h1 style="margin:8px 0 4px 0;font-size:24px;font-weight:900;">
-    Rapport hebdomadaire de surveillance sanitaire
-  </h1>
-  <div style="font-size:14px;opacity:0.9;">
-    {label} · Fuseau : {_esc(meta.get("tz", "Africa/Abidjan"))}
-  </div>
+<!-- Bandeau institutionnel — 3 logos officiels + titre -->
+<tr><td style="background:#fff;padding:20px 32px 8px 32px;border-bottom:1px solid {SLATE_200};">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <!-- Logo MSHPCMU (gauche) -->
+      <td width="80" style="vertical-align:middle;text-align:left;">
+        {_logo_tag("mshpcmu.png", alt="MSHPCMU", height=64)}
+      </td>
+      <!-- Titre institutionnel (centre) -->
+      <td style="vertical-align:middle;text-align:center;padding:0 12px;">
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:{CI_ORANGE};font-weight:900;">
+          République de Côte d'Ivoire
+        </div>
+        <div style="font-size:11px;color:{SLATE_600};font-style:italic;margin-top:2px;">
+          Union &middot; Discipline &middot; Travail
+        </div>
+        <div style="font-size:11px;color:{CI_DARK};font-weight:bold;margin-top:6px;line-height:1.35;">
+          Ministère de la Santé, de l'Hygiène Publique<br>
+          et de la Couverture Maladie Universelle
+        </div>
+        <div style="font-size:10px;color:{SLATE_600};margin-top:3px;">
+          Institut National d'Hygiène Publique — INHP
+        </div>
+      </td>
+      <!-- Armoirie République CI (droite) -->
+      <td width="80" style="vertical-align:middle;text-align:right;">
+        {_logo_tag("armoirie.png", alt="Armoirie de la République", height=64)}
+      </td>
+    </tr>
+  </table>
+</td></tr>
+
+<!-- Titre du rapport -->
+<tr><td style="background:{CI_DARK};padding:22px 32px;color:#fff;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td style="vertical-align:middle;">
+        <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:{CI_GOLD};font-weight:bold;">
+          Veille sanitaire nationale
+        </div>
+        <h1 style="margin:6px 0 4px 0;font-size:22px;font-weight:900;line-height:1.25;">
+          Rapport hebdomadaire de surveillance
+        </h1>
+        <div style="font-size:13px;opacity:0.9;">
+          {label} · Fuseau <strong>{_esc(meta.get("tz", "Africa/Abidjan"))}</strong>
+        </div>
+      </td>
+      <!-- Logo INHP à droite du titre -->
+      <td width="70" style="vertical-align:middle;text-align:right;">
+        {_logo_tag("inhp.png", alt="INHP", height=56, bg="rgba(255,255,255,0.10)", padding=6, radius=8)}
+      </td>
+    </tr>
+  </table>
 </td></tr>
 
 <!-- Contenu -->
@@ -248,15 +359,7 @@ def render_weekly_email_html(agg: dict, *, download_url: str = "", pdf_attached:
            border-bottom:2px solid {CI_ORANGE};padding-bottom:8px;">
   Résumé exécutif
 </h2>
-<p style="line-height:1.6;color:{SLATE_900};margin:0 0 24px 0;">
-  Sur la période du <strong>{label}</strong>, EpiTrace a enregistré
-  <strong>{_fmt_int(travelers.get("registered", 0))} voyageurs</strong>,
-  ouvert <strong>{followups.get("new", 0)} nouveaux suivis</strong> et clos
-  <strong>{followups.get("completed", 0)} suivis</strong>. Les équipes ont reçu
-  <strong>{_fmt_int(checkins.get("received", 0))} check-ins</strong> quotidiens
-  (dont {checkins.get("missed", 0)} manqués) et
-  <strong>{assistance.get("requests", 0)} demandes d'assistance</strong>.
-</p>
+{_render_exec_summary(travelers, followups, checkins, assistance, alerts, label)}
 
 <!-- KPI cards -->
 {kpi_cards}
@@ -303,19 +406,49 @@ def render_weekly_email_html(agg: dict, *, download_url: str = "", pdf_attached:
 
 </td></tr>
 
-<!-- Footer -->
-<tr><td style="background:{SLATE_100};padding:24px 32px;color:{SLATE_600};font-size:12px;line-height:1.5;">
-  <p style="margin:0 0 8px 0;">
-    <strong>EpiTrace / Mon Pass Sanitaire</strong> — Institut National d'Hygiène Publique (INHP)
+<!-- Footer institutionnel -->
+<tr><td style="background:{SLATE_100};padding:22px 32px;color:{SLATE_600};font-size:12px;line-height:1.55;border-top:1px solid {SLATE_200};">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td style="vertical-align:top;">
+        <div style="color:{CI_DARK};font-weight:900;font-size:13px;">
+          EpiTrace / Mon Pass Sanitaire
+        </div>
+        <div style="margin-top:4px;">
+          Institut National d'Hygiène Publique — INHP<br>
+          Ministère de la Santé, de l'Hygiène Publique<br>
+          et de la Couverture Maladie Universelle
+        </div>
+        <div style="margin-top:8px;">
+          <strong>Contact :</strong> inhp@veillesanitaire.com<br>
+          <strong>Assistance :</strong> 143 · SAMU 185
+        </div>
+      </td>
+      <td style="vertical-align:top;text-align:right;">
+        <div style="font-size:10px;color:{SLATE_600};">
+          Généré le<br>
+          <strong style="color:{CI_DARK};">{_esc(meta.get("generated_at", ""))[:19].replace("T", " à ")}</strong>
+        </div>
+        <div style="font-size:9px;color:{SLATE_600};margin-top:6px;">
+          Durée {meta.get("generation_ms", 0)} ms · Schéma v{meta.get("schema_version", 1)}
+        </div>
+      </td>
+    </tr>
+  </table>
+  <div style="border-top:1px dashed {SLATE_200};margin:14px 0 10px 0;"></div>
+  <p style="margin:0;font-size:10px;font-style:italic;color:{SLATE_600};">
+    Ce document est <strong>confidentiel</strong>. Ne pas rediffuser sans
+    autorisation MSHPCMU. Conservation légale : 5 ans conformément à l'arrêté
+    ministériel MSHPCMU.
   </p>
-  <p style="margin:0 0 8px 0;">
-    Rapport généré automatiquement le {_esc(meta.get("generated_at", ""))[:19].replace("T", " à ")}
-    (durée {meta.get("generation_ms", 0)} ms) — schéma v{meta.get("schema_version", 1)}.
-  </p>
-  <p style="margin:0;font-size:11px;">
-    Ce document est confidentiel. Ne pas rediffuser sans autorisation MSHPCMU.
-    Contact : inhp@veillesanitaire.com · Assistance : 143
-  </p>
+</td></tr>
+<!-- Bande tricolore de pied -->
+<tr><td style="padding:0;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
+    <td style="background:{CI_ORANGE};height:5px;"></td>
+    <td style="background:#fff;height:5px;"></td>
+    <td style="background:{CI_GREEN};height:5px;"></td>
+  </tr></table>
 </td></tr>
 
 </table>
@@ -329,6 +462,49 @@ def render_weekly_email_html(agg: dict, *, download_url: str = "", pdf_attached:
 # ---------------------------------------------------------------------------
 # Helpers internes de rendu (isolés pour lisibilité)
 # ---------------------------------------------------------------------------
+def _render_exec_summary(travelers, followups, checkins, assistance, alerts, label) -> str:
+    """Résumé exécutif adaptatif : formule différente si activité nulle."""
+    n_travelers = travelers.get("registered", 0)
+    n_active = travelers.get("active_followup", 0)
+    n_new_fu = followups.get("new", 0)
+    n_done_fu = followups.get("completed", 0)
+    n_checkins = checkins.get("received", 0)
+    n_missed = checkins.get("missed", 0)
+    n_assist = assistance.get("requests", 0)
+    n_alerts_open = alerts.get("open", 0)
+
+    total_activity = n_travelers + n_new_fu + n_checkins + n_alerts_open
+
+    if total_activity == 0:
+        # Semaine sans activité
+        return (
+            f'<div style="background:{SLATE_50};border-left:4px solid {CI_GREEN};'
+            f'padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 20px 0;">'
+            f'<p style="margin:0;line-height:1.6;color:{SLATE_900};">'
+            f'<strong style="color:{CI_GREEN};">Semaine calme</strong> — '
+            f'aucune activité enregistrée sur la période <strong>{label}</strong>. '
+            f'La surveillance de routine reste active.'
+            f'</p></div>'
+        )
+
+    return (
+        f'<div style="background:{SLATE_50};border-left:4px solid {CI_ORANGE};'
+        f'padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 20px 0;">'
+        f'<p style="line-height:1.6;color:{SLATE_900};margin:0;">'
+        f'Sur la période <strong>{label}</strong>, EpiTrace a enregistré '
+        f'<strong>{_fmt_int(n_travelers)} voyageurs</strong>, '
+        f'ouvert <strong>{n_new_fu} nouveaux suivis</strong>, '
+        f'clos <strong>{n_done_fu} suivis</strong> et compte '
+        f'<strong>{_fmt_int(n_active)} personnes actuellement en suivi actif</strong>. '
+        f'Les équipes ont reçu <strong>{_fmt_int(n_checkins)} check-ins</strong> '
+        f'quotidiens ({n_missed} manqués) et traité '
+        f'<strong>{n_assist} demandes d\'assistance</strong>. '
+        f'{n_alerts_open} <strong>alertes sanitaires</strong> restent ouvertes.'
+        f'</p></div>'
+    )
+
+
+
 def _render_kpi_cards(travelers, followups, checkins, alerts, assistance) -> str:
     cards = [
         ("Voyageurs enregistrés", _fmt_int(travelers.get("registered", 0)), CI_ORANGE),
