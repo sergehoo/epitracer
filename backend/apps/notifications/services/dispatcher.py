@@ -227,10 +227,24 @@ def enqueue_notification(
 
     if not final_body or not final_body.strip():
         return SendResult(ok=False, error="Le corps du message est vide.")
-    if len(final_body) > 1530:
+    # Limite 1530 chars = 10 segments SMS (GSM-7 : 153 chars/segment concat).
+    # N'a de sens QUE pour SMS + WhatsApp — l'email HTML fait souvent
+    # plusieurs dizaines de KB (logos base64, styles inline). Le canal push
+    # / Telegram ont leurs propres limites gérées ailleurs.
+    if channel in {Channel.SMS, Channel.WHATSAPP} and len(final_body) > 1530:
         return SendResult(
             ok=False,
             error="Message trop long (max 1530 caractères, soit 10 segments SMS).",
+        )
+    # Sanity check global : refuser au-delà de 1 Mo pour éviter les fuites
+    # mémoire (email HTML avec logos base64 ≈ 500 KB max attendu).
+    if len(final_body) > 1_000_000:
+        return SendResult(
+            ok=False,
+            error=(
+                f"Corps du message trop volumineux ({len(final_body):,} caractères "
+                "— max 1 000 000)."
+            ),
         )
 
     # 4) Création de l'objet Notification
