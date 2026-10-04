@@ -13,6 +13,12 @@ DEBUG = False
 
 # Sécurité durcie (overridable via env mais valeurs strictes par défaut)
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
+
+SECURE_REDIRECT_EXEMPT = [
+    r"^healthz/$",
+    r"^metrics/$",
+]
+
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
 CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000)  # 1 an
