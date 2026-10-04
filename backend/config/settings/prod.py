@@ -22,10 +22,7 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SESSION_COOKIE_SAMESITE = "Strict"
 
-SECURE_REDIRECT_EXEMPT = [
-    r"^healthz/$",
-    r"^metrics/$",
-]
+
 # ---------------------------------------------------------------------------
 # CSP — en prod : ENFORCE (pas report-only) par défaut. On garde report-uri
 # en option pour collecter les violations résiduelles dans Sentry / endpoint
