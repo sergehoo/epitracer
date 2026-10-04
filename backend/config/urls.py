@@ -81,7 +81,7 @@ api_v1_patterns = [
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("healthz/", healthcheck, name="healthcheck"),
-    path("metrics/", include("django_prometheus.urls")),
+    path("", include("django_prometheus.urls")),
 
     # OpenAPI / Swagger / Redoc
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
