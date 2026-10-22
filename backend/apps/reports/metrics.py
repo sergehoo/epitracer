@@ -4,7 +4,7 @@ Import safe : si prometheus_client absent (dev env minimal), tous les
 compteurs deviennent des no-op → aucun crash.
 
 Exposé automatiquement via django-prometheus si branché (voir
-config/urls.py — endpoint /metrics/).
+config/urls.py — endpoint /metrics).
 
 Convention : préfixe `epitrace_reports_` pour disambiguer parmi les autres
 apps qui exportent aussi vers le même endpoint.

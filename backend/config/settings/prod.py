@@ -16,7 +16,7 @@ SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
 
 SECURE_REDIRECT_EXEMPT = [
     r"^healthz/$",
-    r"^metrics/$",
+    r"^metrics$",  # django_prometheus.urls expose "metrics" sans slash final
 ]
 
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
