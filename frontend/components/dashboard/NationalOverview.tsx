@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { api } from '@/lib/api';
+import { COUNTRY_RISK_BADGE, COUNTRY_RISK_LABEL, COUNTRY_RISK_OPTIONS } from '@/lib/countryRisk';
 
 interface NationalData {
   filters?: {
@@ -29,6 +30,8 @@ interface NationalData {
     country?: string | null;
     entry_point?: string | null;
     followup?: string | null;
+    origin_risk?: string | null;
+    monitored?: boolean;
   };
   kpis: {
     travelers_today: number;          // alias historique = registrations_today
@@ -60,7 +63,15 @@ interface NationalData {
     cases_high?: number; cases_critical?: number;
   }[];
   top_entry_points: { entry_point__name: string; entry_point__code: string; count: number }[];
-  top_origins: { country__code: string; country__name: string; count: number }[];
+  top_origins: {
+    country__code: string; country__name: string; count: number;
+    country__risk_level?: string; country__is_monitored?: boolean;
+  }[];
+  arrivals_by_origin_risk?: Record<string, number>;
+  monitored_countries?: {
+    code: string; name: string; risk_level: string;
+    risk_for_diseases: string[]; arrivals_period: number;
+  }[];
   top_nationalities?: { nationality: string; count: number }[];
   statuses: Record<string, number>;
   risk_levels: Record<string, number>;
@@ -82,6 +93,8 @@ export interface NationalOverviewFilters {
   followup: string;
   country: string;
   entryPoint: string;
+  originRisk?: string;
+  monitored?: boolean;
 }
 
 const SEV_STYLES: Record<string, string> = {
@@ -111,6 +124,8 @@ export function NationalOverview({
     if (filters.followup) p.set('followup', filters.followup);
     if (filters.country) p.set('country', filters.country);
     if (filters.entryPoint) p.set('entry_point', filters.entryPoint);
+    if (filters.originRisk) p.set('origin_risk', filters.originRisk);
+    if (filters.monitored) p.set('monitored', 'true');
     return `?${p.toString()}`;
   }, [filters]);
 
@@ -314,6 +329,54 @@ export function NationalOverview({
             </Link>
           </motion.div>
         </div>
+      )}
+
+      {/* Pays surveillés : niveau de risque courant + arrivées de la période */}
+      {!!data?.monitored_countries?.length && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="card p-4 mt-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="text-xs uppercase tracking-widest text-slate-500 font-semibold">
+              Pays surveillés · arrivées sur {data.filters?.period_days ?? 30} j
+            </div>
+            <div className="flex flex-wrap gap-1.5 text-[10px]">
+              {COUNTRY_RISK_OPTIONS.map((o) => (
+                <span key={o.value} className={COUNTRY_RISK_BADGE[o.value]}>
+                  {o.label} : {data.arrivals_by_origin_risk?.[o.value] ?? 0}
+                </span>
+              ))}
+            </div>
+          </div>
+          <ul className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {data.monitored_countries.map((c) => (
+              <li
+                key={c.code}
+                className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs"
+              >
+                <span className="truncate font-semibold" title={c.name}>{c.name}</span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className="tabular-nums text-slate-500">{c.arrivals_period}</span>
+                  <span
+                    className={COUNTRY_RISK_BADGE[c.risk_level] || 'badge-low'}
+                    title={c.risk_for_diseases.length ? c.risk_for_diseases.join(', ') : undefined}
+                  >
+                    {COUNTRY_RISK_LABEL[c.risk_level] || c.risk_level}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/pays-risque"
+            className="block text-right text-xs text-ciOrange font-semibold mt-2 hover:underline"
+          >
+            Gérer les niveaux de risque →
+          </Link>
+        </motion.div>
       )}
     </section>
   );

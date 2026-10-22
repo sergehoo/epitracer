@@ -19,14 +19,15 @@ def ebola_disease(db) -> Disease:
     )
 
 
+# Les pays du référentiel sont créés par la migration geo 0004 : on les réutilise.
 @pytest.fixture
 def country_ci(db) -> Country:
-    return Country.objects.create(code="CI", name="Côte d'Ivoire", region="Afrique")
+    return Country.objects.get_or_create(code="CI", defaults={"name": "Côte d'Ivoire"})[0]
 
 
 @pytest.fixture
 def country_cd(db) -> Country:
-    return Country.objects.create(code="CD", name="RDC", region="Afrique", risk_level="red")
+    return Country.objects.get_or_create(code="CD", defaults={"name": "RDC"})[0]
 
 
 @pytest.fixture

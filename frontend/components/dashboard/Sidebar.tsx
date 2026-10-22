@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Activity, Building2, BarChart3, Bell, ChevronLeft, FileText, FormInput,
+  Activity, Building2, BarChart3, Bell, ChevronLeft, FileText, FormInput, Globe2,
   HeartPulse, LayoutDashboard, Map, MapPin, MessageSquare, Network, QrCode,
   Settings, ShieldAlert, Siren, Stethoscope, Users, X,
 } from 'lucide-react';
@@ -23,6 +23,7 @@ const NAV = [
   { href: '/notifications',     label: 'Notifications',     icon: MessageSquare },
   { href: '/cartographie',      label: 'Cartographie',      icon: Map },
   { href: '/maladies',          label: 'Maladies',          icon: Stethoscope },
+  { href: '/pays-risque',       label: 'Pays à risque',     icon: Globe2 },
   { href: '/formulaires',       label: 'Formulaires',       icon: FormInput },
   { href: '/utilisateurs',      label: 'Utilisateurs',      icon: Users },
   { href: '/visites',           label: 'Visites',           icon: BarChart3 },

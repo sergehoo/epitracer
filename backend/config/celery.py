@@ -138,6 +138,13 @@ app.conf.beat_schedule = {
         "schedule": crontab(hour=4, minute=0, day_of_week=0),
         "options": {"queue": "reports"},
     },
+    # Niveaux de risque pays : applique les prises d'effet / fins de validité
+    # des évaluations datées. 00:05 pour être à jour dès le début de journée.
+    "geo-refresh-country-risk-levels": {
+        "task": "geo.refresh_country_risk_levels",
+        "schedule": crontab(hour=0, minute=5),
+        "options": {"queue": "surveillance"},
+    },
 }
 
 

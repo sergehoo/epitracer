@@ -36,6 +36,7 @@ const ADMIN_PATHS = [
   '/alertes',
   '/cartographie',
   '/maladies',
+  '/pays-risque',
   '/formulaires',
   '/utilisateurs',
   '/visites',

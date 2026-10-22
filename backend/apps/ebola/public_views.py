@@ -31,7 +31,8 @@ from rest_framework.views import APIView
 from apps.audit.services import audit
 from apps.core.validators import validate_uploaded_file
 from apps.diseases.models import Disease
-from apps.geo.models import Country, EntryPoint
+from apps.geo.models import EntryPoint
+from apps.geo.services import alert_on_arrival_from_risk_country, resolve_country
 from apps.health_pass.models import HealthPass
 from apps.health_pass.services import issue_pass_for_ebola_investigation
 from apps.travelers.models import Traveler, TravelHistoryEntry
@@ -148,12 +149,8 @@ class PublicTravelerRegisterView(APIView):
                 entry_point = EntryPoint.objects.filter(pk=voyage["entry_point_id"]).first()
 
             # --- Section 2 : identité ---
-            nationality = None
-            if identite.get("nationality_code"):
-                nationality = Country.objects.filter(code=identite["nationality_code"]).first()
-            id_country = None
-            if identite.get("id_document_country_code"):
-                id_country = Country.objects.filter(code=identite["id_document_country_code"]).first()
+            nationality = resolve_country(identite.get("nationality_code"))
+            id_country = resolve_country(identite.get("id_document_country_code"))
 
             # --- Section 4 : confinement (avec géolocalisation optionnelle) ---
             location = None
@@ -212,7 +209,7 @@ class PublicTravelerRegisterView(APIView):
 
             # --- Section 3 : historique des déplacements ---
             for item in data.get("historique", []) or []:
-                country = Country.objects.filter(code=item.get("country_code")).first()
+                country = resolve_country(item.get("country_code"))
                 if country is None:
                     continue
                 TravelHistoryEntry.objects.create(
@@ -299,6 +296,9 @@ class PublicTravelerRegisterView(APIView):
                 target=investigation,
                 payload={"score": investigation.risk_score, "level": investigation.risk_level},
             )
+
+        # Règle de surveillance : pays de provenance/transit à risque élevé ou critique.
+        alert_on_arrival_from_risk_country(traveler)
 
         return Response({
             "traveler": {

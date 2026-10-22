@@ -1,8 +1,9 @@
 from datetime import timedelta
 
-from django.db.models import Count, Q
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Count, Prefetch, Q
 from django.utils import timezone
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -10,8 +11,22 @@ from rest_framework.response import Response
 from apps.accounts.models import RoleCode
 from apps.core.permissions import HasRole, IsAuthenticatedAndActive
 
-from .models import Country, EntryPoint, HealthZone
-from .serializers import CountrySerializer, EntryPointSerializer, HealthZoneSerializer
+from .models import Country, CountryRiskAssessment, EntryPoint, HealthZone
+from .serializers import (
+    CloseRiskAssessmentSerializer,
+    CountryRiskAssessmentSerializer,
+    CountrySerializer,
+    EntryPointSerializer,
+    HealthZoneSerializer,
+)
+from .services import close_risk_assessment, current_assessments, record_risk_assessment
+
+# Rôles habilités à définir le référentiel pays et les niveaux de risque.
+COUNTRY_ADMIN_ROLES = [RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY]
+
+
+def _drf_error(exc: DjangoValidationError) -> serializers.ValidationError:
+    return serializers.ValidationError(getattr(exc, "message_dict", None) or exc.messages)
 
 
 class CountryViewSet(viewsets.ModelViewSet):
@@ -19,13 +34,101 @@ class CountryViewSet(viewsets.ModelViewSet):
     serializer_class = CountrySerializer
     permission_classes = [IsAuthenticated]
     search_fields = ["code", "code3", "name", "region"]
-    filterset_fields = ["region", "risk_level"]
+    filterset_fields = ["region", "risk_level", "is_monitored"]
+
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related(
+            Prefetch(
+                "risk_assessments",
+                queryset=current_assessments().select_related("disease").order_by("disease__code"),
+                to_attr="current_assessments_list",
+            )
+        )
 
     def get_permissions(self):
         if self.action in {"create", "update", "partial_update", "destroy"}:
-            self.required_roles = [RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY]
+            self.required_roles = COUNTRY_ADMIN_ROLES
             return [IsAuthenticatedAndActive(), HasRole()]
         return super().get_permissions()
+
+    @action(detail=True, methods=["get"], url_path="risk-history")
+    def risk_history(self, request, pk=None):
+        """Toutes les évaluations du pays (en vigueur, closes, remplacées)."""
+        country = self.get_object()
+        qs = (
+            CountryRiskAssessment.objects.filter(country=country)
+            .select_related("country", "disease", "decided_by", "superseded_by")
+            .order_by("-valid_from", "-created_at")
+        )
+        return Response(CountryRiskAssessmentSerializer(qs, many=True).data)
+
+
+class CountryRiskAssessmentViewSet(
+    mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Niveaux de risque par pays et par maladie.
+
+    Pas de modification ni de suppression : un nouveau niveau se saisit en
+    créant une évaluation (qui remplace la précédente), une fin de validité
+    via l'action `close`. L'historique reste donc complet.
+    """
+
+    queryset = CountryRiskAssessment.objects.select_related(
+        "country", "disease", "decided_by", "superseded_by", "source_alert",
+    ).order_by("-valid_from", "-created_at")
+    serializer_class = CountryRiskAssessmentSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = "uuid"
+    filterset_fields = {
+        "country__code": ["exact"],
+        "disease__code": ["exact"],
+        "risk_level": ["exact"],
+    }
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if (self.request.query_params.get("current") or "").lower() == "true":
+            qs = qs.filter(pk__in=current_assessments().values("pk"))
+        return qs
+
+    def get_permissions(self):
+        if self.action in {"create", "close"}:
+            self.required_roles = COUNTRY_ADMIN_ROLES
+            return [IsAuthenticatedAndActive(), HasRole()]
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        data = serializer.validated_data
+        try:
+            serializer.instance = record_risk_assessment(
+                country=data["country"],
+                disease=data.get("disease"),
+                risk_level=data["risk_level"],
+                justification=data.get("justification", ""),
+                valid_from=data.get("valid_from"),
+                valid_until=data.get("valid_until"),
+                source_alert=data.get("source_alert"),
+                source_reference=data.get("source_reference", ""),
+                decided_by=self.request.user,
+            )
+        except DjangoValidationError as exc:
+            raise _drf_error(exc) from exc
+
+    @action(detail=True, methods=["post"])
+    def close(self, request, uuid=None):
+        assessment = self.get_object()
+        ser = CloseRiskAssessmentSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            close_risk_assessment(
+                assessment,
+                valid_until=ser.validated_data.get("valid_until"),
+                reason=ser.validated_data["reason"],
+            )
+        except DjangoValidationError as exc:
+            raise _drf_error(exc) from exc
+        return Response(self.get_serializer(assessment).data, status=status.HTTP_200_OK)
 
 
 class EntryPointViewSet(viewsets.ModelViewSet):
@@ -80,9 +183,9 @@ class HealthZoneViewSet(viewsets.ModelViewSet):
         Les alertes sont matchées via `HealthAlert.zone` (FK directe) OU
         via les voyageurs liés ci-dessus.
         """
-        from apps.travelers.models import Traveler
+        from apps.quarantine.models import DailyCheck, QuarantineRecord
         from apps.surveillance.models import HealthAlert
-        from apps.quarantine.models import QuarantineRecord, DailyCheck
+        from apps.travelers.models import Traveler
 
         zone = self.get_object()
 

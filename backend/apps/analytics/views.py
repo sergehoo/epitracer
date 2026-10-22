@@ -16,10 +16,11 @@ from rest_framework.views import APIView
 from apps.accounts.models import RoleCode
 from apps.core.permissions import HasRole
 from apps.ebola.models import EbolaInvestigation
+from apps.geo.models import COUNTRY_RISK_RANK, Country, CountryRiskLevel
 from apps.health_pass.models import HealthPass
 from apps.quarantine.models import QuarantineRecord, QuarantineStatus
 from apps.surveillance.models import HealthAlert
-from apps.travelers.models import Traveler
+from apps.travelers.models import Traveler, TravelHistoryEntry
 
 from .models import PageVisit, Portal
 from .serializers import VisitTrackSerializer
@@ -117,10 +118,16 @@ class NationalDashboardView(APIView):
         entry_point_filter = (request.query_params.get("entry_point") or "").strip()
         followup_filter = (request.query_params.get("followup") or "").strip().lower()
         compare = (request.query_params.get("compare") or "true").lower() != "false"
+        # Niveau de risque courant du pays de provenance (référentiel geo).
+        origin_risk_filter = (request.query_params.get("origin_risk") or "").strip().lower()
+        if origin_risk_filter not in CountryRiskLevel.values:
+            origin_risk_filter = ""
+        monitored_filter = (request.query_params.get("monitored") or "").lower() == "true"
 
         cache_key = (
-            f"dashboard:national:v4:p={period_days}:r={risk_filter}"
+            f"dashboard:national:v5:p={period_days}:r={risk_filter}"
             f":c={country_filter}:e={entry_point_filter}:f={followup_filter}:cmp={compare}"
+            f":or={origin_risk_filter}:m={monitored_filter}"
         )
         data = cache.get(cache_key)
         if data is not None:
@@ -139,7 +146,6 @@ class NationalDashboardView(APIView):
         travelers_qs = Traveler.objects.all()
         if country_filter:
             try:
-                from apps.travelers.models import TravelHistoryEntry
                 tids = TravelHistoryEntry.objects.filter(
                     role="origin", country__code=country_filter,
                 ).values_list("traveler_id", flat=True)
@@ -148,13 +154,21 @@ class NationalDashboardView(APIView):
                 pass
         if entry_point_filter and entry_point_filter.isdigit():
             travelers_qs = travelers_qs.filter(entry_point_id=int(entry_point_filter))
+        origin_filtered = bool(origin_risk_filter or monitored_filter)
+        if origin_filtered:
+            origins = TravelHistoryEntry.objects.filter(role="origin")
+            if origin_risk_filter:
+                origins = origins.filter(country__risk_level=origin_risk_filter)
+            if monitored_filter:
+                origins = origins.filter(country__is_monitored=True)
+            travelers_qs = travelers_qs.filter(id__in=origins.values("traveler_id"))
 
         # Filtre Ebola investigations selon risque
         invest_qs = EbolaInvestigation.objects.all()
         if risk_filter in {"low", "moderate", "high", "critical"}:
             invest_qs = invest_qs.filter(risk_level=risk_filter)
         # Si on filtre par pays, restreindre aux voyageurs concernés
-        if country_filter:
+        if country_filter or origin_filtered:
             invest_qs = invest_qs.filter(traveler__in=travelers_qs)
 
         # Filtre quarantaines selon "followup"
@@ -171,7 +185,7 @@ class NationalDashboardView(APIView):
             quars_qs = quars_qs.filter(
                 status__in=["COMPLETED", "CLOSED", "RELEASED"],
             )
-        if country_filter or entry_point_filter:
+        if country_filter or entry_point_filter or origin_filtered:
             quars_qs = quars_qs.filter(traveler__in=travelers_qs)
 
         # ------------------------------------------------------------------
@@ -310,16 +324,52 @@ class NationalDashboardView(APIView):
         # ------------------------------------------------------------------
         # Top pays/nationalités sur la période
         # ------------------------------------------------------------------
+        period_origins = TravelHistoryEntry.objects.filter(
+            role="origin", traveler__in=period_travelers,
+        )
         try:
-            from apps.travelers.models import TravelHistoryEntry
             top_origins = list(
-                TravelHistoryEntry.objects.filter(
-                    role="origin", traveler__in=period_travelers,
-                ).values("country__code", "country__name")
+                period_origins.values(
+                    "country__code", "country__name",
+                    "country__risk_level", "country__is_monitored",
+                )
                 .annotate(count=Count("id")).order_by("-count")[:10]
             )
         except Exception:  # noqa: BLE001
             top_origins = []
+
+        # Arrivées par niveau de risque courant du pays de provenance
+        origin_risk_counts = dict(
+            period_origins.values_list("country__risk_level")
+            .annotate(c=Count("traveler_id", distinct=True))
+            .values_list("country__risk_level", "c")
+        )
+        arrivals_by_origin_risk = {
+            level: origin_risk_counts.get(level, 0) for level in CountryRiskLevel.values
+        }
+
+        # Pays surveillés : niveau courant + arrivées de la période
+        monitored_arrivals = dict(
+            period_origins.filter(country__is_monitored=True)
+            .values_list("country_id")
+            .annotate(c=Count("traveler_id", distinct=True))
+            .values_list("country_id", "c")
+        )
+        monitored_countries = sorted(
+            (
+                {
+                    "code": c.code,
+                    "name": c.name,
+                    "risk_level": c.risk_level,
+                    "risk_for_diseases": c.risk_for_diseases,
+                    "arrivals_period": monitored_arrivals.get(c.id, 0),
+                }
+                for c in Country.objects.filter(is_monitored=True)
+            ),
+            key=lambda r: (
+                -COUNTRY_RISK_RANK.get(r["risk_level"], 0), -r["arrivals_period"], r["name"],
+            ),
+        )
 
         # nationality est une FK vers Country — on resort code + name comme top_origins.
         # .exclude(nationality__isnull=True) suffit ; pas de .exclude(nationality="")
@@ -433,11 +483,15 @@ class NationalDashboardView(APIView):
                 "country": country_filter or None,
                 "entry_point": entry_point_filter or None,
                 "followup": followup_filter or None,
+                "origin_risk": origin_risk_filter or None,
+                "monitored": monitored_filter,
             },
             "kpis": kpis,
             "timeline": timeline,
             "top_entry_points": top_entry_points,
             "top_origins": top_origins,
+            "arrivals_by_origin_risk": arrivals_by_origin_risk,
+            "monitored_countries": monitored_countries,
             "top_nationalities": top_nationalities,
             "statuses": statuses,
             "risk_levels": risk_levels,

@@ -13,7 +13,9 @@ import {
 } from 'recharts';
 import { api, extractApiError } from '@/lib/api';
 import { NationalOverview } from '@/components/dashboard/NationalOverview';
-import { DashboardFilters, DashboardFilterState } from '@/components/dashboard/DashboardFilters';
+import {
+  DashboardFilters, DashboardFilterState, DEFAULT_DASHBOARD_FILTERS,
+} from '@/components/dashboard/DashboardFilters';
 import {
   FunnelChart, HourlyHeatmap, ComplianceGauge, ComparisonCard,
 } from '@/components/dashboard/AdvancedStats';
@@ -112,9 +114,7 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Filtres pilotant le bandeau national + les stats avancées
-  const [filters, setFilters] = useState<DashboardFilterState>({
-    period: 30, risk: '', followup: '', country: '', entryPoint: '',
-  });
+  const [filters, setFilters] = useState<DashboardFilterState>(DEFAULT_DASHBOARD_FILTERS);
   // Données du payload /analytics/national/ remontées par NationalOverview
   const [nationalData, setNationalData] = useState<any>(null);
 

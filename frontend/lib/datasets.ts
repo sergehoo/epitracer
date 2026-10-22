@@ -10,22 +10,31 @@ export const ENTRY_POINTS: EntryPointLite[] = [
   { id: 6, code: 'AKJ-AIRPORT', name: 'Aéroport de Yamoussoukro', type: 'airport', city: 'Yamoussoukro', iata_code: 'ASK' },
 ];
 
+// Codes ISO 3166-1 alpha-2, alignés sur le référentiel backend (apps/geo/referential.py).
+// Aucun niveau de risque ici : il est défini côté serveur à partir des alertes validées.
 export const COUNTRIES: CountryLite[] = [
+  // Sous-région ouest-africaine
   { code: 'CI', name: "Côte d'Ivoire" },
   { code: 'GH', name: 'Ghana' },
-  { code: 'NG', name: 'Nigeria', risk_level: 'moderate' },
-  { code: 'CD', name: 'République démocratique du Congo', risk_level: 'red' },
-  { code: 'CG', name: 'République du Congo', risk_level: 'high' },
-  { code: 'UG', name: 'Ouganda', risk_level: 'high' },
-  { code: 'GN', name: 'Guinée', risk_level: 'high' },
-  { code: 'SL', name: 'Sierra Leone', risk_level: 'high' },
-  { code: 'LR', name: 'Liberia', risk_level: 'high' },
-  { code: 'ML', name: 'Mali' },
-  { code: 'BF', name: 'Burkina Faso' },
-  { code: 'SN', name: 'Sénégal' },
   { code: 'TG', name: 'Togo' },
   { code: 'BJ', name: 'Bénin' },
-  { code: 'CM', name: 'Cameroun', risk_level: 'moderate' },
+  { code: 'BF', name: 'Burkina Faso' },
+  { code: 'ML', name: 'Mali' },
+  { code: 'NE', name: 'Niger' },
+  { code: 'NG', name: 'Nigeria' },
+  { code: 'GN', name: 'Guinée' },
+  { code: 'GW', name: 'Guinée-Bissau' },
+  { code: 'LR', name: 'Liberia' },
+  { code: 'SL', name: 'Sierra Leone' },
+  { code: 'SN', name: 'Sénégal' },
+  { code: 'GM', name: 'Gambie' },
+  { code: 'CV', name: 'Cap-Vert' },
+  { code: 'MR', name: 'Mauritanie' },
+  // Autres pays
+  { code: 'CD', name: 'République démocratique du Congo' },
+  { code: 'CG', name: 'République du Congo' },
+  { code: 'UG', name: 'Ouganda' },
+  { code: 'CM', name: 'Cameroun' },
   { code: 'GA', name: 'Gabon' },
   { code: 'CF', name: 'République centrafricaine' },
   { code: 'KE', name: 'Kenya' },

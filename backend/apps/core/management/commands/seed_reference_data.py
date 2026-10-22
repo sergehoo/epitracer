@@ -15,7 +15,8 @@ from apps.diseases.models import (
     Symptom,
     TransmissionMode,
 )
-from apps.geo.models import Country, EntryPoint, EntryPointType, RiskLevel
+from apps.geo.models import Country, EntryPoint, EntryPointType
+from apps.geo.referential import REFERENCE_COUNTRIES, find_country, sync_reference_countries
 from apps.notifications.models import NotificationTemplate
 
 User = get_user_model()
@@ -148,20 +149,9 @@ EBOLA_RISK_FACTORS = [
 ]
 
 
-COUNTRIES = [
-    # ISO-2, name, region, risk_level, risk_for_diseases
-    ("CI", "Côte d'Ivoire", "Afrique", RiskLevel.LOW, []),
-    ("GH", "Ghana", "Afrique", RiskLevel.LOW, []),
-    ("NG", "Nigeria", "Afrique", RiskLevel.MODERATE, ["LASSA", "MPOX"]),
-    ("CD", "République démocratique du Congo", "Afrique", RiskLevel.RED, ["EBOLA", "MPOX"]),
-    ("CG", "République du Congo", "Afrique", RiskLevel.HIGH, ["EBOLA", "MPOX"]),
-    ("UG", "Ouganda", "Afrique", RiskLevel.HIGH, ["EBOLA"]),
-    ("GN", "Guinée", "Afrique", RiskLevel.HIGH, ["EBOLA", "LASSA"]),
-    ("SL", "Sierra Leone", "Afrique", RiskLevel.HIGH, ["EBOLA", "LASSA"]),
-    ("LR", "Liberia", "Afrique", RiskLevel.HIGH, ["EBOLA", "LASSA"]),
-    ("FR", "France", "Europe", RiskLevel.LOW, []),
-    ("US", "États-Unis", "Amérique", RiskLevel.LOW, []),
-]
+# Pays : référentiel ISO partagé avec la migration geo 0004 (apps.geo.referential).
+# Les niveaux de risque ne sont plus seedés : ils se saisissent comme
+# évaluations datées et justifiées (API /geo/country-risks/ ou admin).
 
 
 # Points d'entrée Côte d'Ivoire (sélection)
@@ -259,17 +249,15 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"  {len(RoleCode.choices)} rôles synchronisés."))
 
         self.stdout.write(self.style.MIGRATE_HEADING("> Pays"))
-        country_map = {}
-        for code, name, region, risk, diseases in COUNTRIES:
-            c, _ = Country.objects.update_or_create(
-                code=code,
-                defaults={
-                    "name": name, "region": region,
-                    "risk_level": risk, "risk_for_diseases": diseases,
-                },
-            )
-            country_map[code] = c
-        self.stdout.write(self.style.SUCCESS(f"  {len(country_map)} pays synchronisés."))
+        stats = sync_reference_countries(Country)
+        country_map = {
+            code2: find_country(Country, code2, code3) for code2, code3, *_ in REFERENCE_COUNTRIES
+        }
+        self.stdout.write(self.style.SUCCESS(
+            f"  {len(country_map)} pays au référentiel "
+            f"({stats['created']} créés, {stats['updated']} complétés, "
+            "niveaux de risque inchangés)."
+        ))
 
         self.stdout.write(self.style.MIGRATE_HEADING("> Maladies"))
         for d in DISEASES:

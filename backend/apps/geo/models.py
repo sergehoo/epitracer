@@ -1,9 +1,13 @@
 """Modèles géographiques (Country, EntryPoint, HealthZone) avec PostGIS."""
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.gis.db import models as gis_models
 from django.db import models
+from django.db.models import Q
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from simple_history.models import HistoricalRecords
 
 from apps.core.models import BaseModel
 
@@ -23,25 +27,117 @@ class RiskLevel(models.TextChoices):
     RED = "red", _("Zone rouge")
 
 
+class CountryRiskLevel(models.TextChoices):
+    """Niveau de risque sanitaire d'un pays (distinct de HealthZone.RiskLevel)."""
+
+    NORMAL = "normal", _("Normal")
+    MODERATE = "moderate", _("Modéré")
+    HIGH = "high", _("Élevé")
+    CRITICAL = "critical", _("Critique")
+
+
+# Ordre de gravité, pour retenir le niveau le plus élevé entre plusieurs maladies.
+COUNTRY_RISK_RANK = {
+    CountryRiskLevel.NORMAL: 0,
+    CountryRiskLevel.MODERATE: 1,
+    CountryRiskLevel.HIGH: 2,
+    CountryRiskLevel.CRITICAL: 3,
+}
+
+
 class Country(BaseModel):
     code = models.CharField(_("code ISO-2"), max_length=2, unique=True, db_index=True)
     code3 = models.CharField(_("code ISO-3"), max_length=3, blank=True, db_index=True)
     name = models.CharField(_("nom"), max_length=120, db_index=True)
     name_local = models.CharField(_("nom local"), max_length=120, blank=True)
     region = models.CharField(_("région"), max_length=80, blank=True)
-    risk_level = models.CharField(max_length=20, choices=RiskLevel.choices, default=RiskLevel.LOW)
+    # « Pays surveillé » (inclus dans le dispositif de veille) est indépendant
+    # du niveau de risque : un pays surveillé peut être au niveau normal.
+    is_monitored = models.BooleanField(_("pays surveillé"), default=False, db_index=True)
+    # Niveau global courant = le plus élevé des CountryRiskAssessment en vigueur.
+    # Dénormalisé pour les filtres ; recalculé par apps.geo.services.refresh_country_risk.
+    risk_level = models.CharField(
+        max_length=20, choices=CountryRiskLevel.choices, default=CountryRiskLevel.NORMAL,
+        db_index=True,
+    )
     risk_for_diseases = models.JSONField(
         default=list, blank=True,
-        help_text=_("Liste de codes maladie pour lesquelles ce pays est à risque."),
+        help_text=_("Codes maladie en vigueur au niveau modéré ou plus (recalculé)."),
     )
 
     class Meta(BaseModel.Meta):
         verbose_name = _("Pays")
         verbose_name_plural = _("Pays")
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["code3"], condition=~Q(code3=""), name="uniq_country_code3_when_set",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.code = (self.code or "").strip().upper()
+        self.code3 = (self.code3 or "").strip().upper()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.code} - {self.name}"
+
+
+class CountryRiskAssessment(BaseModel):
+    """Niveau de risque d'un pays pour une maladie, sur une période de validité.
+
+    Une nouvelle évaluation remplace les précédentes du même couple
+    (pays, maladie) à partir de sa date d'effet : les anciennes restent en base
+    comme historique. `disease` vide = toutes maladies confondues.
+    """
+
+    country = models.ForeignKey(Country, on_delete=models.PROTECT, related_name="risk_assessments")
+    disease = models.ForeignKey(
+        "diseases.Disease", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="country_risk_assessments",
+        help_text=_("Vide = toutes maladies confondues."),
+    )
+    risk_level = models.CharField(
+        _("niveau de risque"), max_length=20, choices=CountryRiskLevel.choices,
+    )
+    valid_from = models.DateField(_("en vigueur du"), default=timezone.localdate, db_index=True)
+    valid_until = models.DateField(_("en vigueur jusqu'au"), null=True, blank=True)
+    justification = models.TextField(_("justification"))
+    source_alert = models.ForeignKey(
+        "surveillance.HealthAlert", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="country_risk_assessments",
+    )
+    source_reference = models.CharField(
+        _("référence de l'alerte validée"), max_length=255, blank=True,
+        help_text=_("Ex : bulletin OMS, communiqué MSHPCMU, alerte INHP."),
+    )
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    superseded_by = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="supersedes",
+        help_text=_("Évaluation qui a remplacé celle-ci avant sa date d'effet."),
+    )
+
+    history = HistoricalRecords()
+
+    class Meta(BaseModel.Meta):
+        verbose_name = _("Évaluation du risque pays")
+        verbose_name_plural = _("Évaluations du risque pays")
+        ordering = ["-valid_from", "-created_at"]
+        indexes = [models.Index(fields=["country", "disease", "valid_from"])]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(valid_until__isnull=True) | Q(valid_until__gte=models.F("valid_from")),
+                name="country_risk_valid_period",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        target = self.disease.code if self.disease_id else "toutes maladies"
+        return f"{self.country.code} · {target} · {self.risk_level} ({self.valid_from})"
 
 
 class EntryPoint(BaseModel):

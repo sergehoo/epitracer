@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Calendar, Globe2, MapPin, ShieldAlert, X } from 'lucide-react';
+import { Calendar, Globe2, MapPin, Radar, ShieldAlert, X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { COUNTRY_RISK_OPTIONS } from '@/lib/countryRisk';
 
 export interface DashboardFilterState {
   period: number;
@@ -10,7 +11,15 @@ export interface DashboardFilterState {
   followup: string;
   country: string;
   entryPoint: string;
+  /** Niveau de risque courant du pays de provenance. */
+  originRisk: string;
+  /** Provenance limitée aux pays surveillés. */
+  monitored: boolean;
 }
+
+export const DEFAULT_DASHBOARD_FILTERS: DashboardFilterState = {
+  period: 30, risk: '', followup: '', country: '', entryPoint: '', originRisk: '', monitored: false,
+};
 
 interface Props {
   value: DashboardFilterState;
@@ -42,7 +51,7 @@ const FOLLOWUP_OPTIONS = [
 ];
 
 interface EntryPoint { id: number; name: string; code: string }
-interface Country { code: string; name: string }
+interface Country { code: string; name: string; is_monitored?: boolean }
 
 export function DashboardFilters({ value, onChange }: Props) {
   const [entryPoints, setEntryPoints] = useState<EntryPoint[]>([]);
@@ -57,7 +66,12 @@ export function DashboardFilters({ value, onChange }: Props) {
       .catch(() => undefined);
   }, []);
 
-  const hasFilters = !!(value.risk || value.followup || value.country || value.entryPoint || value.period !== 30);
+  const hasFilters = !!(
+    value.risk || value.followup || value.country || value.entryPoint
+    || value.originRisk || value.monitored || value.period !== 30
+  );
+  const monitoredCountries = countries.filter((c) => c.is_monitored);
+  const otherCountries = countries.filter((c) => !c.is_monitored);
 
   return (
     <div className="card p-4 flex flex-wrap items-center gap-3">
@@ -113,11 +127,44 @@ export function DashboardFilters({ value, onChange }: Props) {
           onChange={(e) => onChange({ ...value, country: e.target.value })}
         >
           <option value="">Tous pays</option>
-          {countries.map((c) => (
-            <option key={c.code} value={c.code}>{c.name || c.code}</option>
+          {monitoredCountries.length > 0 && (
+            <optgroup label="Pays surveillés">
+              {monitoredCountries.map((c) => (
+                <option key={c.code} value={c.code}>{c.name || c.code}</option>
+              ))}
+            </optgroup>
+          )}
+          <optgroup label={monitoredCountries.length > 0 ? 'Autres pays' : 'Pays'}>
+            {otherCountries.map((c) => (
+              <option key={c.code} value={c.code}>{c.name || c.code}</option>
+            ))}
+          </optgroup>
+        </select>
+      </div>
+
+      {/* Risque du pays de provenance */}
+      <div className="inline-flex items-center gap-1">
+        <Radar className="h-3.5 w-3.5 text-slate-500" />
+        <select
+          className="select max-w-[220px] text-sm"
+          value={value.originRisk}
+          onChange={(e) => onChange({ ...value, originRisk: e.target.value })}
+          aria-label="Niveau de risque du pays de provenance"
+        >
+          <option value="">Tout risque pays</option>
+          {COUNTRY_RISK_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>Provenance : {o.label.toLowerCase()}</option>
           ))}
         </select>
       </div>
+      <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+        <input
+          type="checkbox"
+          checked={value.monitored}
+          onChange={(e) => onChange({ ...value, monitored: e.target.checked })}
+        />
+        Provenance pays surveillés
+      </label>
 
       {/* Point d'entrée */}
       <div className="inline-flex items-center gap-1">
@@ -136,9 +183,7 @@ export function DashboardFilters({ value, onChange }: Props) {
 
       {hasFilters && (
         <button
-          onClick={() => onChange({
-            period: 30, risk: '', followup: '', country: '', entryPoint: '',
-          })}
+          onClick={() => onChange(DEFAULT_DASHBOARD_FILTERS)}
           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
         >
           <X className="h-3 w-3" /> Réinitialiser
