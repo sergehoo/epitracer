@@ -124,7 +124,8 @@ def apply_risk_outcome(investigation: "EbolaInvestigation") -> "EbolaInvestigati
     # `current_health_status` sur le Traveler ou par la maladie elle-même.
     # Sans cette ligne, les low-risk étaient invisibles côté admin et la
     # plateforme ne pouvait pas leur envoyer de rappels quotidiens.
-    if disease:
+    # Pas de suivi pour une maladie désactivée par les administrateurs.
+    if disease and disease.is_active:
         open_quarantine_for_investigation(investigation, disease)
 
     traveler = investigation.traveler

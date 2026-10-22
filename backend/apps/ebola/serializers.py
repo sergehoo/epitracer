@@ -133,6 +133,18 @@ class TravelHistoryItemPublicSerializer(serializers.Serializer):
     duration_text = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
 
 
+class ScreeningAnswerSerializer(serializers.Serializer):
+    """Réponses « oui » au questionnaire d'une maladie (codes RiskFactor / Symptom)."""
+
+    disease = serializers.CharField(max_length=40)
+    exposures = serializers.ListField(
+        child=serializers.CharField(max_length=60), required=False, default=list, max_length=50,
+    )
+    symptoms = serializers.ListField(
+        child=serializers.CharField(max_length=60), required=False, default=list, max_length=50,
+    )
+
+
 class PublicTravelerSubmissionSerializer(serializers.Serializer):
     """Soumission publique d'un voyageur depuis le portail web (sans auth).
 
@@ -156,3 +168,7 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
     symptoms = serializers.DictField()
     # --- Section 7 : déclaration ---
     declaration = serializers.DictField()
+    # --- Questionnaires des autres maladies sous surveillance (protocoles configurés) ---
+    screenings = serializers.ListField(
+        child=ScreeningAnswerSerializer(), required=False, default=list, max_length=30,
+    )

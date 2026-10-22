@@ -1,15 +1,25 @@
+import Link from 'next/link';
 import { Section } from '@/components/ui/Section';
 import { Mail, PhoneCall, ShieldAlert, Stethoscope } from 'lucide-react';
 
-export const metadata = { title: 'Assistance & Numéros d\'urgence' };
+export const metadata = {
+  title: 'Assistance & Numéros d\'urgence',
+  description: "Conduite à tenir en cas de symptômes, numéros d'urgence (143, 185) et notices sanitaires pour les voyageurs en Côte d'Ivoire.",
+};
 
 export default function AssistancePage() {
   return (
     <>
       <Section
-        eyebrow="Notice sanitaire individuelle"
-        title="Maladie à Virus Ebola (MVE) — Informations & Assistance"
-        description="Document officiel INHP — Surveillance des voyageurs entrant sur le territoire ivoirien."
+        eyebrow="Assistance sanitaire aux voyageurs"
+        title="Informations & assistance"
+        description={
+          <>
+            Conduite à tenir, numéros d&apos;urgence et notice INHP relative à la maladie à virus Ebola.
+            Les fiches de toutes les maladies sous surveillance sont disponibles dans la rubrique{' '}
+            <Link href="/maladies" className="font-semibold text-ciOrange hover:underline">Maladies sous surveillance</Link>.
+          </>
+        }
       >
         <div className="grid lg:grid-cols-3 gap-6">
           <article className="card p-6 lg:col-span-2 space-y-4 text-sm leading-relaxed">

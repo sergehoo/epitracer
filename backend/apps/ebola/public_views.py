@@ -35,6 +35,7 @@ from apps.geo.models import EntryPoint
 from apps.geo.services import alert_on_arrival_from_risk_country, resolve_country
 from apps.health_pass.models import HealthPass
 from apps.health_pass.services import issue_pass_for_ebola_investigation
+from apps.portal.services import apply_screenings
 from apps.travelers.models import Traveler, TravelHistoryEntry
 
 from .models import EbolaDeclaration, EbolaExposureAssessment, EbolaInvestigation, EbolaSymptomReport
@@ -287,6 +288,13 @@ class PublicTravelerRegisterView(APIView):
             # --- Scoring + workflow ---
             apply_risk_outcome(investigation)
 
+            # --- Autres maladies sous surveillance : même voyageur, un suivi par maladie ---
+            screenings = data.get("screenings") or []
+            followups = apply_screenings(traveler, screenings)
+            if screenings:
+                decl_obj.extra = {**(decl_obj.extra or {}), "screenings": screenings}
+                decl_obj.save(update_fields=["extra"])
+
             # --- Health Pass délivré immédiatement ---
             hp = issue_pass_for_ebola_investigation(investigation)
 
@@ -318,6 +326,7 @@ class PublicTravelerRegisterView(APIView):
                 "qr_token": _safe_qr_token(hp),
             },
             "instructions": _public_instructions(investigation),
+            "followups": followups,
         }, status=status.HTTP_201_CREATED)
 
 
@@ -396,6 +405,17 @@ class PublicPassConsultView(APIView):
                 "has_passport": bool(traveler.passport_document),
             },
             "investigation": EbolaInvestigationSerializer(last_inv).data if last_inv else None,
+            # Un dossier de suivi par maladie, pour la même identité de voyageur.
+            "followups": [
+                {
+                    "disease_name": q.disease.name,
+                    "disease_slug": q.disease.slug if q.disease.is_published else "",
+                    "status": q.status,
+                    "started_on": q.started_on,
+                    "expected_end_on": q.expected_end_on,
+                }
+                for q in traveler.quarantines.select_related("disease").order_by("started_on")
+            ],
             "pass": None,
             "downloads": {
                 "pass_pdf": f"/api/v1/ebola/public/pass/{public_id}/pdf/",

@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.accounts.models import RoleCode, Role
+from apps.diseases.catalog import sync_disease_catalog
 from apps.diseases.models import (
     Disease,
     DiseaseSeverity,
@@ -264,7 +265,11 @@ class Command(BaseCommand):
             obj, _ = Disease.objects.update_or_create(code=d["code"], defaults=d)
             if obj.code == "EBOLA":
                 self._seed_ebola_metadata(obj)
-        self.stdout.write(self.style.SUCCESS(f"  {len(DISEASES)} maladies synchronisées."))
+        catalog = sync_disease_catalog(Disease, Symptom, RiskFactor)
+        self.stdout.write(self.style.SUCCESS(
+            f"  {len(DISEASES)} maladies synchronisées ; catalogue public : "
+            f"{catalog['created']} ajoutées (inactives), {catalog['completed']} brouillons complétés."
+        ))
 
         self.stdout.write(self.style.MIGRATE_HEADING("> Points d'entrée"))
         for ep in ENTRY_POINTS:

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   Activity, Building2, BarChart3, Bell, ChevronLeft, FileText, FormInput, Globe2,
   HeartPulse, LayoutDashboard, Map, MapPin, MessageSquare, Network, QrCode,
-  Settings, ShieldAlert, Siren, Stethoscope, Users, X,
+  Megaphone, Settings, ShieldAlert, Siren, Stethoscope, Users, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/lib/sidebarStore';
@@ -22,7 +22,8 @@ const NAV = [
   { href: '/alertes',           label: 'Alertes',           icon: Siren },
   { href: '/notifications',     label: 'Notifications',     icon: MessageSquare },
   { href: '/cartographie',      label: 'Cartographie',      icon: Map },
-  { href: '/maladies',          label: 'Maladies',          icon: Stethoscope },
+  { href: '/gestion-maladies',  label: 'Maladies',          icon: Stethoscope },
+  { href: '/contenus-publics',  label: 'Contenus publics',  icon: Megaphone },
   { href: '/pays-risque',       label: 'Pays à risque',     icon: Globe2 },
   { href: '/formulaires',       label: 'Formulaires',       icon: FormInput },
   { href: '/utilisateurs',      label: 'Utilisateurs',      icon: Users },

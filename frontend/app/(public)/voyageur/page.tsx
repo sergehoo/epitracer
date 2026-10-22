@@ -19,9 +19,9 @@ export default function VoyageurPage() {
 
   return (
     <Section
-      eyebrow="Fiche de renseignement passager — Maladie à Virus Ebola (MVE)"
+      eyebrow="Fiche de renseignement passager — veille sanitaire aux frontières"
       title="Fiche passager — accompagnement sanitaire"
-      description="Vos informations permettent à l'INHP de vous accompagner durant votre séjour. Vos données sont chiffrées et utilisées exclusivement à des fins de suivi sanitaire."
+      description="Vos informations permettent à l'INHP de vous informer et de vous accompagner durant votre séjour, selon les maladies actuellement sous surveillance. Vos données sont chiffrées et utilisées exclusivement à des fins de suivi sanitaire."
     >
       <div className="card p-6 lg:p-10">
         <StepIndicator current={step} onJump={(i) => goTo(i)} />

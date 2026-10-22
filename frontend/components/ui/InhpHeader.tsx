@@ -9,7 +9,7 @@ import { adminUrl, publicUrl } from '@/lib/hosts';
 
 const PUBLIC_NAV = [
   { href: '#accompagnement', label: 'Accompagnement' },
-  { href: '#ebola', label: 'Prévention Ebola' },
+  { href: '/maladies', label: 'Maladies sous surveillance' },
   { href: '#fonctionnement', label: 'Comment ça marche' },
   { href: '#urgence', label: 'Assistance' },
   { href: '#faq', label: 'FAQ' },
@@ -26,7 +26,7 @@ const PUBLIC_NAV = [
 function resolveAnchorHref(href: string, currentPath: string | null): string {
   if (!href.startsWith('#')) return href;
   if (currentPath === '/') return href;
-  return `/${href}`; // ex : "#ebola" → "/#ebola"
+  return `/${href}`; // ex : "#faq" → "/#faq"
 }
 const ADMIN_NAV = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -83,12 +83,16 @@ function PublicHeader({
           </span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-700 dark:text-slate-200">
+        <nav
+          aria-label="Navigation principale"
+          className="hidden lg:flex items-center gap-6 text-sm font-bold text-slate-700 dark:text-slate-200"
+        >
           {nav.map((n) => (
             <a
               key={n.href}
               href={resolveAnchorHref(n.href, pathname)}
-              className="hover:text-ciOrange transition relative group"
+              aria-current={pathname === n.href ? 'page' : undefined}
+              className="hover:text-ciOrange transition relative group whitespace-nowrap"
             >
               {n.label}
               <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-ciOrange to-ciGreen scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
@@ -96,7 +100,7 @@ function PublicHeader({
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center gap-2">
+        <div className="hidden lg:flex items-center gap-2">
           {/* ThemeToggle volontairement absent du header PUBLIC : la landing
               est en light forcé (identité institutionnelle). Le toggle reste
               actif dans l'admin (cf. AdminHeader). */}
@@ -120,15 +124,17 @@ function PublicHeader({
 
         <button
           onClick={() => setOpen(!open)}
-          aria-label="Menu"
-          className="md:hidden h-10 w-10 grid place-items-center text-ciDark dark:text-emerald-200"
+          aria-label={open ? 'Fermer le menu' : 'Ouvrir le menu'}
+          aria-expanded={open}
+          aria-controls="public-mobile-menu"
+          className="lg:hidden h-10 w-10 grid place-items-center text-ciDark dark:text-emerald-200"
         >
           {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
       </div>
 
       {open && (
-        <div className="md:hidden px-6 pb-5 space-y-3 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800">
+        <div id="public-mobile-menu" className="lg:hidden px-6 pb-5 space-y-3 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800">
           {nav.map((n) => (
             <a
               key={n.href}

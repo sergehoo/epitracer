@@ -1,29 +1,38 @@
-'use client';
-
 import Link from 'next/link';
-import { useState } from 'react';
 import {
-  ArrowRight, Building2, FileBadge2, HandHelping, HeartHandshake,
-  HeartPulse, Hospital, MessageCircle, Phone, PhoneCall,
-  Plus, QrCode, ShieldCheck, Sparkles, Stethoscope,
+  ArrowRight, Building2, FileBadge2, HandHelping,
+  HeartPulse, Megaphone, MessageCircle, Phone, PhoneCall,
+  QrCode, ShieldCheck, Sparkles, Stethoscope,
 } from 'lucide-react';
+import { DiseaseCard } from '@/components/public/DiseaseCard';
+import { HomeFaq } from '@/components/public/HomeFaq';
+import { NoticeCard } from '@/components/public/NoticeCard';
+import { ALERT_LEVEL_ORDER, fetchPublicDiseases, fetchPublicNotices } from '@/lib/portal';
+import type { PublicDisease, PublicNotice } from '@/types/portal';
+
+// Contenus publiés par les autorités : régénérés toutes les 5 minutes.
+export const revalidate = 300;
 
 /* ============================================================ */
 /* Landing INHP — inspirée strictement du mockup officiel          */
 /* Palette : ciOrange #F77F00 · ciGreen #009B5A · ciDark #064E3B  */
 /* ============================================================ */
 
-export default function HomePage() {
+export default async function HomePage() {
+  const [diseases, notices] = await Promise.all([
+    fetchPublicDiseases('?active=true'),
+    fetchPublicNotices(),
+  ]);
   return (
     <>
       <OfficialBanner />
       <Hero />
       <Accompagnement />
-      <PreventionEbola />
+      <VeilleSanitaire diseases={diseases} notices={notices} />
       <Parcours />
       <Fonctionnement />
       <Urgence />
-      <FAQ />
+      <HomeFaq />
       <CtaFinal />
     </>
   );
@@ -100,9 +109,10 @@ function Hero() {
           </h1>
 
           <p className="mt-6 text-lg text-slate-600 max-w-xl leading-8">
-            Cette plateforme vous aide à préparer votre entrée sur le territoire, à recevoir les bonnes
-            informations sanitaires et à bénéficier d'un accompagnement clair, humain et rassurant
-            pendant votre séjour.
+            EpiTrace est le dispositif national d'information, de prévention et d'accompagnement
+            sanitaire des voyageurs, porté par le MSHPCMU et l'INHP. Il vous aide à préparer votre
+            entrée sur le territoire, à connaître les maladies sous surveillance et à bénéficier d'un
+            accompagnement clair, humain et rassurant pendant votre séjour.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row gap-4">
@@ -115,7 +125,7 @@ function Hero() {
           </div>
 
           <div className="mt-10 grid grid-cols-3 gap-5 max-w-lg">
-            <Stat value="21j" label="Accompagnement possible" />
+            <Stat value="1" label="Fiche unique pour votre séjour" />
             <Stat value="QR" label="Pass pratique" />
             <Stat value="24/7" label="Aide disponible" />
           </div>
@@ -158,12 +168,12 @@ function Hero() {
 
             <div className="mt-6 grid grid-cols-2 gap-4">
               <div className="rounded-2xl bg-orange-50 p-4">
-                <p className="text-xs text-slate-500">Maladie suivie</p>
-                <p className="font-black text-ciOrange">Ebola (MVE)</p>
+                <p className="text-xs text-slate-500">Maladies suivies</p>
+                <p className="font-black text-ciOrange">Selon la situation</p>
               </div>
               <div className="rounded-2xl bg-emerald-50 p-4">
-                <p className="text-xs text-slate-500">Surveillance</p>
-                <p className="font-black text-ciGreen">21 jours</p>
+                <p className="text-xs text-slate-500">Suivi</p>
+                <p className="font-black text-ciGreen">Selon le protocole</p>
               </div>
             </div>
           </div>
@@ -215,75 +225,77 @@ function Accompagnement() {
   );
 }
 
-/* ----------------------- PRÉVENTION EBOLA ---------------------- */
-function PreventionEbola() {
-  const tips = [
-    { icon: <HeartPulse className="h-6 w-6" />, title: 'Lavez-vous régulièrement les mains', desc: "Avec de l'eau et du savon ou une solution hydroalcoolique." },
-    { icon: <HeartHandshake className="h-6 w-6" />, title: 'Évitez les contacts à risque', desc: "En cas de doute, demandez conseil à un agent de santé." },
-    { icon: <Hospital className="h-6 w-6" />, title: 'Consultez rapidement si vous ne vous sentez pas bien', desc: "Une prise en charge précoce protège mieux le voyageur et son entourage." },
-  ];
+/* ------------------- MALADIES SOUS SURVEILLANCE ------------------- */
+/* Contenus publiés par les administrateurs habilités (API /public/).    */
+function VeilleSanitaire({ diseases, notices }: { diseases: PublicDisease[]; notices: PublicNotice[] }) {
+  const alerts = notices
+    .filter((n) => n.kind === 'alert')
+    .sort((a, b) => ALERT_LEVEL_ORDER.indexOf(a.alert_level) - ALERT_LEVEL_ORDER.indexOf(b.alert_level));
+  const recommendations = notices.filter((n) => n.kind === 'recommendation');
+
   return (
-    <section id="ebola" className="py-24 bg-gradient-to-br from-white via-orange-50/40 to-emerald-50/60">
-      <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-14 items-center">
-        <div>
+    <section
+      id="maladies"
+      aria-labelledby="maladies-title"
+      className="py-24 bg-gradient-to-br from-white via-orange-50/40 to-emerald-50/60"
+    >
+      {/* Ancre historique conservée pour les anciens liens /#ebola */}
+      <span id="ebola" className="sr-only" aria-hidden="true" />
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-3xl">
           <span className="pill-green">
-            <ShieldCheck className="h-3.5 w-3.5" /> Prévention Ebola
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Maladies sous surveillance
           </span>
-          <h2 className="mt-5 font-display text-4xl md:text-5xl font-black text-ciDark leading-tight">
-            Quelques gestes simples pour voyager <span className="text-ciOrange">avec tranquillité</span>.
+          <h2 id="maladies-title" className="mt-5 font-display text-4xl md:text-5xl font-black text-ciDark leading-tight">
+            S'informer pour voyager <span className="text-ciOrange">en toute tranquillité</span>.
           </h2>
           <p className="mt-5 text-slate-600 leading-8">
-            La maladie à virus Ebola peut être prévenue par des gestes simples, une information fiable
-            et une réaction rapide en cas de symptômes. Les équipes sanitaires sont là pour vous guider,
-            répondre à vos questions et vous accompagner sans jugement.
+            Les autorités sanitaires ivoiriennes publient ici les alertes en cours, les maladies
+            actuellement surveillées et les recommandations utiles aux voyageurs. Ces informations
+            sont validées par le MSHPCMU et l'INHP.
           </p>
-
-          <div className="mt-8 space-y-4">
-            {tips.map((t) => (
-              <div key={t.title} className="flex gap-4 p-4 rounded-2xl bg-white border border-slate-100 shadow-sm">
-                <div className="h-12 w-12 shrink-0 rounded-2xl bg-emerald-50 text-ciGreen grid place-items-center">{t.icon}</div>
-                <div>
-                  <h3 className="font-black text-ciDark">{t.title}</h3>
-                  <p className="text-sm text-slate-600 mt-1 leading-6">{t.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
 
-        <div className="relative">
-          <div className="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-ciOrange/20 to-ciGreen/20 blur-2xl" />
-          <div className="relative rounded-[2rem] overflow-hidden shadow-2xl bg-gradient-to-br from-ciDark via-emerald-900 to-emerald-700 text-white p-10 min-h-[520px] flex flex-col justify-between">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-black backdrop-blur">
-                <Stethoscope className="h-3.5 w-3.5" /> Information sanitaire
-              </div>
-              <h3 className="mt-6 font-display text-3xl font-black leading-tight">
-                Maladie à Virus Ebola — l'essentiel à connaître
-              </h3>
-              <p className="mt-4 text-emerald-100 leading-7">
-                Incubation jusqu'à 21 jours. Transmission par contact direct avec les fluides corporels
-                d'une personne ou d'un animal infecté (chauve-souris frugivore, primates).
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <KpiPill big="21" sub="jours d'incubation" />
-              <KpiPill big="7" sub="symptômes-clés" />
-              <KpiPill big="3" sub="numéros d'urgence" />
+        {alerts.length > 0 && (
+          <div className="mt-12" role="region" aria-labelledby="alertes-title">
+            <h3 id="alertes-title" className="font-display text-2xl font-black text-ciDark inline-flex items-center gap-2">
+              <Megaphone className="h-6 w-6 text-ciOrange" aria-hidden="true" /> Alertes sanitaires en cours
+            </h3>
+            <div className="mt-6 grid gap-6 md:grid-cols-2">
+              {alerts.slice(0, 4).map((n) => <NoticeCard key={n.uuid} notice={n} />)}
             </div>
           </div>
+        )}
+
+        <div className="mt-12">
+          <h3 className="font-display text-2xl font-black text-ciDark">Maladies actuellement surveillées</h3>
+          {diseases.length > 0 ? (
+            <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {diseases.slice(0, 6).map((d) => <DiseaseCard key={d.slug} disease={d} />)}
+            </div>
+          ) : (
+            <p className="mt-6 rounded-2xl border border-slate-100 bg-white p-6 text-slate-600">
+              Les fiches d'information sont publiées par les autorités sanitaires au fil de la
+              situation. En cas de doute ou de symptôme, contactez le <a href="tel:143" className="font-bold text-ciOrange">143</a>.
+            </p>
+          )}
+          <Link href="/maladies" className="btn-paper mt-8 inline-flex">
+            Toutes les fiches maladies <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
         </div>
+
+        {recommendations.length > 0 && (
+          <div className="mt-12" role="region" aria-labelledby="recos-title">
+            <h3 id="recos-title" className="font-display text-2xl font-black text-ciDark inline-flex items-center gap-2">
+              <Stethoscope className="h-6 w-6 text-ciGreen" aria-hidden="true" /> Recommandations aux voyageurs
+            </h3>
+            <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {recommendations.slice(0, 6).map((n) => <NoticeCard key={n.uuid} notice={n} />)}
+            </div>
+          </div>
+        )}
       </div>
     </section>
-  );
-}
-
-function KpiPill({ big, sub }: { big: string; sub: string }) {
-  return (
-    <div className="rounded-2xl bg-white/10 backdrop-blur border border-white/15 p-4 text-center">
-      <div className="font-display text-3xl font-black text-ciOrange">{big}</div>
-      <div className="text-[11px] text-emerald-100 mt-1">{sub}</div>
-    </div>
   );
 }
 
@@ -354,9 +366,9 @@ function Fonctionnement() {
     {
       n: '04',
       icon: <HeartPulse className="h-6 w-6" />,
-      title: 'Je suis accompagné 21 jours',
-      duration: 'Suivi quotidien',
-      desc: "Vous recevez chaque jour un rappel WhatsApp / SMS pour confirmer votre état de santé. En cas de symptômes ou de doute, accédez immédiatement à l'assistance via le 143 (gratuit) ou la messagerie sécurisée.",
+      title: 'Je suis accompagné si nécessaire',
+      duration: 'Suivi adapté',
+      desc: "Si votre situation le justifie, un suivi est ouvert pour la ou les maladies concernées, pour la durée prévue par leur protocole (21 jours pour Ebola, par exemple). Un rappel WhatsApp / SMS vous invite chaque jour à confirmer votre état de santé ; en cas de doute, appelez le 143 (gratuit).",
       action: 'Check-in quotidien · Ligne 143 · Conseils personnalisés',
     },
   ];
@@ -493,61 +505,6 @@ function Urgence() {
   );
 }
 
-/* ------------------------------ FAQ ---------------------------- */
-const FAQS = [
-  {
-    q: "Pourquoi me demande-t-on ces informations ?",
-    a: "Ces informations permettent aux équipes sanitaires de mieux vous orienter, de vous donner des conseils adaptés et de faciliter votre passage aux points d'entrée.",
-  },
-  {
-    q: "Mes données sont-elles confidentielles ?",
-    a: "Oui. Vos informations sont protégées (signature cryptographique Ed25519, accès strict RBAC) et utilisées uniquement dans le cadre de l'accompagnement sanitaire et de la protection de la santé publique.",
-  },
-  {
-    q: "Que se passe-t-il si je ne me sens pas bien ?",
-    a: "Vous pouvez contacter les services sanitaires. Un agent vous orientera calmement vers la conduite à tenir et, si nécessaire, vers le centre de santé approprié.",
-  },
-  {
-    q: "Est-ce que cela va ralentir mon arrivée ?",
-    a: "Au contraire, le pré-enregistrement permet souvent de gagner du temps, car votre fiche est déjà prête et le QR code facilite votre orientation.",
-  },
-];
-
-function FAQ() {
-  const [open, setOpen] = useState<number | null>(0);
-  return (
-    <section id="faq" className="py-24 bg-slate-50">
-      <div className="max-w-4xl mx-auto px-6">
-        <div className="text-center mb-12">
-          <h2 className="font-display text-4xl font-black text-ciDark">Questions fréquentes</h2>
-          <p className="mt-3 text-slate-600">Les réponses aux interrogations les plus courantes des voyageurs.</p>
-        </div>
-        <div className="space-y-4">
-          {FAQS.map((f, i) => {
-            const isOpen = open === i;
-            return (
-              <article key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                <button
-                  onClick={() => setOpen(isOpen ? null : i)}
-                  className="w-full flex justify-between items-center gap-4 text-left font-black text-ciDark"
-                >
-                  <span>{f.q}</span>
-                  <span className={`text-ciOrange transition-transform ${isOpen ? 'rotate-45' : ''}`}>
-                    <Plus className="h-5 w-5" />
-                  </span>
-                </button>
-                {isOpen && (
-                  <p className="mt-4 text-slate-600 leading-7 animate-fade-up">{f.a}</p>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* -------------------------- CTA FINAL -------------------------- */
 function CtaFinal() {
   return (
@@ -557,8 +514,8 @@ function CtaFinal() {
           Préparez votre arrivée <span className="text-ciOrange">en toute sérénité</span>
         </h2>
         <p className="mt-4 text-slate-600 leading-7 max-w-2xl mx-auto">
-          Quelques minutes suffisent pour recevoir votre fiche sanitaire et bénéficier d'un
-          accompagnement simple, rassurant et respectueux.
+          Quelques minutes suffisent pour recevoir votre pass sanitaire, connaître les mesures de
+          prévention utiles et bénéficier d'un accompagnement simple, rassurant et respectueux.
         </p>
         <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
           <Link href="/voyageur" className="btn-orange">

@@ -454,6 +454,7 @@ class FollowUpActionType(models.TextChoices):
     CASE_CLASSIFIED = "case_classified", _("Classification mise à jour")
     MEDICAL_ORIENTATION = "medical_orientation", _("Orientation médicale")
     FOLLOWUP_CLOSED = "followup_closed", _("Suivi clôturé")
+    SCREENING = "screening", _("Questionnaire d'entrée")
 
 
 class FollowUpActionStatus(models.TextChoices):

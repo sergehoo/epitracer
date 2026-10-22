@@ -17,6 +17,7 @@ import type {
   SectionSymptoms,
   SectionVoyage,
 } from '@/types/ebola';
+import type { ScreeningAnswer } from '@/types/portal';
 
 interface RegistrationDraft {
   step: number;
@@ -25,6 +26,8 @@ interface RegistrationDraft {
   historique?: HistoryItem[];
   confinement?: SectionConfinement;
   exposure?: SectionExposure;
+  /** Questionnaires des autres maladies sous surveillance active. */
+  screenings?: ScreeningAnswer[];
   symptoms?: SectionSymptoms;
   declaration?: SectionDeclaration;
   set: (patch: Partial<RegistrationDraft>) => void;
@@ -46,6 +49,7 @@ export const useRegistrationStore = create<RegistrationDraft>()(
           identite: undefined,
           confinement: undefined,
           exposure: undefined,
+          screenings: undefined,
           symptoms: undefined,
           declaration: undefined,
         }),

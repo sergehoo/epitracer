@@ -16,6 +16,7 @@ from apps.medical.urls import (
     admin_urlpatterns as medical_admin_urls,
     public_urlpatterns as medical_public_urls,
 )
+from apps.portal.urls import public_urlpatterns as portal_public_urls
 
 
 def healthcheck(_request):
@@ -60,6 +61,11 @@ api_v1_patterns = [
 
     # --- Companion (PWA voyageur : check-in, géoloc, push, consentement) ---
     path("public/", include("apps.companion.urls")),
+
+    # --- Portail public : fiches maladies, annonces, questionnaire (lecture seule) ---
+    path("public/", include(portal_public_urls)),
+    # --- Gestion des contenus publics (annonces) ---
+    path("portal/", include("apps.portal.urls")),
 
     # --- Companion ADMIN (suivi voyageurs, itinéraire, carte) ---
     path("admin/companion/", include("apps.companion.admin_urls")),

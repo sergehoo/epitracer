@@ -25,6 +25,14 @@ interface PassConsultPayload {
     entry_point: string | null;
     has_passport: boolean;
   };
+  /** Un suivi par maladie (même voyageur). */
+  followups?: {
+    disease_name: string;
+    disease_slug: string;
+    status: string;
+    started_on: string;
+    expected_end_on: string;
+  }[];
   investigation: {
     case_number: string;
     risk_level: RiskLevel;
@@ -187,7 +195,14 @@ export default function PassDetailPage() {
                 <dl className="mt-4 space-y-2.5 text-sm">
                   <Row label="Voyageur" value={t.full_name} accent />
                   <Row label="ID voyageur" value={t.public_id} />
-                  <Row label="Maladie suivie" value="Maladie à Virus Ebola (MVE)" />
+                  <Row
+                    label={(data.followups?.length ?? 0) > 1 ? 'Maladies suivies' : 'Suivi sanitaire'}
+                    value={
+                      data.followups && data.followups.length > 0
+                        ? data.followups.map((f) => f.disease_name).join(' · ')
+                        : 'Information et prévention'
+                    }
+                  />
                   <Row label="Point d'entrée" value={t.entry_point || '—'} />
                   <Row label="Émis le" value={formatDateTime(hp.issued_at)} />
                   <Row label="Expire le" value={formatDateTime(hp.expires_at)} />

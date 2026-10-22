@@ -104,6 +104,8 @@ LOCAL_APPS = [
     # Phase 9A — fondation du suivi médical complet (protocoles, prélèvements,
     # analyses labo, classifications, timeline d'actions, géoloc obligatoire).
     "apps.medical",
+    # Portail public multimaladies : annonces publiées (alertes, recommandations).
+    "apps.portal",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

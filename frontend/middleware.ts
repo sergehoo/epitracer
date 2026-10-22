@@ -21,6 +21,7 @@ const PUBLIC_PATHS = [
   '/voyageur',           // couvre /voyageur, /voyageur/suivi, /voyageur/confidentialite
   '/pass',
   '/assistance',
+  '/maladies',           // fiches maladies publiques + /maladies/[slug]
 ];
 
 const ADMIN_PATHS = [
@@ -35,7 +36,8 @@ const ADMIN_PATHS = [
   '/districts',
   '/alertes',
   '/cartographie',
-  '/maladies',
+  '/gestion-maladies',
+  '/contenus-publics',
   '/pays-risque',
   '/formulaires',
   '/utilisateurs',

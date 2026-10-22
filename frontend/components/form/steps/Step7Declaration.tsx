@@ -80,6 +80,7 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
         historique: store.historique || [],
         confinement: store.confinement,
         exposure: store.exposure,
+        screenings: store.screenings || [],
         symptoms: store.symptoms,
         declaration: {
           signed_place: signedPlace,

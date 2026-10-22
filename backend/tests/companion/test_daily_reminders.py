@@ -236,3 +236,24 @@ def test_fcm_sent_when_mobile_device_registered(
     assert called["data"]["type"] == "daily_checkin"
     assert called["data"]["traveler_id"] == traveler.public_id
     assert called["data"]["day"] == "3"  # FCM exige des strings
+
+
+def test_single_reminder_for_traveler_followed_for_several_diseases(
+    traveler, active_quarantine, consent_push,
+):
+    """Un voyageur suivi pour deux maladies ne reçoit qu'un rappel par jour."""
+    from apps.diseases.models import Disease
+    from apps.quarantine.models import QuarantineRecord, QuarantineStatus
+
+    mpox = Disease.objects.create(code="MPOX", name="Mpox", surveillance_days=21)
+    QuarantineRecord.objects.create(
+        traveler=traveler,
+        disease=mpox,
+        started_on=date.today() - timedelta(days=1),
+        expected_end_on=date.today() + timedelta(days=20),
+        status=QuarantineStatus.ACTIVE,
+        address="Cocody",
+    )
+    result = companion_tasks.send_daily_checkin_reminders.run()
+    assert result["travelers"] == 1
+    assert companion_tasks.push_notify.call_count == 1

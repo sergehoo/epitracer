@@ -241,25 +241,32 @@ def send_daily_checkin_reminders(self) -> dict[str, int]:
         "skipped_day_overflow": 0,
     }
 
+    # Un voyageur peut être suivi pour plusieurs maladies : un seul rappel par
+    # jour, basé sur le suivi qui se termine le plus tard.
     active_qs = QuarantineRecord.objects.filter(
         status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
-    ).select_related("traveler")
+    ).select_related("traveler").order_by("traveler_id", "-expected_end_on")
 
     today = date.today()
+    seen: set[int] = set()
+    reminded: set[int] = set()
 
     for q in active_qs:
         traveler = q.traveler
-        if traveler is None:
+        if traveler is None or traveler.id in reminded:
             continue
-        stats["travelers"] += 1
+        if traveler.id not in seen:
+            seen.add(traveler.id)
+            stats["travelers"] += 1
 
-        # Calcul du jour J — on n'envoie que si on est dans la fenêtre 21j.
+        # Calcul du jour J — on n'envoie que si on est dans la fenêtre de suivi.
         day_index = max(0, (today - q.started_on).days)
         total = (q.expected_end_on - q.started_on).days or SURVEILLANCE_DAYS
         if day_index >= total:
             stats["skipped_day_overflow"] += 1
             DAILY_REMINDER_SKIPPED.labels(reason="day_overflow").inc()
             continue
+        reminded.add(traveler.id)
 
         # Consentement push — bloque tout (FCM + VAPID + SMS de rappel).
         if not has_consent(traveler, ConsentScope.PUSH_NOTIFICATIONS):

@@ -4,16 +4,22 @@ import { PwaRegister } from '@/components/public/PwaRegister';
 import { VisitTracker } from '@/components/public/VisitTracker';
 import '../styles/globals.css';
 
+const PUBLIC_HOST = process.env.NEXT_PUBLIC_PUBLIC_HOST;
+
 export const metadata: Metadata = {
+  metadataBase: new URL(PUBLIC_HOST ? `https://${PUBLIC_HOST}` : 'http://localhost:3000'),
   title: {
     default: 'EpiTrace CI — MSHPCMU · INHP',
     template: '%s — EpiTrace CI',
   },
   description:
-    "Plateforme nationale de surveillance épidémiologique des voyageurs entrant en Côte d'Ivoire. MSHPCMU · Institut National d'Hygiène Publique (INHP).",
+    "Dispositif national d'information, de prévention et d'accompagnement sanitaire des voyageurs en Côte d'Ivoire : maladies sous surveillance, alertes sanitaires, pass sanitaire et suivi. MSHPCMU · Institut National d'Hygiène Publique (INHP).",
   applicationName: 'EpiTrace CI',
   authors: [{ name: "MSHPCMU - Ministère de la Santé, de l'Hygiène Publique et de la Couverture Maladie Universelle" }],
-  keywords: ['Ebola', 'MSHPCMU', 'INHP', "Côte d'Ivoire", 'surveillance sanitaire', 'pass sanitaire'],
+  keywords: [
+    'MSHPCMU', 'INHP', "Côte d'Ivoire", 'veille sanitaire', 'maladies sous surveillance',
+    'alertes sanitaires', 'voyageurs', 'pass sanitaire', 'Ebola', 'Mpox', 'choléra', 'fièvre jaune',
+  ],
   formatDetection: { telephone: true, email: true },
   manifest: '/manifest.webmanifest',
   appleWebApp: {

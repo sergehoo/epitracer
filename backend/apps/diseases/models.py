@@ -6,7 +6,9 @@ critères de risque, niveaux de gravité, couleur, statut.
 """
 from __future__ import annotations
 
+from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from simple_history.models import HistoricalRecords
 
@@ -29,6 +31,21 @@ class TransmissionMode(models.TextChoices):
     FECAL_ORAL = "fecal_oral", _("Féco-orale")
     BLOOD = "blood", _("Sanguine")
     OTHER = "other", _("Autre")
+
+
+class PublicAlertLevel(models.TextChoices):
+    """Niveau d'alerte affiché au public (mêmes valeurs que le risque pays)."""
+
+    NORMAL = "normal", _("Veille")
+    MODERATE = "moderate", _("Vigilance")
+    HIGH = "high", _("Alerte")
+    CRITICAL = "critical", _("Urgence sanitaire")
+
+
+# Champs de contenu public traduisibles via `public_translations`.
+PUBLIC_TRANSLATABLE_FIELDS = (
+    "name", "description", "transmission_details", "prevention", "traveler_recommendations",
+)
 
 
 class Disease(BaseModel):
@@ -67,12 +84,44 @@ class Disease(BaseModel):
     requires_quarantine = models.BooleanField(_("requiert quarantaine"), default=True)
     requires_pass = models.BooleanField(_("requiert un pass sanitaire"), default=True)
 
+    # --- Portail public : contenu affiché après validation et publication ---
+    # `description` (ci-dessus) sert de présentation publique ; symptômes et
+    # modes de transmission viennent de Symptom / transmission_modes.
+    slug = models.SlugField(_("slug public"), max_length=60, blank=True, db_index=True)
+    transmission_details = models.TextField(_("transmission (texte public)"), blank=True)
+    prevention = models.TextField(
+        _("prévention"), blank=True, help_text=_("Un conseil par ligne."),
+    )
+    traveler_recommendations = models.TextField(
+        _("recommandations aux voyageurs"), blank=True,
+        help_text=_("Une recommandation par ligne."),
+    )
+    public_alert_level = models.CharField(
+        _("niveau d'alerte public"), max_length=20,
+        choices=PublicAlertLevel.choices, default=PublicAlertLevel.NORMAL,
+    )
+    public_translations = models.JSONField(
+        _("traductions du contenu public"), default=dict, blank=True,
+        help_text=_('Ex : {"en": {"name": "…", "prevention": "…"}}'),
+    )
+    is_published = models.BooleanField(_("publiée sur le portail"), default=False, db_index=True)
+    published_at = models.DateTimeField(_("publiée le"), null=True, blank=True)
+    published_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
     history = HistoricalRecords()
 
     class Meta(BaseModel.Meta):
         verbose_name = _("Maladie")
         verbose_name_plural = _("Maladies")
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["slug"], condition=~Q(slug=""), name="uniq_disease_slug_when_set",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name

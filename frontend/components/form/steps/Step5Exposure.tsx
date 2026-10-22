@@ -1,10 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRegistrationStore } from '@/lib/store';
+import { api } from '@/lib/api';
 import { FieldGroup, YesNo } from '@/components/form/Field';
+import {
+  DiseaseScreenings, ScreeningDraft, initialScreeningDraft, toScreeningAnswers, unansweredExposures,
+} from '@/components/form/DiseaseScreenings';
 import { exposureSchema } from '@/lib/schema';
 import type { SectionExposure } from '@/types/ebola';
+import type { RegistrationConfig } from '@/types/portal';
+
+const NO_EBOLA_EXPOSURE: SectionExposure = {
+  visited_ebola_zone: false,
+  visited_ebola_zone_details: '',
+  contact_with_case: false,
+  attended_funeral_or_touched_corpse: false,
+  visited_ebola_healthcare_facility: false,
+};
 
 const QUESTIONS: { key: keyof SectionExposure; label: string }[] = [
   { key: 'visited_ebola_zone', label: "Avez-vous séjourné ou transité par une zone touchée par l'épidémie d'Ebola ?" },
@@ -20,7 +33,22 @@ type ExposureDraft = {
 };
 
 export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
-  const { exposure, set, goTo } = useRegistrationStore();
+  const { exposure, screenings, set, goTo } = useRegistrationStore();
+  // Configuration par maladie. En cas d'API indisponible, on garde le
+  // questionnaire Ebola historique (comportement d'avant).
+  const [config, setConfig] = useState<RegistrationConfig | null>(null);
+  const [screeningDraft, setScreeningDraft] = useState<ScreeningDraft>({});
+  useEffect(() => {
+    api.get<RegistrationConfig>('/public/registration-config/')
+      .then((r) => {
+        setConfig(r.data);
+        setScreeningDraft(initialScreeningDraft(r.data.diseases, screenings));
+      })
+      .catch(() => setConfig({ ebola_questionnaire: true, diseases: [] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const showEbola = config?.ebola_questionnaire ?? true;
+  const otherDiseases = config?.diseases ?? [];
   // Initialise à null pour FORCER l'utilisateur à répondre (au lieu de
   // false par défaut — qui correspondrait à "non" implicite).
   const [state, setState] = useState<ExposureDraft>(
@@ -40,7 +68,12 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
 
   const submit = () => {
     // Vérifie que TOUTES les questions oui/non ont reçu une réponse.
-    const unanswered = QUESTIONS.filter((q) => state[q.key] === null || state[q.key] === undefined);
+    const unanswered = [
+      ...(showEbola
+        ? QUESTIONS.filter((q) => state[q.key] === null || state[q.key] === undefined).map((q) => q.key)
+        : []),
+      ...unansweredExposures(otherDiseases, screeningDraft),
+    ];
     if (unanswered.length > 0) {
       setShowErrors(true);
       setError(
@@ -48,21 +81,23 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
       );
       // Scroll vers la 1ère question non répondue
       setTimeout(() => {
-        const el = document.querySelector(`[data-name="${unanswered[0].key}"]`);
+        const el = document.querySelector(`[data-name="${unanswered[0]}"]`);
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 50);
       return;
     }
 
+    // Ebola hors surveillance : section masquée, réponses « non » par défaut.
+    const ebolaAnswers = showEbola ? state : NO_EBOLA_EXPOSURE;
     // Cast vers SectionExposure pour le schema (tous les null → boolean garanti)
-    const parse = exposureSchema.safeParse(state);
+    const parse = exposureSchema.safeParse(ebolaAnswers);
     if (!parse.success) {
       setError(parse.error.errors[0]?.message || 'Vérifiez vos réponses.');
       return;
     }
     setError(null);
     setShowErrors(false);
-    set({ exposure: state as SectionExposure });
+    set({ exposure: ebolaAnswers as SectionExposure, screenings: toScreeningAnswers(screeningDraft) });
     goTo(5);
     onNext();
   };
@@ -73,12 +108,18 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
         <h2 className="font-display text-xl font-bold">5. Questionnaire de prévention</h2>
         <p className="text-sm text-slate-500 mt-1">
           Réponses portant sur les <strong>21 derniers jours</strong>. Toutes les questions
-          sont <strong className="text-rose-600">obligatoires</strong>. Vos réponses aident
-          l'INHP à mieux vous accompagner.
+          sont <strong className="text-rose-600">obligatoires</strong>. Elles portent sur les
+          maladies actuellement sous surveillance et aident l'INHP à mieux vous accompagner.
         </p>
       </div>
 
+      {config === null && <p className="text-sm text-slate-500" role="status">Chargement du questionnaire…</p>}
+
+      {showEbola && (
       <div className="space-y-3">
+        {otherDiseases.length > 0 && (
+          <h3 className="font-display text-lg font-bold">Maladie à virus Ebola</h3>
+        )}
         {QUESTIONS.map((q) => {
           const unanswered = state[q.key] === null || state[q.key] === undefined;
           return (
@@ -101,8 +142,9 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
           );
         })}
       </div>
+      )}
 
-      {state.visited_ebola_zone === true && (
+      {showEbola && state.visited_ebola_zone === true && (
         <FieldGroup label="Si oui, précisez la ville / région et le pays" required>
           <input
             className="input"
@@ -113,7 +155,14 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
         </FieldGroup>
       )}
 
-      {error && <p className="field-error">{error}</p>}
+      <DiseaseScreenings
+        diseases={otherDiseases}
+        draft={screeningDraft}
+        onChange={setScreeningDraft}
+        showErrors={showErrors}
+      />
+
+      {error && <p className="field-error" role="alert">{error}</p>}
 
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className="btn-ghost">← Précédent</button>
