@@ -425,6 +425,14 @@ class MobileFormSubmissionView(APIView):
         "signature_data_url": "declaration", "declarant_full_name": "declaration",
     }
 
+    # Champs « provenance » du formulaire mobile → étape d'historique « origin ».
+    _ORIGIN_FIELDS = {
+        "origin_country": "country_code",
+        "origin_city": "city",
+        "origin_province": "province",
+        "origin_duration": "duration_text",
+    }
+
     def _build_legacy_payload(self, answers: dict, signature_data_url: str) -> dict:
         """Convertit answers={code: value} → structure attendue par
         PublicTravelerSubmissionSerializer.
@@ -437,7 +445,15 @@ class MobileFormSubmissionView(APIView):
             "confinement": {}, "exposure": {}, "symptoms": {},
             "declaration": {},
         }
+        origin: dict = {}
         for code, value in (answers or {}).items():
+            if code in self._ORIGIN_FIELDS:
+                # Pays de provenance (section « historique » du formulaire
+                # mobile) : auparavant non mappé, donc toujours perdu.
+                if code == "origin_country" and isinstance(value, dict):
+                    value = value.get("code") or value.get("iso2") or ""
+                origin[self._ORIGIN_FIELDS[code]] = str(value or "").strip()
+                continue
             section = self._INFER_BY_FIELD.get(code)
             if section is None:
                 # Pas mappé → on l'ignore plutôt que de planter. Trace pour
@@ -463,6 +479,9 @@ class MobileFormSubmissionView(APIView):
                     target["longitude"] = lng
                 continue
             target[code] = value
+
+        if origin.get("country_code"):
+            payload["historique"].append({"role": "origin", **origin})
 
         # Signature manuscrite : on la pousse explicitement dans declaration
         if signature_data_url:

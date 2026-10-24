@@ -2,6 +2,7 @@ from datetime import date
 
 from rest_framework import serializers
 
+from apps.geo.services import resolve_country
 from apps.travelers.serializers import TravelerSerializer
 
 from .models import (
@@ -199,3 +200,36 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
                 {"planned_departure_date": "Le départ prévu précède la date d'arrivée."}
             )
         return voyage
+
+    def validate_historique(self, items: list) -> list:
+        """Pays de provenance obligatoire ; un pays inconnu est refusé, jamais ignoré.
+
+        Auparavant, une étape dont le pays manquait au référentiel était
+        abandonnée sans erreur : la fiche partait sans provenance.
+        """
+        unknown = sorted({
+            str(item.get("country_code") or "").upper()
+            for item in items
+            if resolve_country(item.get("country_code")) is None
+        })
+        if unknown:
+            raise serializers.ValidationError(
+                f"Pays inconnu dans l'historique des déplacements : {', '.join(unknown)}."
+            )
+        if not any(item.get("role") == "origin" for item in items):
+            raise serializers.ValidationError(
+                "Le pays de provenance est obligatoire (étape « Historique des déplacements »)."
+            )
+        return items
+
+    def validate_identite(self, identite: dict) -> dict:
+        """Nationalité et pays de la pièce : un code inconnu est refusé."""
+        labels = {
+            "nationality_code": "Nationalité",
+            "id_document_country_code": "Pays de délivrance du document",
+        }
+        for field, label in labels.items():
+            code = identite.get(field)
+            if code and resolve_country(code) is None:
+                raise serializers.ValidationError({field: f"{label} : pays inconnu ({code})."})
+        return identite

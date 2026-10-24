@@ -210,7 +210,7 @@ def _register(**overrides):
     payload = {
         "voyage": {"arrival_date": timezone.now().date().isoformat(), "entry_point_code": "ABJ"},
         "identite": {"last_name": "BAMBA", "first_name": "Inès", "gender": "F"},
-        "historique": [],
+        "historique": [{"role": "origin", "country_code": "FR", "city": "Paris"}],
         "confinement": {"city": "Abidjan"},
         "exposure": {},
         "symptoms": {},

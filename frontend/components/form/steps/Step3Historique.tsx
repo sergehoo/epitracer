@@ -1,11 +1,29 @@
 'use client';
 
-import { useState } from 'react';
-import { Plane, Plus, Trash2 } from 'lucide-react';
-import { COUNTRIES } from '@/lib/datasets';
+import { useMemo, useState } from 'react';
+import { Lightbulb, Plane, Plus, Trash2 } from 'lucide-react';
+import { COUNTRIES, DIAL_CODE_COUNTRY } from '@/lib/datasets';
 import { useRegistrationStore } from '@/lib/store';
 import { FieldGroup, FieldRow } from '@/components/form/Field';
 import type { HistoryItem } from '@/types/ebola';
+
+const COUNTRY_NAME = new Map(COUNTRIES.map((c) => [c.code, c.name]));
+
+/**
+ * Pays suggéré d'après l'indicatif international du téléphone déclaré
+ * (ex. +254 → Kenya). Simple suggestion : le voyageur doit la confirmer.
+ * Un numéro ivoirien ou au format local ne dit rien de la provenance.
+ */
+function countryFromPhone(phone?: string): { code: string; dial: string } | null {
+  const raw = (phone || '').replace(/[\s().-]/g, '');
+  const intl = raw.startsWith('+') ? raw.slice(1) : raw.startsWith('00') ? raw.slice(2) : '';
+  for (const len of [3, 2, 1]) {
+    const dial = intl.slice(0, len);
+    const code = DIAL_CODE_COUNTRY[dial];
+    if (code && dial !== '225') return { code, dial };
+  }
+  return null;
+}
 
 function emptyItem(role: HistoryItem['role']): HistoryItem {
   return {
@@ -21,7 +39,8 @@ function emptyItem(role: HistoryItem['role']): HistoryItem {
 }
 
 export function Step3Historique({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
-  const { historique = [], set, goTo } = useRegistrationStore();
+  const { historique = [], identite, set, goTo } = useRegistrationStore();
+  const phoneHint = useMemo(() => countryFromPhone(identite?.phone_mobile), [identite?.phone_mobile]);
   const [items, setItems] = useState<HistoryItem[]>(
     historique.length ? historique : [emptyItem('origin')],
   );
@@ -33,6 +52,7 @@ export function Step3Historique({ onNext, onBack }: { onNext: () => void; onBack
   };
   const remove = (i: number) => setItems((arr) => arr.filter((_, idx) => idx !== i));
   const add = (role: HistoryItem['role']) => setItems((arr) => [...arr, emptyItem(role)]);
+  const hasOriginItem = items.some((it) => it.role === 'origin');
 
   const submit = () => {
     const next: Record<number, string> = {};
@@ -114,7 +134,7 @@ export function Step3Historique({ onNext, onBack }: { onNext: () => void; onBack
                 // ---- ORIGIN / VISITED : avec Province + adresse + hôtel ----
                 <>
                   <FieldRow>
-                    <FieldGroup label="Pays" required>
+                    <FieldGroup label={item.role === 'origin' ? 'Pays de provenance' : 'Pays'} required>
                       <select
                         className="select"
                         value={item.country_code}
@@ -123,6 +143,16 @@ export function Step3Historique({ onNext, onBack }: { onNext: () => void; onBack
                         <option value="">Sélectionner —</option>
                         {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
                       </select>
+                      {item.role === 'origin' && !item.country_code && phoneHint && (
+                        <button
+                          type="button"
+                          onClick={() => update(i, { country_code: phoneHint.code })}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-left text-xs font-semibold text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-100"
+                        >
+                          <Lightbulb className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          Vous arrivez de {COUNTRY_NAME.get(phoneHint.code)} ? (d&apos;après votre numéro +{phoneHint.dial}) — Utiliser
+                        </button>
+                      )}
                     </FieldGroup>
                     <FieldGroup label="Ville" required>
                       <input
@@ -205,6 +235,11 @@ export function Step3Historique({ onNext, onBack }: { onNext: () => void; onBack
       {globalError && <p className="field-error">{globalError}</p>}
 
       <div className="flex flex-wrap gap-2">
+        {!hasOriginItem && (
+          <button type="button" onClick={() => add('origin')} className="btn-outline text-sm">
+            <Plus className="h-4 w-4" /> Ajouter le pays de provenance
+          </button>
+        )}
         <button type="button" onClick={() => add('transit')} className="btn-outline text-sm">
           <Plus className="h-4 w-4" /> Ajouter un pays de transit
         </button>

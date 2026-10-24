@@ -282,7 +282,7 @@ def _payload(**voyage):
     return {
         "voyage": {"arrival_date": "2026-10-01", "entry_point_code": "ABJ", **voyage},
         "identite": {"last_name": "DIOP", "first_name": "Awa", "gender": "F"},
-        "historique": [],
+        "historique": [{"role": "origin", "country_code": "FR", "city": "Paris"}],
         "confinement": {"city": "Abidjan"},
         "exposure": {},
         "symptoms": {},
