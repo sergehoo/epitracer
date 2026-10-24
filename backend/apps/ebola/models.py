@@ -239,3 +239,26 @@ class EbolaDeclaration(BaseModel):
     class Meta(BaseModel.Meta):
         verbose_name = _("Déclaration Ebola (Section 7)")
         verbose_name_plural = _("Déclarations Ebola (Section 7)")
+
+
+class PublicRegistrationKey(models.Model):
+    """Clé d'idempotence d'une soumission du formulaire public (web et mobile).
+
+    Le client génère une clé par fiche et la renvoie à chaque retry : un POST
+    rejoué après un timeout renvoie la fiche déjà créée au lieu d'en créer une
+    seconde. Seule l'empreinte SHA-256 de la clé est conservée.
+    """
+
+    digest = models.CharField(max_length=64, unique=True)
+    traveler = models.ForeignKey(
+        "travelers.Traveler", null=True, on_delete=models.CASCADE,
+        related_name="registration_keys",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Clé d'idempotence d'inscription")
+        verbose_name_plural = _("Clés d'idempotence d'inscription")
+
+    def __str__(self) -> str:
+        return f"{self.digest[:12]}… → {self.traveler_id or '—'}"

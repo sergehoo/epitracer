@@ -9,8 +9,33 @@ import { declarationSchema } from '@/lib/schema';
 import { FieldGroup, FieldRow } from '@/components/form/Field';
 import { SignaturePad } from '@/components/form/SignaturePad';
 import { TURNSTILE_SITE_KEY, TurnstileWidget } from '@/components/form/TurnstileWidget';
-import { api, apiPostWithRetry, extractApiError } from '@/lib/api';
+import { api, apiPostWithRetry, extractApiError, newIdempotencyKey } from '@/lib/api';
 import type { RegistrationResponse } from '@/types/ebola';
+
+const UNSUBMITTED_KEY = 'epi_last_unsubmitted';
+
+/**
+ * Sauvegarde locale de la fiche avant envoi, avec sa clé d'idempotence.
+ * Même fiche que la dernière tentative non confirmée → même clé : un retry
+ * ou une resoumission après coupure renvoie la fiche déjà créée côté serveur.
+ * Réponses modifiées → nouvelle clé.
+ */
+function saveUnsubmitted(payload: unknown): string {
+  let key = '';
+  try {
+    const saved = JSON.parse(localStorage.getItem(UNSUBMITTED_KEY) || 'null');
+    if (saved?.idempotencyKey && JSON.stringify(saved.payload) === JSON.stringify(payload)) {
+      key = saved.idempotencyKey;
+    }
+  } catch { /* stockage indisponible ou illisible */ }
+  key = key || newIdempotencyKey();
+  try {
+    localStorage.setItem(UNSUBMITTED_KEY, JSON.stringify({
+      payload, savedAt: new Date().toISOString(), idempotencyKey: key,
+    }));
+  } catch { /* quota plein, on ignore */ }
+  return key;
+}
 
 export function Step7Declaration({ onBack }: { onBack: () => void }) {
   const router = useRouter();
@@ -101,16 +126,11 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
       };
 
       // Sauvegarde locale AVANT la requête : si le réseau coupe en cours,
-      // on garde la fiche pour la resoumettre plus tard.
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('epi_last_unsubmitted', JSON.stringify({
-            payload, savedAt: new Date().toISOString(),
-          }));
-        } catch { /* quota plein, on ignore */ }
-      }
+      // on garde la fiche (et sa clé d'idempotence) pour la resoumettre plus tard.
+      const idempotencyKey = saveUnsubmitted(payload);
 
-      // POST avec retry automatique (2 retries, backoff 1s/2s/4s, timeout 90s)
+      // POST avec retry automatique (2 retries, backoff 1s/2s/4s, timeout 90s).
+      // La même clé accompagne chaque essai : le serveur ne crée qu'une fiche.
       const { data } = await apiPostWithRetry<RegistrationResponse>(
         '/ebola/public/register/',
         payload,
@@ -118,14 +138,15 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
           retries: 2,
           timeoutMs: 90_000,
           onAttempt: (n) => setAttempt(n),
-          headers: captchaToken ? { 'X-Turnstile-Token': captchaToken } : undefined,
+          headers: {
+            'Idempotency-Key': idempotencyKey,
+            ...(captchaToken ? { 'X-Turnstile-Token': captchaToken } : {}),
+          },
         },
       );
 
       // Succès → on nettoie la sauvegarde locale
-      if (typeof window !== 'undefined') {
-        try { localStorage.removeItem('epi_last_unsubmitted'); } catch { /* noop */ }
-      }
+      try { localStorage.removeItem(UNSUBMITTED_KEY); } catch { /* noop */ }
 
       // Upload passport en best-effort (n'empêche pas la redirection si échoue)
       if (passportFile) {
@@ -147,7 +168,11 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
         }
       }
 
-      toast.success('Fiche enregistrée. Pass délivré.');
+      toast.success(
+        data.already_registered
+          ? 'Votre fiche était déjà enregistrée. Voici votre pass.'
+          : 'Fiche enregistrée. Pass délivré.',
+      );
       store.reset();
       router.replace(`/pass/${data.traveler.public_id}?just_issued=1`);
     } catch (err) {

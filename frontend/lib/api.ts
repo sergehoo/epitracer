@@ -94,6 +94,11 @@ api.interceptors.response.use(
  *   OU statut 502/503/504 OU timeout
  * - PAS de retry sur : 4xx (validation), 5xx applicatif (sauf gateway)
  * - Backoff exponentiel : 1s, 2s, 4s
+ *
+ * ATTENTION : après un timeout ou un 502/504, le serveur a pu traiter la
+ * requête. Pour un POST qui crée une ressource, passer un en-tête
+ * `Idempotency-Key` (cf. `newIdempotencyKey`) : il est rejoué tel quel à
+ * chaque essai et le serveur renvoie la ressource déjà créée.
  */
 export async function apiPostWithRetry<T = unknown>(
   url: string,
@@ -135,6 +140,16 @@ export async function apiPostWithRetry<T = unknown>(
     }
   }
   throw lastError;
+}
+
+/** Clé d'idempotence aléatoire (UUID v4, ou 32 caractères hexadécimaux sur les vieux navigateurs). */
+export function newIdempotencyKey(): string {
+  const c = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (c?.getRandomValues) c.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Helper pour formater proprement les erreurs DRF.

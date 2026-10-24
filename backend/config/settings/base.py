@@ -384,6 +384,8 @@ CORS_ALLOW_HEADERS = list(
         default=[
             "accept", "accept-encoding", "authorization", "content-type",
             "dnt", "origin", "user-agent", "x-csrftoken", "x-requested-with",
+            # Formulaire voyageur public : clé réutilisée par les retries (anti-doublon).
+            "idempotency-key",
         ],
     )
 )

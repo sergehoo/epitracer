@@ -139,6 +139,8 @@ export interface RegistrationResponse {
   followups?: { disease_code: string; disease_name: string; duration_days: number | null }[];
   /** Certaines réponses seront revues par un agent de santé. */
   review_pending?: boolean;
+  /** Soumission déjà traitée (retry réseau, double envoi) : fiche existante renvoyée. */
+  already_registered?: boolean;
   pass: {
     pass_number: string;
     uuid: string;

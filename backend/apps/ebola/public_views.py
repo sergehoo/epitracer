@@ -35,10 +35,11 @@ from apps.geo.models import EntryPoint
 from apps.geo.services import alert_on_arrival_from_risk_country, resolve_country
 from apps.health_pass.models import HealthPass
 from apps.health_pass.services import issue_pass_for_registration
-from apps.medical.models import ScreeningDecision
+from apps.medical.models import ScreeningDecision, ScreeningReviewStatus
 from apps.medical.screening import apply_screenings
 from apps.travelers.models import Traveler, TravelHistoryEntry
 
+from . import registration_dedup as dedup
 from .models import (
     EbolaDeclaration,
     EbolaExposureAssessment,
@@ -192,6 +193,13 @@ class PublicTravelerRegisterView(APIView):
                     "Crée le voyageur, ouvre une enquête Ebola, calcule le score, génère le pass.",
     )
     def post(self, request):
+        key = dedup.idempotency_key(request)  # 400 si l'en-tête est malformé
+        # Retry après timeout ou coupure réseau : la fiche existe déjà. Ni garde
+        # anti-robot ni quota : rien n'est créé, aucun SMS supplémentaire.
+        known = dedup.traveler_for_key(key)
+        if known is not None:
+            return _already_registered(request, known)
+
         blocked = _registration_guard(request)
         if blocked is not None:
             return blocked
@@ -207,6 +215,10 @@ class PublicTravelerRegisterView(APIView):
         declaration = data.get("declaration", {})
 
         with transaction.atomic():
+            claim, duplicate = _claim_registration(request, key, identite, voyage)
+            if duplicate is not None:
+                return duplicate
+
             # --- Section 1 : voyage ---
             entry_point = None
             if voyage.get("entry_point_code"):
@@ -273,6 +285,7 @@ class PublicTravelerRegisterView(APIView):
                 signed_at=_parse_datetime(declaration.get("declared_at")) or timezone.now(),
                 signed_place=_trim(declaration.get("signed_place"), 120),
             )
+            dedup.bind_key(claim, traveler)
 
             # --- Section 3 : historique des déplacements ---
             for item in data.get("historique", []) or []:
@@ -343,6 +356,26 @@ class PublicTravelerRegisterView(APIView):
         )
 
 
+def _claim_registration(request, key: str, identite: dict, voyage: dict):
+    """Anti-doublon, dans la transaction d'inscription.
+
+    Réserve la clé d'idempotence, puis cherche une fiche déjà délivrée : même
+    clé validée entre-temps (retry concurrent), ou même pièce + même arrivée +
+    même contact. Retourne (réservation, réponse) ; une réponse non nulle
+    renvoie la fiche existante.
+    """
+    claim = dedup.claim_key(key) if key else None
+    if key and claim is None:
+        return None, _already_registered(request, dedup.traveler_for_key(key))
+    arrival = _parse_date(voyage.get("arrival_date"))
+    dedup.lock_identity(identite, arrival)
+    existing = dedup.existing_registration(identite, arrival)
+    if existing is not None:
+        dedup.bind_key(claim, existing)
+        return claim, _already_registered(request, existing)
+    return claim, None
+
+
 def _registration_payload(
     traveler, investigation, hp, level, followups, *, review_pending,
 ) -> dict:
@@ -370,6 +403,44 @@ def _registration_payload(
         # Un agent vérifiera certaines réponses : le voyageur est simplement prévenu.
         "review_pending": review_pending,
     }
+
+
+def _already_registered(request, traveler) -> Response:
+    """Soumission déjà traitée (retry réseau, double envoi, brouillon resoumis) :
+    la fiche existante est renvoyée telle quelle ; rien n'est créé ni modifié."""
+    from apps.quarantine.services import followup_duration_days
+
+    if traveler is None:
+        return Response(
+            {"detail": "Cette fiche a déjà été soumise. Consultez votre pass ou appelez le 143."},
+            status=status.HTTP_409_CONFLICT,
+        )
+    hp = traveler.health_passes.order_by("-created_at").first()
+    investigation = traveler.ebola_investigations.order_by("-created_at").first()
+    screenings = list(traveler.health_screenings.select_related("disease").order_by("created_at"))
+    followups = [
+        {
+            "disease_code": s.disease.code,
+            "disease_name": s.disease.name,
+            "decision": s.decision,
+            "review_pending": s.review_status == ScreeningReviewStatus.PENDING,
+            "duration_days": followup_duration_days(s.disease),
+            "reasons": s.reasons,
+        }
+        for s in screenings
+        if s.decision == ScreeningDecision.FOLLOWUP
+    ]
+    audit(
+        request, action="read",
+        summary=f"Soumission en double — fiche existante renvoyée {traveler.public_id}",
+        target=traveler,
+    )
+    data = _registration_payload(
+        traveler, investigation, hp, hp.risk_level if hp else "low", followups,
+        review_pending=any(s.review_status == ScreeningReviewStatus.PENDING for s in screenings),
+    )
+    data["already_registered"] = True
+    return Response(data, status=status.HTTP_200_OK)
 
 
 def _create_ebola_investigation(traveler, entry_point, exposure, symptoms, declaration, sig_file, sig_hash):
