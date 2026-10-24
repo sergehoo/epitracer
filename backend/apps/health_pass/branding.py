@@ -7,6 +7,7 @@ Charge les 3 logos officiels en cache mémoire :
 
 Les fichiers PNG sont stockés dans backend/static/branding/.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -69,9 +70,12 @@ def get_inhp_logo() -> ImageReader | None:
 def draw_ci_flag_band(c, x: float, y: float, width: float, height: float):
     """Trace le drapeau ivoirien (orange/blanc/vert vertical)."""
     band = width / 3.0
-    c.setFillColor(CI_ORANGE); c.rect(x, y, band, height, stroke=0, fill=1)
-    c.setFillColor(CI_WHITE);  c.rect(x + band, y, band, height, stroke=0, fill=1)
-    c.setFillColor(CI_GREEN);  c.rect(x + 2 * band, y, band, height, stroke=0, fill=1)
+    c.setFillColor(CI_ORANGE)
+    c.rect(x, y, band, height, stroke=0, fill=1)
+    c.setFillColor(CI_WHITE)
+    c.rect(x + band, y, band, height, stroke=0, fill=1)
+    c.setFillColor(CI_GREEN)
+    c.rect(x + 2 * band, y, band, height, stroke=0, fill=1)
 
 
 def draw_ci_emblem(c, cx: float, cy: float, radius: float):
@@ -79,6 +83,7 @@ def draw_ci_emblem(c, cx: float, cy: float, radius: float):
     c.setFillColor(CI_DARK)
     c.circle(cx, cy, radius, stroke=0, fill=1)
     import math
+
     c.setStrokeColor(CI_ORANGE)
     c.setLineWidth(2)
     for i in range(8):

@@ -5,6 +5,7 @@ Conventions :
   - Endpoints publics (login, OTP, refresh) → délégués à apps.accounts
   - Réponses mobile-friendly : pas de nested DRF complexes, champs plats
 """
+
 from __future__ import annotations
 
 import logging
@@ -12,7 +13,6 @@ import logging
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import generics, mixins, status, viewsets
-from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -21,13 +21,20 @@ from apps.accounts.services.email_otp import send_otp_email
 from apps.health_pass.models import HealthPass
 
 from .models import (
-    AssistanceRequest, LocationShare, MobileDevice, Vaccination,
+    LocationShare,
+    MobileDevice,
+    Vaccination,
 )
 from .serializers import (
-    AssistanceRequestCreateSerializer, CheckinCreateSerializer,
-    FollowupSummarySerializer, LocationShareCreateSerializer,
-    MobileDeviceRegisterSerializer, MobileNotificationSerializer,
-    MobilePassSerializer, MobileProfileSerializer, QrImportSerializer,
+    AssistanceRequestCreateSerializer,
+    CheckinCreateSerializer,
+    FollowupSummarySerializer,
+    LocationShareCreateSerializer,
+    MobileDeviceRegisterSerializer,
+    MobileNotificationSerializer,
+    MobilePassSerializer,
+    MobileProfileSerializer,
+    QrImportSerializer,
     VaccinationSerializer,
 )
 
@@ -39,8 +46,10 @@ User = get_user_model()
 # AUTH (les login/OTP réutilisent apps.accounts.views — on expose les noms ici)
 # ===========================================================================
 
+
 class MobileOtpResendView(APIView):
     """POST /api/mobile/auth/otp/resend/ — alias mobile de mfa/email/resend/."""
+
     permission_classes = []
 
     def post(self, request):
@@ -50,15 +59,19 @@ class MobileOtpResendView(APIView):
         user = User.objects.filter(email=email, is_active=True).first()
         if user and user.mfa_enabled:
             send_otp_email(user, request=request)
-        return Response({"ok": True, "detail": "Si un compte avec MFA existe, un code a été envoyé."})
+        return Response(
+            {"ok": True, "detail": "Si un compte avec MFA existe, un code a été envoyé."}
+        )
 
 
 # ===========================================================================
 # PROFIL
 # ===========================================================================
 
+
 class MobileProfileView(APIView):
     """GET /api/mobile/profile/ — utilisateur courant aplati."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -69,10 +82,12 @@ class MobileProfileView(APIView):
 # PASS SANITAIRES
 # ===========================================================================
 
-class MobilePassesViewSet(mixins.ListModelMixin,
-                          mixins.RetrieveModelMixin,
-                          viewsets.GenericViewSet):
+
+class MobilePassesViewSet(
+    mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
     """GET /api/mobile/passes/  +  GET /api/mobile/passes/{id}/"""
+
     serializer_class = MobilePassSerializer
     permission_classes = [IsAuthenticated]
 
@@ -81,8 +96,9 @@ class MobilePassesViewSet(mixins.ListModelMixin,
         # Pour les agents qui se connectent, on ne renvoie rien.
         email = self.request.user.email
         return (
-            HealthPass.objects
-            .select_related("traveler", "traveler__entry_point", "traveler__disease")
+            HealthPass.objects.select_related(
+                "traveler", "traveler__entry_point", "traveler__disease"
+            )
             .filter(traveler__email__iexact=email)
             .order_by("-created_at")
         )
@@ -92,8 +108,10 @@ class MobilePassesViewSet(mixins.ListModelMixin,
 # VACCINATIONS — carnet vaccinal CRUD
 # ===========================================================================
 
+
 class MobileVaccinationsViewSet(viewsets.ModelViewSet):
     """GET / POST / PATCH / DELETE /api/mobile/vaccinations/"""
+
     serializer_class = VaccinationSerializer
     permission_classes = [IsAuthenticated]
 
@@ -108,16 +126,20 @@ class MobileVaccinationsViewSet(viewsets.ModelViewSet):
 # SUIVI 21 JOURS
 # ===========================================================================
 
+
 class MobileFollowupSummaryView(APIView):
     """GET /api/mobile/followups/ — état du suivi pour le dashboard mobile."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         try:
-            from apps.companion.models import FollowupTracking, FollowupCheckin
+            from apps.companion.models import FollowupCheckin, FollowupTracking
+
             tracking = (
-                FollowupTracking.objects
-                .filter(traveler__email__iexact=request.user.email, status="active")
+                FollowupTracking.objects.filter(
+                    traveler__email__iexact=request.user.email, status="active"
+                )
                 .order_by("-created_at")
                 .first()
             )
@@ -125,30 +147,43 @@ class MobileFollowupSummaryView(APIView):
             tracking = None
 
         if not tracking:
-            return Response(FollowupSummarySerializer({
-                "active": False, "day": 0, "total_days": 21,
-                "started_at": None, "ends_at": None,
-                "checkin_today_done": False,
-            }).data)
+            return Response(
+                FollowupSummarySerializer(
+                    {
+                        "active": False,
+                        "day": 0,
+                        "total_days": 21,
+                        "started_at": None,
+                        "ends_at": None,
+                        "checkin_today_done": False,
+                    }
+                ).data
+            )
 
         day = max(1, (timezone.now().date() - tracking.started_at.date()).days + 1)
         total_days = 21
         today_done = FollowupCheckin.objects.filter(
-            tracking=tracking, captured_at__date=timezone.now().date(),
+            tracking=tracking,
+            captured_at__date=timezone.now().date(),
         ).exists()
 
-        return Response(FollowupSummarySerializer({
-            "active": True,
-            "day": day,
-            "total_days": total_days,
-            "started_at": tracking.started_at.date(),
-            "ends_at": (tracking.started_at + timezone.timedelta(days=total_days)).date(),
-            "checkin_today_done": today_done,
-        }).data)
+        return Response(
+            FollowupSummarySerializer(
+                {
+                    "active": True,
+                    "day": day,
+                    "total_days": total_days,
+                    "started_at": tracking.started_at.date(),
+                    "ends_at": (tracking.started_at + timezone.timedelta(days=total_days)).date(),
+                    "checkin_today_done": today_done,
+                }
+            ).data
+        )
 
 
 class MobileCheckinCreateView(APIView):
     """POST /api/mobile/checkins/ — check-in quotidien."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -157,11 +192,14 @@ class MobileCheckinCreateView(APIView):
         data = serializer.validated_data
 
         try:
-            from apps.companion.models import FollowupTracking, FollowupCheckin
+            from apps.companion.models import FollowupCheckin, FollowupTracking
+
             tracking = (
-                FollowupTracking.objects
-                .filter(traveler__email__iexact=request.user.email, status="active")
-                .order_by("-created_at").first()
+                FollowupTracking.objects.filter(
+                    traveler__email__iexact=request.user.email, status="active"
+                )
+                .order_by("-created_at")
+                .first()
             )
         except Exception:
             tracking = None
@@ -174,12 +212,18 @@ class MobileCheckinCreateView(APIView):
 
         # Symptômes consolidés
         symptoms = []
-        if data.get("fever"): symptoms.append("fever")
-        if data.get("unusual_fatigue"): symptoms.append("fatigue")
-        if data.get("headache"): symptoms.append("headache")
-        if data.get("muscle_pain"): symptoms.append("muscle_pain")
-        if data.get("vomiting_or_diarrhea"): symptoms.append("digestive")
-        if data.get("unexplained_bleeding"): symptoms.append("bleeding")
+        if data.get("fever"):
+            symptoms.append("fever")
+        if data.get("unusual_fatigue"):
+            symptoms.append("fatigue")
+        if data.get("headache"):
+            symptoms.append("headache")
+        if data.get("muscle_pain"):
+            symptoms.append("muscle_pain")
+        if data.get("vomiting_or_diarrhea"):
+            symptoms.append("digestive")
+        if data.get("unexplained_bleeding"):
+            symptoms.append("bleeding")
 
         FollowupCheckin.objects.create(
             tracking=tracking,
@@ -201,19 +245,24 @@ class MobileCheckinCreateView(APIView):
                 context="checkin",
             )
 
-        return Response({
-            "ok": True,
-            "detail": "Check-in enregistré. Merci pour votre confirmation.",
-            "wants_contact": data.get("wants_contact", False),
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "ok": True,
+                "detail": "Check-in enregistré. Merci pour votre confirmation.",
+                "wants_contact": data.get("wants_contact", False),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # ===========================================================================
 # PARTAGE POSITION
 # ===========================================================================
 
+
 class MobileLocationShareView(generics.CreateAPIView):
     """POST /api/mobile/location/share/ — partage volontaire one-shot."""
+
     serializer_class = LocationShareCreateSerializer
     permission_classes = [IsAuthenticated]
 
@@ -225,31 +274,34 @@ class MobileLocationShareView(generics.CreateAPIView):
 # NOTIFICATIONS (lecture)
 # ===========================================================================
 
+
 class MobileNotificationsListView(APIView):
     """GET /api/mobile/notifications/ — historique multi-canaux."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         try:
             from apps.notifications.models import Notification
-            qs = (
-                Notification.objects
-                .filter(recipient__icontains=request.user.email)
-                .order_by("-created_at")[:50]
-            )
+
+            qs = Notification.objects.filter(recipient__icontains=request.user.email).order_by(
+                "-created_at"
+            )[:50]
         except Exception:
             return Response([])
 
         data = [
-            MobileNotificationSerializer({
-                "id": n.id,
-                "title": n.subject or n.message_type,
-                "body": n.body[:300],
-                "status": n.status,
-                "channel": n.channel,
-                "created_at": n.created_at,
-                "read": n.status in ("delivered", "read"),
-            }).data
+            MobileNotificationSerializer(
+                {
+                    "id": n.id,
+                    "title": n.subject or n.message_type,
+                    "body": n.body[:300],
+                    "status": n.status,
+                    "channel": n.channel,
+                    "created_at": n.created_at,
+                    "read": n.status in ("delivered", "read"),
+                }
+            ).data
             for n in qs
         ]
         return Response(data)
@@ -259,8 +311,10 @@ class MobileNotificationsListView(APIView):
 # PUSH DEVICE REGISTRATION
 # ===========================================================================
 
+
 class MobilePushRegisterView(APIView):
     """POST /api/mobile/push/register/ — enregistre/met à jour un token FCM."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -277,19 +331,24 @@ class MobilePushRegisterView(APIView):
                 "is_active": True,
             },
         )
-        return Response({
-            "ok": True,
-            "device_id": device.id,
-            "created": created,
-        }, status=status.HTTP_201_CREATED if created else 200)
+        return Response(
+            {
+                "ok": True,
+                "device_id": device.id,
+                "created": created,
+            },
+            status=status.HTTP_201_CREATED if created else 200,
+        )
 
 
 # ===========================================================================
 # ASSISTANCE
 # ===========================================================================
 
+
 class MobileAssistanceRequestView(generics.CreateAPIView):
     """POST /api/mobile/assistance/request/ — demande d'appel agent."""
+
     serializer_class = AssistanceRequestCreateSerializer
     permission_classes = [IsAuthenticated]
 
@@ -297,7 +356,9 @@ class MobileAssistanceRequestView(generics.CreateAPIView):
         instance = serializer.save(user=self.request.user)
         logger.info(
             "Assistance request #%s from user=%s reason=%s",
-            instance.id, self.request.user.email, instance.reason,
+            instance.id,
+            self.request.user.email,
+            instance.reason,
         )
         # TODO Phase 4 : envoyer notif email/SMS aux agents INHP d'astreinte
 
@@ -306,12 +367,14 @@ class MobileAssistanceRequestView(generics.CreateAPIView):
 # QR IMPORT (ajouter un pass scanné dans la wallet)
 # ===========================================================================
 
+
 class MobileQrImportView(APIView):
     """POST /api/mobile/qr/import/ — body : {qr_payload}.
 
     Vérifie la signature Ed25519 du payload puis associe le pass au compte
     courant si l'email correspond (sinon refus pour sécurité).
     """
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):

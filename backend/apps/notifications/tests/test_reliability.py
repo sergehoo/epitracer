@@ -9,6 +9,7 @@ Couvre les incidents observés en production (historique /notifications) :
 
 Les fournisseurs (Orange CI, Twilio) sont mockés : aucun appel réseau.
 """
+
 from __future__ import annotations
 
 import threading
@@ -72,7 +73,9 @@ def orange(monkeypatch):
 @pytest.fixture
 def orange_quota(orange):
     orange.return_value = OrangeSendResult(
-        ok=False, error=ORANGE_QUOTA_ERROR, error_code=ErrorCode.QUOTA_EXHAUSTED,
+        ok=False,
+        error=ORANGE_QUOTA_ERROR,
+        error_code=ErrorCode.QUOTA_EXHAUSTED,
     )
     return orange
 
@@ -87,10 +90,14 @@ def twilio(monkeypatch):
 @pytest.fixture
 def district_agent(db, django_user_model, roles):
     user = django_user_model.objects.create_user(
-        email="agent@example.ci", username="agent@example.ci", password="StrongPwd!2026",
+        email="agent@example.ci",
+        username="agent@example.ci",
+        password="StrongPwd!2026",
     )
     RoleAssignment.objects.create(
-        user=user, role=Role.objects.get(code=RoleCode.DISTRICT), is_active=True,
+        user=user,
+        role=Role.objects.get(code=RoleCode.DISTRICT),
+        is_active=True,
     )
     return user
 
@@ -100,11 +107,18 @@ def second_disease(db):
     from apps.diseases.models import Disease, DiseaseSeverity
 
     return Disease.objects.create(
-        code="MPOX", name="Mpox", short_name="Mpox",
-        severity=DiseaseSeverity.HIGH, color="#7c3aed",
-        incubation_min_days=5, incubation_max_days=21,
-        surveillance_days=21, quarantine_days=21,
-        risk_countries=["CD"], requires_quarantine=True, requires_pass=True,
+        code="MPOX",
+        name="Mpox",
+        short_name="Mpox",
+        severity=DiseaseSeverity.HIGH,
+        color="#7c3aed",
+        incubation_min_days=5,
+        incubation_max_days=21,
+        surveillance_days=21,
+        quarantine_days=21,
+        risk_countries=["CD"],
+        requires_quarantine=True,
+        requires_pass=True,
     )
 
 
@@ -113,10 +127,12 @@ def _followup(traveler, disease, *, started_days_ago=5, ends_in_days=16):
 
     today = date.today()
     return QuarantineRecord.objects.create(
-        traveler=traveler, disease=disease,
+        traveler=traveler,
+        disease=disease,
         started_on=today - timedelta(days=started_days_ago),
         expected_end_on=today + timedelta(days=ends_in_days),
-        status=QuarantineStatus.ACTIVE, address="Cocody",
+        status=QuarantineStatus.ACTIVE,
+        address="Cocody",
     )
 
 
@@ -127,14 +143,20 @@ def multi_followup_traveler(traveler, ebola_disease, second_disease):
     _followup(traveler, ebola_disease)
     _followup(traveler, second_disease, ends_in_days=10)
     record_consent(
-        traveler=traveler, scope=ConsentScope.PUSH_NOTIFICATIONS, granted=True, version="v1.0",
+        traveler=traveler,
+        scope=ConsentScope.PUSH_NOTIFICATIONS,
+        granted=True,
+        version="v1.0",
     )
     return traveler
 
 
 def _consent(traveler):
     record_consent(
-        traveler=traveler, scope=ConsentScope.PUSH_NOTIFICATIONS, granted=True, version="v1.0",
+        traveler=traveler,
+        scope=ConsentScope.PUSH_NOTIFICATIONS,
+        granted=True,
+        version="v1.0",
     )
 
 
@@ -147,8 +169,12 @@ def _client(user) -> APIClient:
 def _notif(**kw) -> Notification:
     """Ligne d'historique créée directement (sans déclencher d'envoi)."""
     defaults = dict(
-        channel=Channel.SMS, recipient=CI_PHONE, normalized_phone=CI_PHONE,
-        body="Bonjour", provider=Provider.ORANGE_CI, status=NotificationStatus.QUEUED,
+        channel=Channel.SMS,
+        recipient=CI_PHONE,
+        normalized_phone=CI_PHONE,
+        body="Bonjour",
+        provider=Provider.ORANGE_CI,
+        status=NotificationStatus.QUEUED,
         message_type=MessageType.MANUAL_MESSAGE,
     )
     defaults.update(kw)
@@ -183,14 +209,20 @@ class TestIdempotence:
         assert claim_reminder(traveler, ReminderKind.DAILY_CHECKIN, tomorrow) is True
 
         row = ReminderDispatch.objects.get(
-            traveler=traveler, kind=ReminderKind.DAILY_CHECKIN, reminder_date=today,
+            traveler=traveler,
+            kind=ReminderKind.DAILY_CHECKIN,
+            reminder_date=today,
         )
         assert row.duplicates_avoided == 2
 
     def test_same_dedup_key_creates_a_single_notification(self, traveler, orange):
         key = reminder_dedup_key(ReminderKind.DAILY_CHECKIN, traveler.pk, date.today(), "sms")
         kwargs = dict(
-            channel="sms", recipient=CI_PHONE, body="Rappel", traveler=traveler, dedup_key=key,
+            channel="sms",
+            recipient=CI_PHONE,
+            body="Rappel",
+            traveler=traveler,
+            dedup_key=key,
         )
         first = enqueue_notification(**kwargs)
         second = enqueue_notification(**kwargs)
@@ -206,18 +238,26 @@ class TestIdempotence:
     def test_urgent_and_manual_messages_are_never_deduplicated(self, traveler, orange):
         for _ in range(2):
             enqueue_notification(
-                channel="sms", recipient=CI_PHONE, body="Symptôme critique déclaré",
-                traveler=traveler, message_type=MessageType.SYMPTOM_ALERT,
+                channel="sms",
+                recipient=CI_PHONE,
+                body="Symptôme critique déclaré",
+                traveler=traveler,
+                message_type=MessageType.SYMPTOM_ALERT,
             )
             enqueue_notification(
-                channel="sms", recipient=CI_PHONE, body="Merci de rappeler l'INHP",
-                traveler=traveler, message_type=MessageType.MANUAL_MESSAGE,
+                channel="sms",
+                recipient=CI_PHONE,
+                body="Merci de rappeler l'INHP",
+                traveler=traveler,
+                message_type=MessageType.MANUAL_MESSAGE,
             )
         assert Notification.objects.filter(message_type=MessageType.SYMPTOM_ALERT).count() == 2
         assert Notification.objects.filter(message_type=MessageType.MANUAL_MESSAGE).count() == 2
 
     def test_daily_reminder_once_despite_multi_followups_and_repeated_jobs(
-        self, multi_followup_traveler, orange,
+        self,
+        multi_followup_traveler,
+        orange,
     ):
         from apps.medical.tasks import send_daily_followup_reminders as medical_daily
 
@@ -229,14 +269,16 @@ class TestIdempotence:
         companion_tasks.send_daily_checkin_reminders.run()
 
         sms = Notification.objects.filter(
-            traveler=multi_followup_traveler, channel=Channel.SMS,
+            traveler=multi_followup_traveler,
+            channel=Channel.SMS,
             message_type=MessageType.FOLLOWUP_REMINDER,
         )
         assert sms.count() == 1
         assert sms.get().status == NotificationStatus.SENT
         assert orange.call_count == 1
         dispatch = ReminderDispatch.objects.get(
-            traveler=multi_followup_traveler, kind=ReminderKind.DAILY_CHECKIN,
+            traveler=multi_followup_traveler,
+            kind=ReminderKind.DAILY_CHECKIN,
         )
         assert dispatch.duplicates_avoided == 2
 
@@ -251,16 +293,25 @@ class TestIdempotence:
             companion_tasks.detect_missed_checkins.run()
 
         relances = Notification.objects.filter(
-            traveler=multi_followup_traveler, body__startswith="Donnez-nous de vos nouvelles",
+            traveler=multi_followup_traveler,
+            body__startswith="Donnez-nous de vos nouvelles",
         )
         assert relances.count() == 1
         assert orange.call_count == 1
-        assert ReminderDispatch.objects.get(
-            traveler=multi_followup_traveler, kind=ReminderKind.MISSED_CHECKIN,
-        ).duplicates_avoided == 2
+        assert (
+            ReminderDispatch.objects.get(
+                traveler=multi_followup_traveler,
+                kind=ReminderKind.MISSED_CHECKIN,
+            ).duplicates_avoided
+            == 2
+        )
 
     def test_completion_message_sent_once_when_last_followup_ends(
-        self, traveler, ebola_disease, second_disease, orange,
+        self,
+        traveler,
+        ebola_disease,
+        second_disease,
+        orange,
     ):
         _consent(traveler)
         _followup(traveler, ebola_disease, started_days_ago=21, ends_in_days=0)
@@ -269,13 +320,21 @@ class TestIdempotence:
         stats = companion_tasks.send_completion_messages.run()
 
         assert stats["completed"] == 2
-        assert Notification.objects.filter(
-            traveler=traveler, message_type=MessageType.FOLLOWUP_COMPLETED,
-        ).count() == 1
+        assert (
+            Notification.objects.filter(
+                traveler=traveler,
+                message_type=MessageType.FOLLOWUP_COMPLETED,
+            ).count()
+            == 1
+        )
         assert stats["duplicates_avoided"] == 1
 
     def test_completion_message_deferred_while_another_followup_continues(
-        self, traveler, ebola_disease, second_disease, orange,
+        self,
+        traveler,
+        ebola_disease,
+        second_disease,
+        orange,
     ):
         _consent(traveler)
         _followup(traveler, ebola_disease, started_days_ago=21, ends_in_days=0)
@@ -293,7 +352,10 @@ class TestIdempotence:
         assert not Notification.objects.exists()
 
         ok = enqueue_notification(
-            channel="sms", recipient=CI_PHONE, body="ID : {traveler_id}.", traveler=traveler,
+            channel="sms",
+            recipient=CI_PHONE,
+            body="ID : {traveler_id}.",
+            traveler=traveler,
         )
         assert ok.ok
         assert Notification.objects.get().body == f"ID : {traveler.public_id}."
@@ -341,13 +403,20 @@ def _run_threads(n: int, target) -> list:
 class TestConcurrency:
     def test_concurrent_enqueue_with_same_key_keeps_one_row(self, live_db, monkeypatch):
         monkeypatch.setattr(
-            "apps.notifications.tasks.send_notification_task.delay", lambda *a, **k: None,
+            "apps.notifications.tasks.send_notification_task.delay",
+            lambda *a, **k: None,
         )
         key = f"daily_checkin:test-concurrency:{timezone.now():%Y%m%d%H%M%S%f}:sms"
         try:
-            results = _run_threads(6, lambda: enqueue_notification(
-                channel="sms", recipient=CI_PHONE, body="Rappel du jour", dedup_key=key,
-            ))
+            results = _run_threads(
+                6,
+                lambda: enqueue_notification(
+                    channel="sms",
+                    recipient=CI_PHONE,
+                    body="Rappel du jour",
+                    dedup_key=key,
+                ),
+            )
             assert Notification.objects.filter(dedup_key=key).count() == 1
             assert sum(1 for r in results if r.ok and not r.duplicate) == 1
             assert sum(1 for r in results if r.duplicate) == 5
@@ -358,8 +427,11 @@ class TestConcurrency:
         from apps.travelers.models import Traveler
 
         traveler = Traveler.objects.create(
-            first_name="Test", last_name="CONCURRENCE", gender="F",
-            id_document_number="CONC-1", phone_mobile=CI_PHONE,
+            first_name="Test",
+            last_name="CONCURRENCE",
+            gender="F",
+            id_document_number="CONC-1",
+            phone_mobile=CI_PHONE,
         )
         try:
             results = _run_threads(6, lambda: claim_reminder(traveler, ReminderKind.DAILY_CHECKIN))
@@ -417,7 +489,8 @@ class TestOrangeQuota:
         settings.NOTIFICATIONS = {
             **settings.NOTIFICATIONS,
             "ORANGE_CI_SMS_ENABLED": True,
-            "ORANGE_CI_SMS_CLIENT_ID": "id", "ORANGE_CI_SMS_CLIENT_SECRET": "secret",
+            "ORANGE_CI_SMS_CLIENT_ID": "id",
+            "ORANGE_CI_SMS_CLIENT_SECRET": "secret",
             "ORANGE_CI_SMS_SENDER_MSISDN": "+2250709862860",
         }
         monkeypatch.setattr(sms_orange_ci, "_get_access_token", lambda force_refresh=False: "tok")
@@ -433,7 +506,11 @@ class TestOrangeQuota:
         assert "POL0001" not in friendly_error(ErrorCode.QUOTA_EXHAUSTED)
 
     def test_quota_exhausted_holds_suspends_and_alerts_admins_once(
-        self, superadmin, orange_quota, twilio, django_capture_on_commit_callbacks,
+        self,
+        superadmin,
+        orange_quota,
+        twilio,
+        django_capture_on_commit_callbacks,
     ):
         with django_capture_on_commit_callbacks(execute=True):
             first = enqueue_notification(channel="sms", recipient=CI_PHONE, body="Rappel 1")
@@ -475,7 +552,10 @@ class TestOrangeQuota:
 
     def test_forced_twilio_for_ci_number_is_refused(self):
         res = enqueue_notification(
-            channel="sms", recipient=CI_PHONE, body="Test", force_provider=Provider.TWILIO,
+            channel="sms",
+            recipient=CI_PHONE,
+            body="Test",
+            force_provider=Provider.TWILIO,
         )
         assert not res.ok and "politique nationale" in res.error
 
@@ -488,7 +568,9 @@ class TestOrangeQuota:
     def test_urgent_alert_is_still_attempted_while_suspended(self, orange):
         _suspend_orange()
         res = enqueue_notification(
-            channel="sms", recipient=CI_PHONE, body="Alerte symptôme critique",
+            channel="sms",
+            recipient=CI_PHONE,
+            body="Alerte symptôme critique",
             message_type=MessageType.SYMPTOM_ALERT,
         )
         assert Notification.objects.get(pk=res.notification_id).status == NotificationStatus.SENT
@@ -500,18 +582,35 @@ class TestOrangeQuota:
         delay = MagicMock()
         monkeypatch.setattr(tasks.send_notification_task, "delay", delay)
         now = timezone.now()
-        _notif(status=NotificationStatus.FAILED, failed_at=now, retry_count=1,
-               error_code=ErrorCode.QUOTA_EXHAUSTED, error_message=ORANGE_QUOTA_ERROR)
-        _notif(status=NotificationStatus.FAILED, failed_at=now, retry_count=1,
-               error_code=ErrorCode.INVALID_NUMBER)
+        _notif(
+            status=NotificationStatus.FAILED,
+            failed_at=now,
+            retry_count=1,
+            error_code=ErrorCode.QUOTA_EXHAUSTED,
+            error_message=ORANGE_QUOTA_ERROR,
+        )
+        _notif(
+            status=NotificationStatus.FAILED,
+            failed_at=now,
+            retry_count=1,
+            error_code=ErrorCode.INVALID_NUMBER,
+        )
         retryable = _notif(
-            status=NotificationStatus.FAILED, failed_at=now, retry_count=1,
-            provider=Provider.TWILIO, recipient=INTL_PHONE, normalized_phone=INTL_PHONE,
+            status=NotificationStatus.FAILED,
+            failed_at=now,
+            retry_count=1,
+            provider=Provider.TWILIO,
+            recipient=INTL_PHONE,
+            normalized_phone=INTL_PHONE,
             error_code=ErrorCode.NETWORK,
         )
         _suspend_orange()
-        _notif(status=NotificationStatus.FAILED, failed_at=now, retry_count=1,
-               error_code=ErrorCode.NETWORK)
+        _notif(
+            status=NotificationStatus.FAILED,
+            failed_at=now,
+            retry_count=1,
+            error_code=ErrorCode.NETWORK,
+        )
 
         assert tasks.retry_failed_notifications() == {"requeued": 1}
         delay.assert_called_once_with(retryable.id)
@@ -525,16 +624,24 @@ class TestResume:
     URL = "/api/v1/notifications/providers/orange_ci/resume/"
 
     def test_resume_requeues_relevant_messages_and_expires_stale_reminders(
-        self, superadmin, traveler, orange, django_capture_on_commit_callbacks,
+        self,
+        superadmin,
+        traveler,
+        orange,
+        django_capture_on_commit_callbacks,
     ):
         _suspend_orange()
         manual = _notif(
-            status=NotificationStatus.ON_HOLD, error_code=ErrorCode.QUOTA_EXHAUSTED, retry_count=1,
+            status=NotificationStatus.ON_HOLD,
+            error_code=ErrorCode.QUOTA_EXHAUSTED,
+            retry_count=1,
         )
         yesterday = date.today() - timedelta(days=1)
         stale = _notif(
-            status=NotificationStatus.ON_HOLD, error_code=ErrorCode.PROVIDER_SUSPENDED,
-            traveler=traveler, message_type=MessageType.FOLLOWUP_REMINDER,
+            status=NotificationStatus.ON_HOLD,
+            error_code=ErrorCode.PROVIDER_SUSPENDED,
+            traveler=traveler,
+            message_type=MessageType.FOLLOWUP_REMINDER,
             body="Jour 20/21 de surveillance",
             dedup_key=reminder_dedup_key(ReminderKind.DAILY_CHECKIN, traveler.pk, yesterday, "sms"),
             metadata={"reminder_date": yesterday.isoformat()},
@@ -545,7 +652,10 @@ class TestResume:
 
         assert resp.status_code == 200, resp.data
         assert resp.data == {
-            "provider": "orange_ci", "was_suspended": True, "requeued": 1, "expired": 1,
+            "provider": "orange_ci",
+            "was_suspended": True,
+            "requeued": 1,
+            "expired": 1,
         }
         manual.refresh_from_db()
         stale.refresh_from_db()
@@ -579,8 +689,11 @@ class TestResume:
 @pytest.mark.django_db
 class TestNotificationsApi:
     def test_agents_never_see_raw_provider_responses(self, district_agent, superadmin):
-        _notif(status=NotificationStatus.ON_HOLD, error_code=ErrorCode.QUOTA_EXHAUSTED,
-               error_message=ORANGE_QUOTA_ERROR)
+        _notif(
+            status=NotificationStatus.ON_HOLD,
+            error_code=ErrorCode.QUOTA_EXHAUSTED,
+            error_message=ORANGE_QUOTA_ERROR,
+        )
         # Ligne historique sans error_code (antérieure au correctif).
         _notif(status=NotificationStatus.FAILED, error_message=ORANGE_QUOTA_ERROR)
 
@@ -601,19 +714,31 @@ class TestNotificationsApi:
     def test_stats_and_filters(self, district_agent, traveler, ebola_disease):
         _followup(traveler, ebola_disease)
         _notif(status=NotificationStatus.SENT, body="x" * 170, traveler=traveler)  # 2 SMS
-        _notif(status=NotificationStatus.DELIVERED, provider=Provider.TWILIO,
-               recipient=INTL_PHONE, normalized_phone=INTL_PHONE)
+        _notif(
+            status=NotificationStatus.DELIVERED,
+            provider=Provider.TWILIO,
+            recipient=INTL_PHONE,
+            normalized_phone=INTL_PHONE,
+        )
         _notif(status=NotificationStatus.FAILED, error_code=ErrorCode.NETWORK)
         _notif(status=NotificationStatus.ON_HOLD, error_code=ErrorCode.QUOTA_EXHAUSTED)
         _notif(status=NotificationStatus.QUEUED)
-        _notif(channel=Channel.EMAIL, provider=Provider.SMTP, recipient="a@b.ci",
-               normalized_phone="", status=NotificationStatus.SENT)
+        _notif(
+            channel=Channel.EMAIL,
+            provider=Provider.SMTP,
+            recipient="a@b.ci",
+            normalized_phone="",
+            status=NotificationStatus.SENT,
+        )
         ReminderDispatch.objects.create(
-            traveler=traveler, kind=ReminderKind.DAILY_CHECKIN,
-            reminder_date=date.today(), duplicates_avoided=2,
+            traveler=traveler,
+            kind=ReminderKind.DAILY_CHECKIN,
+            reminder_date=date.today(),
+            duplicates_avoided=2,
         )
         NotificationAuditLog.objects.create(
-            notification=Notification.objects.first(), action=NotificationAuditAction.DUPLICATE,
+            notification=Notification.objects.first(),
+            action=NotificationAuditAction.DUPLICATE,
         )
 
         client = _client(district_agent)
@@ -626,7 +751,8 @@ class TestNotificationsApi:
         assert stats["sms"]["messages"] == 2
         assert stats["sms"]["segments"] == 3
         assert {r["provider"]: r["segments"] for r in stats["sms"]["by_provider"]} == {
-            "orange_ci": 2, "twilio": 1,
+            "orange_ci": 2,
+            "twilio": 1,
         }
 
         def count(**params):

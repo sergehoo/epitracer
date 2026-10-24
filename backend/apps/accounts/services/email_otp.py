@@ -7,6 +7,7 @@ Sécurité :
     - Invalidation auto des anciens codes lors d'une nouvelle génération
     - Envoi via le canal INTERNAL (inhp@veillesanitaire.com)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -14,7 +15,6 @@ import logging
 import secrets
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Optional
 
 from django.utils import timezone
 
@@ -30,7 +30,7 @@ OTP_LENGTH = 6
 class OtpResult:
     ok: bool
     error: str = ""
-    code_id: Optional[int] = None
+    code_id: int | None = None
     attempts_remaining: int = 0
 
 
@@ -38,7 +38,7 @@ def _hash_code(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
-def _get_client_ip(request) -> Optional[str]:
+def _get_client_ip(request) -> str | None:
     if not request:
         return None
     xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
@@ -55,7 +55,9 @@ def generate_otp_for_user(user, *, request=None) -> tuple[str, EmailOtpCode]:
     """
     # Invalidate tous les codes valides précédents (un code à la fois actif)
     EmailOtpCode.objects.filter(
-        user=user, used_at__isnull=True, expires_at__gt=timezone.now(),
+        user=user,
+        used_at__isnull=True,
+        expires_at__gt=timezone.now(),
     ).update(used_at=timezone.now())
 
     # Code à 6 chiffres aléatoires (cryptographiquement sûr)
@@ -89,15 +91,13 @@ def send_otp_email(user, *, request=None, sync: bool = True) -> OtpResult:
     """
     from apps.notifications.email_models import EmailLog, EmailStatus, EmailType
     from apps.notifications.services.email_router import (
-        _execute_email_send, send_email_by_type,
+        _execute_email_send,
+        send_email_by_type,
     )
 
     code, obj = generate_otp_for_user(user, request=request)
 
-    full_name = (
-        f"{user.first_name} {user.last_name}".strip()
-        or user.get_username() or user.email
-    )
+    full_name = f"{user.first_name} {user.last_name}".strip() or user.get_username() or user.email
 
     subject = "Votre code de vérification — INHP Veille Sanitaire"
     body_html = f"""
@@ -195,7 +195,8 @@ def send_otp_email(user, *, request=None, sync: bool = True) -> OtpResult:
                 if not ok:
                     logger.warning(
                         "Envoi OTP sync KO pour user=%s : %s",
-                        user.pk, email_log.error_message,
+                        user.pk,
+                        email_log.error_message,
                     )
                     return OtpResult(ok=False, error=email_log.error_message)
         except Exception as exc:  # noqa: BLE001
@@ -219,14 +220,14 @@ def verify_otp(user, code: str) -> OtpResult:
         return OtpResult(ok=False, error="Code invalide (6 chiffres attendus).")
 
     obj = (
-        EmailOtpCode.objects
-        .filter(user=user, used_at__isnull=True, expires_at__gt=timezone.now())
+        EmailOtpCode.objects.filter(user=user, used_at__isnull=True, expires_at__gt=timezone.now())
         .order_by("-created_at")
         .first()
     )
     if not obj:
         return OtpResult(
-            ok=False, error="Code expiré ou inexistant. Demander un nouveau code.",
+            ok=False,
+            error="Code expiré ou inexistant. Demander un nouveau code.",
         )
 
     if obj.attempts >= obj.max_attempts:

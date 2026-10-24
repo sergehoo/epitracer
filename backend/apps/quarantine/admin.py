@@ -16,7 +16,14 @@ class FollowUpVisitInline(admin.TabularInline):
 
 @admin.register(QuarantineRecord)
 class QuarantineRecordAdmin(GISModelAdmin):
-    list_display = ("traveler", "disease", "status", "started_on", "expected_end_on", "actual_end_on")
+    list_display = (
+        "traveler",
+        "disease",
+        "status",
+        "started_on",
+        "expected_end_on",
+        "actual_end_on",
+    )
     list_filter = ("status", "disease")
     search_fields = ("traveler__public_id", "traveler__last_name", "investigation_ref")
     inlines = [DailyCheckInline, FollowUpVisitInline]

@@ -10,6 +10,7 @@ Les settings sont découpés en :
 Toutes les variables sensibles passent par les variables d'environnement
 (.env via django-environ) — aucune valeur secrète n'est commitée.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -186,8 +187,10 @@ ANONYMOUS_USER_NAME = "AnonymousUser"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-     "OPTIONS": {"min_length": 10}},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 10},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -243,10 +246,12 @@ ALLOWED_UPLOAD_MIMES = env.list(
 # Limite globale Django sur le corps multipart (sécurité défense-en-profondeur).
 # 8 Mo : laisse une marge au MAX_UPLOAD_SIZE_MB + champs texte du formulaire.
 DATA_UPLOAD_MAX_MEMORY_SIZE = env.int(
-    "DATA_UPLOAD_MAX_MEMORY_SIZE", default=8 * 1024 * 1024,
+    "DATA_UPLOAD_MAX_MEMORY_SIZE",
+    default=8 * 1024 * 1024,
 )
 FILE_UPLOAD_MAX_MEMORY_SIZE = env.int(
-    "FILE_UPLOAD_MAX_MEMORY_SIZE", default=8 * 1024 * 1024,
+    "FILE_UPLOAD_MAX_MEMORY_SIZE",
+    default=8 * 1024 * 1024,
 )
 
 # ---------------------------------------------------------------------------
@@ -257,9 +262,7 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
-    ),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_FILTER_BACKENDS": (
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
@@ -289,7 +292,6 @@ REST_FRAMEWORK = {
         "companion_checkin": "12/hour",
         # Phase 9B — endpoints publics suivi médical (PWA + Flutter).
         "mobile_followup": "10/min",
-       
         "companion_location": "60/hour",
         "companion_consent": "30/hour",
         "companion_push": "30/hour",
@@ -314,9 +316,7 @@ REST_FRAMEWORK = {
         "mobile_form_schema": "20/min",
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_RENDERER_CLASSES": (
-        "rest_framework.renderers.JSONRenderer",
-    ),
+    "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
     "EXCEPTION_HANDLER": "apps.core.exceptions.api_exception_handler",
 }
 
@@ -324,7 +324,9 @@ REST_FRAMEWORK = {
 # JWT
 # ---------------------------------------------------------------------------
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("JWT_ACCESS_TOKEN_LIFETIME_MIN", default=30)),
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=env.int("JWT_ACCESS_TOKEN_LIFETIME_MIN", default=30)
+    ),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_TOKEN_LIFETIME_DAYS", default=7)),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -382,8 +384,15 @@ CORS_ALLOW_HEADERS = list(
     env.list(
         "DJANGO_CORS_ALLOW_HEADERS",
         default=[
-            "accept", "accept-encoding", "authorization", "content-type",
-            "dnt", "origin", "user-agent", "x-csrftoken", "x-requested-with",
+            "accept",
+            "accept-encoding",
+            "authorization",
+            "content-type",
+            "dnt",
+            "origin",
+            "user-agent",
+            "x-csrftoken",
+            "x-requested-with",
             # Formulaire voyageur public : clé réutilisée par les retries (anti-doublon).
             "idempotency-key",
         ],
@@ -491,7 +500,9 @@ EMAIL_PROFILES = {
         "use_ssl": env.bool("PUBLIC_EMAIL_USE_SSL", default=False),
         "username": env("PUBLIC_EMAIL_HOST_USER", default=""),
         "password": env("PUBLIC_EMAIL_HOST_PASSWORD", default=""),
-        "from_name": env("PUBLIC_EMAIL_FROM_NAME", default="Destination CI - Accompagnement Voyageur"),
+        "from_name": env(
+            "PUBLIC_EMAIL_FROM_NAME", default="Destination CI - Accompagnement Voyageur"
+        ),
         "from_address": env("PUBLIC_EMAIL_FROM_ADDRESS", default="infos@destinationci.com"),
         "reply_to": env("DEFAULT_REPLY_TO_PUBLIC", default="infos@destinationci.com"),
         "timeout": env.int("PUBLIC_EMAIL_TIMEOUT", default=20),
@@ -669,13 +680,14 @@ NOTIFICATIONS = {
     # Legacy keys (compat ascendante)
     "SMS_PROVIDER": env("SMS_PROVIDER", default="auto"),  # "auto" = routage par numéro
     "FCM_SERVER_KEY": env("FCM_SERVER_KEY", default=""),
-
     # ── Orange Côte d'Ivoire (numéros +225) ──────────────────────────
     "ORANGE_CI_SMS_ENABLED": env.bool("ORANGE_CI_SMS_ENABLED", default=False),
-    "ORANGE_CI_SMS_BASE_URL": env("ORANGE_CI_SMS_BASE_URL",
-                                   default="https://api.orange.com/smsmessaging/v1"),
-    "ORANGE_CI_SMS_TOKEN_URL": env("ORANGE_CI_SMS_TOKEN_URL",
-                                    default="https://api.orange.com/oauth/v3/token"),
+    "ORANGE_CI_SMS_BASE_URL": env(
+        "ORANGE_CI_SMS_BASE_URL", default="https://api.orange.com/smsmessaging/v1"
+    ),
+    "ORANGE_CI_SMS_TOKEN_URL": env(
+        "ORANGE_CI_SMS_TOKEN_URL", default="https://api.orange.com/oauth/v3/token"
+    ),
     "ORANGE_CI_SMS_CLIENT_ID": env("ORANGE_CI_SMS_CLIENT_ID", default=""),
     "ORANGE_CI_SMS_CLIENT_SECRET": env("ORANGE_CI_SMS_CLIENT_SECRET", default=""),
     # MSISDN émetteur du contrat Orange CI — Format E.164 (ex: +2250709862860).
@@ -689,10 +701,10 @@ NOTIFICATIONS = {
     # URL publique du delivery webhook — quand renseignée, on envoie un
     # `receiptRequest` dans le payload SMS pour qu'Orange CI nous notifie.
     "ORANGE_CI_SMS_CALLBACK_URL": env("ORANGE_CI_SMS_CALLBACK_URL", default=""),
-
     # ── Twilio (SMS international + WhatsApp) ────────────────────────
-    "TWILIO_SMS_ENABLED": env.bool("TWILIO_SMS_ENABLED",
-                                    default=bool(env("TWILIO_ACCOUNT_SID", default=""))),
+    "TWILIO_SMS_ENABLED": env.bool(
+        "TWILIO_SMS_ENABLED", default=bool(env("TWILIO_ACCOUNT_SID", default=""))
+    ),
     "TWILIO_ACCOUNT_SID": env("TWILIO_ACCOUNT_SID", default=""),
     "TWILIO_AUTH_TOKEN": env("TWILIO_AUTH_TOKEN", default=""),
     "TWILIO_FROM_NUMBER": env("TWILIO_FROM_NUMBER", default=""),
@@ -701,7 +713,6 @@ NOTIFICATIONS = {
         "TWILIO_STATUS_CALLBACK_BASE",
         default="https://api.veillesanitaire.com",
     ),
-
     # ── WhatsApp (Phase C — Twilio ou Meta) ──────────────────────────
     "WHATSAPP_ENABLED": env.bool("WHATSAPP_ENABLED", default=False),
     "WHATSAPP_PROVIDER": env("WHATSAPP_PROVIDER", default="twilio"),  # "twilio" | "meta"
@@ -727,13 +738,19 @@ SMS_GUARD = {
     "ENABLED": env.bool("SMS_GUARD_ENABLED", default=True),
     # Par numéro E.164 et par priorité : (heure, jour).
     "PER_NUMBER": {
-        "otp": (env.int("SMS_OTP_PER_NUMBER_HOUR", default=3),
-                env.int("SMS_OTP_PER_NUMBER_DAY", default=6)),
-        "standard": (env.int("SMS_PER_NUMBER_HOUR", default=6),
-                     env.int("SMS_PER_NUMBER_DAY", default=12)),
+        "otp": (
+            env.int("SMS_OTP_PER_NUMBER_HOUR", default=3),
+            env.int("SMS_OTP_PER_NUMBER_DAY", default=6),
+        ),
+        "standard": (
+            env.int("SMS_PER_NUMBER_HOUR", default=6),
+            env.int("SMS_PER_NUMBER_DAY", default=12),
+        ),
         # Urgences médicales : plafond dédié, jamais illimité.
-        "urgent": (env.int("SMS_URGENT_PER_NUMBER_HOUR", default=10),
-                   env.int("SMS_URGENT_PER_NUMBER_DAY", default=30)),
+        "urgent": (
+            env.int("SMS_URGENT_PER_NUMBER_HOUR", default=10),
+            env.int("SMS_URGENT_PER_NUMBER_DAY", default=30),
+        ),
     },
     "PER_TRAVELER_DAY": env.int("SMS_PER_TRAVELER_DAY", default=15),
     # Plafond journalier par fournisseur (segments) → coupe-circuit fournisseur.
@@ -782,7 +799,8 @@ TURNSTILE = {
         default="https://challenges.cloudflare.com/turnstile/v0/siteverify",
     ),
     "PROTECTED_ACTIONS": env.list(
-        "TURNSTILE_PROTECTED_ACTIONS", default=["public_registration", "otp_request"],
+        "TURNSTILE_PROTECTED_ACTIONS",
+        default=["public_registration", "otp_request"],
     ),
     "ALLOWED_HOSTNAMES": env.list("TURNSTILE_ALLOWED_HOSTNAMES", default=[]),
     "FAIL_OPEN": env.bool("TURNSTILE_FAIL_OPEN", default=False),
@@ -829,7 +847,8 @@ WEBPUSH = {
     # Champ "sub" du JWT VAPID — doit être un mailto: ou https: que le push
     # service peut contacter en cas de problème (RFC 8292).
     "VAPID_CLAIM_SUB": env(
-        "VAPID_CLAIM_SUB", default="mailto:info@destinationci.com",
+        "VAPID_CLAIM_SUB",
+        default="mailto:info@destinationci.com",
     ),
     # Clé publique exposée à l'API publique (`/api/v1/public/push/public-key/`)
     # pour que la PWA puisse appeler `pushManager.subscribe()` avec.

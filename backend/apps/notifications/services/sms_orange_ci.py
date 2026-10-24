@@ -4,12 +4,12 @@ Doc fournisseur : https://developer.orange.com/apis/sms-ci/
 Authentification : OAuth 2.0 Client Credentials. Le token a une durée
 de vie ; on le cache en mémoire process avec un buffer de sécurité.
 """
+
 from __future__ import annotations
 
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
 from urllib.parse import quote
 
 import httpx
@@ -23,7 +23,7 @@ class OrangeSendResult:
     ok: bool
     provider_message_id: str = ""
     error: str = ""
-    raw_response: Optional[dict] = None
+    raw_response: dict | None = None
     # Catégorie normalisée (cf. services.errors.ErrorCode) — ex :
     # "provider_quota_exhausted" pour HTTP 403 / POL0001 (crédit épuisé).
     error_code: str = ""
@@ -51,7 +51,9 @@ def _get_settings() -> dict:
     cfg = getattr(settings, "NOTIFICATIONS", {})
     return {
         "enabled": cfg.get("ORANGE_CI_SMS_ENABLED", False),
-        "base_url": cfg.get("ORANGE_CI_SMS_BASE_URL", "https://api.orange.com/smsmessaging/v1/outbound/"),
+        "base_url": cfg.get(
+            "ORANGE_CI_SMS_BASE_URL", "https://api.orange.com/smsmessaging/v1/outbound/"
+        ),
         "token_url": cfg.get("ORANGE_CI_SMS_TOKEN_URL", "https://api.orange.com/oauth/v3/token"),
         "client_id": cfg.get("ORANGE_CI_SMS_CLIENT_ID", ""),
         "client_secret": cfg.get("ORANGE_CI_SMS_CLIENT_SECRET", ""),
@@ -111,8 +113,8 @@ def _get_access_token(force_refresh: bool = False) -> str:
 def send_sms(
     to: str,
     body: str,
-    metadata: Optional[dict] = None,
-    callback_data: Optional[str] = None,
+    metadata: dict | None = None,
+    callback_data: str | None = None,
 ) -> OrangeSendResult:
     """Envoie un SMS via Orange CI.
 

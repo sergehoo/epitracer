@@ -5,13 +5,19 @@ from apps.accounts.models import RoleCode
 from apps.core.permissions import HasRole, IsAuthenticatedAndActive
 
 from .models import (
-    DynamicForm, FieldOption, FormField, FormSection, FormSubmission,
+    DynamicForm,
+    FieldOption,
+    FormField,
+    FormSection,
+    FormSubmission,
 )
 from .serializers import (
-    DynamicFormSerializer, FieldOptionSerializer, FormFieldSerializer,
-    FormSectionSerializer, FormSubmissionSerializer,
+    DynamicFormSerializer,
+    FieldOptionSerializer,
+    FormFieldSerializer,
+    FormSectionSerializer,
+    FormSubmissionSerializer,
 )
-
 
 # ---------------------------------------------------------------------------
 # Permissions helper
@@ -57,7 +63,9 @@ class FormSectionViewSet(_EditorMixin, viewsets.ModelViewSet):
 # FormField
 # ---------------------------------------------------------------------------
 class FormFieldViewSet(_EditorMixin, viewsets.ModelViewSet):
-    queryset = FormField.objects.select_related("section").prefetch_related("options", "conditions").all()
+    queryset = (
+        FormField.objects.select_related("section").prefetch_related("options", "conditions").all()
+    )
     serializer_class = FormFieldSerializer
     filterset_fields = ["section", "type", "is_required"]
     search_fields = ["code", "label"]

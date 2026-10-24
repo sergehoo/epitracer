@@ -15,6 +15,7 @@ Matrice d'autorisation cible :
   manage_report_schedule        |       ✓        |    –     |  –   |    –     |    –
   download_sensitive_reports    |       ✓        |    ✓     |  ✓   |    –     |    –
 """
+
 from __future__ import annotations
 
 from rest_framework.permissions import BasePermission
@@ -44,9 +45,14 @@ class _BaseReportsPermission(BasePermission):
 # ---------------------------------------------------------------------------
 class CanViewWeeklyReports(_BaseReportsPermission):
     """Lecture des rapports générés — tous les rôles opérationnels."""
+
     message = "Vous n'avez pas la permission de consulter les rapports."
     allowed_roles = {
-        "NATIONAL_ADMIN", "MINISTRY", "INHP", "DISTRICT", "OBSERVER",
+        "NATIONAL_ADMIN",
+        "MINISTRY",
+        "INHP",
+        "DISTRICT",
+        "OBSERVER",
         "ENTRY_POINT",
     }
 
@@ -56,6 +62,7 @@ class CanViewWeeklyReports(_BaseReportsPermission):
 # ---------------------------------------------------------------------------
 class CanGenerateWeeklyReports(_BaseReportsPermission):
     """Déclencher `generate_weekly_report` hors du cron Beat."""
+
     message = "Vous n'avez pas la permission de générer un rapport."
     allowed_roles = {"NATIONAL_ADMIN", "MINISTRY", "INHP"}
 
@@ -68,6 +75,7 @@ class CanSendWeeklyReports(_BaseReportsPermission):
 
     Restrictif car coût potentiellement massif si mal configuré.
     """
+
     message = "Vous n'avez pas la permission d'envoyer un rapport."
     allowed_roles = {"NATIONAL_ADMIN", "INHP"}
 
@@ -77,6 +85,7 @@ class CanSendWeeklyReports(_BaseReportsPermission):
 # ---------------------------------------------------------------------------
 class CanManageReportRecipients(_BaseReportsPermission):
     """Ajouter/modifier/désactiver/supprimer les destinataires."""
+
     message = "Gestion des destinataires réservée à l'administration nationale."
     allowed_roles = {"NATIONAL_ADMIN", "INHP"}
 
@@ -86,6 +95,7 @@ class CanManageReportRecipients(_BaseReportsPermission):
 # ---------------------------------------------------------------------------
 class CanManageReportSchedule(_BaseReportsPermission):
     """Modifier la fréquence / heure / activation du cron."""
+
     message = "Modification de la planification réservée au Super Admin."
     allowed_roles = {"NATIONAL_ADMIN"}
 
@@ -100,5 +110,6 @@ class CanDownloadReports(_BaseReportsPermission):
     évolution épidémiologique) qui ne doivent pas fuiter. Accès trace par
     audit log + IP + user-agent (Phase 6).
     """
+
     message = "Téléchargement réservé aux acteurs sanitaires nationaux."
     allowed_roles = {"NATIONAL_ADMIN", "MINISTRY", "INHP"}

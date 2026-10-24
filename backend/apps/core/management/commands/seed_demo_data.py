@@ -1,4 +1,5 @@
 """Génère un jeu de données de démo (5 voyageurs + 1 enquête Ebola high)."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -32,10 +33,12 @@ class Command(BaseCommand):
         today = date.today()
         for first, last, sex in names:
             t = Traveler.objects.create(
-                first_name=first, last_name=last, gender=sex,
+                first_name=first,
+                last_name=last,
+                gender=sex,
                 nationality=ci,
                 id_document_number=f"P{abs(hash(first+last)) % 10**6:06d}",
-                phone_mobile="+22507" + str(abs(hash(first+last)))[:8],
+                phone_mobile="+22507" + str(abs(hash(first + last)))[:8],
                 email=f"{first.lower()}.{last.lower()}@example.ci",
                 arrival_date=today,
                 entry_point=ep,
@@ -73,6 +76,8 @@ class Command(BaseCommand):
             diarrhea_nausea_vomiting=True,
         )
         apply_risk_outcome(inv)
-        self.stdout.write(self.style.SUCCESS(
-            f"  Enquête {inv.case_number} créée : score={inv.risk_score} ({inv.risk_level}) - statut={inv.status}"
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"  Enquête {inv.case_number} créée : score={inv.risk_score} ({inv.risk_level}) - statut={inv.status}"
+            )
+        )

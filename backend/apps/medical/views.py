@@ -9,11 +9,11 @@ numérique ou un `Traveler.public_id` ("TRV-XXXXXXXXXX"). Toute consultation
 de données sensibles (santé, localisation) est tracée dans
 `apps.companion.DataAccessLog`.
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Tuple
 
 from django.db.models import Q
 from django.http import Http404
@@ -42,7 +42,6 @@ from apps.travelers.models import Traveler
 
 from . import services_api
 from .models import (
-    CaseClassificationCode,
     DiseaseFollowupProtocol,
     FollowUpAction,
     FollowUpActionStatus,
@@ -110,15 +109,14 @@ def _resolve_traveler(traveler_id) -> Traveler:
     return get_object_or_404(Traveler, public_id=raw)
 
 
-def _resolve_case(traveler_id) -> Tuple[Traveler, QuarantineRecord]:
+def _resolve_case(traveler_id) -> tuple[Traveler, QuarantineRecord]:
     """Renvoie (traveler, case) — case = QuarantineRecord active/dernière.
 
     Raise Http404 si pas de cas associé.
     """
     traveler = _resolve_traveler(traveler_id)
     case = (
-        traveler.quarantines
-        .filter(status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED])
+        traveler.quarantines.filter(status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED])
         .order_by("-started_on")
         .first()
     )
@@ -155,6 +153,7 @@ class _FollowupListPagination(PageNumberPagination):
 
     Page size = 50 par défaut conformément à la spec Phase 9F.
     """
+
     page_size = 50
     page_size_query_param = "page_size"
     max_page_size = 200
@@ -190,11 +189,9 @@ class FollowupListView(GenericAPIView):
         description="Liste paginée des cas de suivi médical.",
     )
     def get(self, request):
-        qs = (
-            QuarantineRecord.objects
-            .select_related("traveler", "disease", "assigned_district", "assigned_agent")
-            .order_by("-created_at")
-        )
+        qs = QuarantineRecord.objects.select_related(
+            "traveler", "disease", "assigned_district", "assigned_agent"
+        ).order_by("-created_at")
         params = request.query_params
 
         if status_p := params.get("status"):
@@ -229,23 +226,27 @@ class FollowupListView(GenericAPIView):
         for case in items:
             day_index = max(0, (today - case.started_on).days)
             traveler = case.traveler
-            results.append({
-                "id": case.id,
-                "uuid": str(getattr(case, "uuid", "")),
-                "traveler_id": traveler.id,
-                "public_id": traveler.public_id,
-                "traveler_name": f"{traveler.first_name} {traveler.last_name}".strip(),
-                "disease_code": case.disease.code if case.disease_id else "",
-                "disease_name": case.disease.name if case.disease_id else "",
-                "status": case.status,
-                "current_classification": case.current_classification,
-                "started_on": case.started_on,
-                "expected_end_on": case.expected_end_on,
-                "day_index": day_index,
-                "total_days": (case.expected_end_on - case.started_on).days,
-                "assigned_district": case.assigned_district.name if case.assigned_district_id else None,
-                "assigned_agent_id": case.assigned_agent_id,
-            })
+            results.append(
+                {
+                    "id": case.id,
+                    "uuid": str(getattr(case, "uuid", "")),
+                    "traveler_id": traveler.id,
+                    "public_id": traveler.public_id,
+                    "traveler_name": f"{traveler.first_name} {traveler.last_name}".strip(),
+                    "disease_code": case.disease.code if case.disease_id else "",
+                    "disease_name": case.disease.name if case.disease_id else "",
+                    "status": case.status,
+                    "current_classification": case.current_classification,
+                    "started_on": case.started_on,
+                    "expected_end_on": case.expected_end_on,
+                    "day_index": day_index,
+                    "total_days": (case.expected_end_on - case.started_on).days,
+                    "assigned_district": (
+                        case.assigned_district.name if case.assigned_district_id else None
+                    ),
+                    "assigned_agent_id": case.assigned_agent_id,
+                }
+            )
 
         if page is not None:
             return self.get_paginated_response(results)
@@ -267,10 +268,13 @@ class FollowupDetailView(APIView):
 
         # Pré-fetch pour économiser des requêtes.
         case = (
-            QuarantineRecord.objects
-            .select_related(
-                "traveler", "traveler__nationality", "traveler__entry_point",
-                "disease", "assigned_district", "assigned_agent",
+            QuarantineRecord.objects.select_related(
+                "traveler",
+                "traveler__nationality",
+                "traveler__entry_point",
+                "disease",
+                "assigned_district",
+                "assigned_agent",
             )
             .prefetch_related(
                 "classifications",
@@ -282,7 +286,8 @@ class FollowupDetailView(APIView):
         )
 
         log_data_access(
-            request=request, traveler=traveler,
+            request=request,
+            traveler=traveler,
             resource=DataAccessLog.Resource.HEALTH,
             reason=request.query_params.get("reason", "Consultation détail suivi"),
         )
@@ -305,8 +310,7 @@ class FollowupTimelineView(APIView):
         _check_object_perm(request, self, case, CanViewFollowupDetail)
 
         days = (
-            case.daily_checks
-            .select_related("agent_responsible")
+            case.daily_checks.select_related("agent_responsible")
             .prefetch_related("symptom_reports", "samples", "actions")
             .order_by("day_index")
         )
@@ -381,8 +385,7 @@ class FollowupSymptomsView(APIView):
         _check_object_perm(request, self, case, CanViewFollowupDetail)
 
         qs = (
-            MedicalSymptomReport.objects
-            .filter(followup_case=case)
+            MedicalSymptomReport.objects.filter(followup_case=case)
             .select_related("reported_by_user")
             .order_by("-created_at")
         )
@@ -421,7 +424,8 @@ class FollowupSymptomsView(APIView):
         # Auto-flag is_critical via le protocole de la maladie
         is_critical = False
         protocol = DiseaseFollowupProtocol.objects.filter(
-            disease=case.disease, is_active=True,
+            disease=case.disease,
+            is_active=True,
         ).first()
         if protocol:
             criticals = set(protocol.critical_symptoms or [])
@@ -481,8 +485,7 @@ class FollowupSamplesView(APIView):
         _check_object_perm(request, self, case, CanViewFollowupDetail)
 
         qs = (
-            MedicalSample.objects
-            .filter(followup_case=case)
+            MedicalSample.objects.filter(followup_case=case)
             .select_related("collected_by")
             .order_by("-created_at")
         )
@@ -559,9 +562,14 @@ class FollowupSampleUpdateView(APIView):
 
         updates = request.data or {}
         allowed = (
-            "transport_status", "collected_at", "received_at",
-            "destination_lab", "transport_conditions", "notes",
-            "collection_location", "transport_departed_at",
+            "transport_status",
+            "collected_at",
+            "received_at",
+            "destination_lab",
+            "transport_conditions",
+            "notes",
+            "collection_location",
+            "transport_departed_at",
         )
         update_fields = []
         for field in allowed:
@@ -613,8 +621,7 @@ class FollowupLabResultsView(APIView):
         _check_object_perm(request, self, case, CanViewFollowupDetail)
 
         qs = (
-            LabAnalysis.objects
-            .filter(sample__followup_case=case)
+            LabAnalysis.objects.filter(sample__followup_case=case)
             .select_related("sample", "validated_by")
             .order_by("-created_at")
         )
@@ -750,14 +757,20 @@ class FollowupNotifyView(APIView):
             from apps.notifications.services.security import SecurityEventKind, log_security_event
 
             log_security_event(
-                SecurityEventKind.RECIPIENT_REJECTED, source="medical.followup_notify",
-                ip=client_ip(request), phone=v.get("recipient") or "", traveler=traveler,
-                user=request.user, dedupe=f"recipient:{request.user.pk}:{v.get('recipient')}",
+                SecurityEventKind.RECIPIENT_REJECTED,
+                source="medical.followup_notify",
+                ip=client_ip(request),
+                phone=v.get("recipient") or "",
+                traveler=traveler,
+                user=request.user,
+                dedupe=f"recipient:{request.user.pk}:{v.get('recipient')}",
             )
             return Response(
-                {"detail": (
-                    "Destinataire non autorisé : utilisez une coordonnée enregistrée du voyageur."
-                )},
+                {
+                    "detail": (
+                        "Destinataire non autorisé : utilisez une coordonnée enregistrée du voyageur."
+                    )
+                },
                 status=drf_status.HTTP_403_FORBIDDEN,
             )
         result = send_manual_message(
@@ -797,12 +810,15 @@ class FollowupNotifyView(APIView):
         except Exception:  # pragma: no cover
             logger.exception("FollowUpAction NOTIFICATION_SENT creation failed")
 
-        return Response({
-            "ok": ok,
-            "notification_id": notif_id,
-            "channel": channel,
-            "error": error,
-        }, status=drf_status.HTTP_200_OK if ok else drf_status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "ok": ok,
+                "notification_id": notif_id,
+                "channel": channel,
+                "error": error,
+            },
+            status=drf_status.HTTP_200_OK if ok else drf_status.HTTP_400_BAD_REQUEST,
+        )
 
 
 # ============================================================================
@@ -830,12 +846,14 @@ class FollowupAssignAgentView(APIView):
             performed_by=request.user,
         )
         case.refresh_from_db()
-        return Response({
-            "ok": True,
-            "assigned_agent_id": case.assigned_agent_id,
-            "assigned_district_id": case.assigned_district_id,
-            "assigned_team": case.assigned_team,
-        })
+        return Response(
+            {
+                "ok": True,
+                "assigned_agent_id": case.assigned_agent_id,
+                "assigned_district_id": case.assigned_district_id,
+                "assigned_team": case.assigned_team,
+            }
+        )
 
 
 # ============================================================================
@@ -863,12 +881,14 @@ class FollowupCloseView(APIView):
             performed_by=request.user,
         )
         case.refresh_from_db()
-        return Response({
-            "ok": True,
-            "status": case.status,
-            "closure_reason": case.closure_reason,
-            "actual_end_on": case.actual_end_on,
-        })
+        return Response(
+            {
+                "ok": True,
+                "status": case.status,
+                "closure_reason": case.closure_reason,
+                "actual_end_on": case.actual_end_on,
+            }
+        )
 
 
 # ============================================================================
@@ -897,11 +917,11 @@ class FollowupDocumentsView(APIView):
 
     def _list_documents(self, case):
         """Inspecte MEDIA_ROOT et renvoie les documents existants pour ce cas."""
-        from django.conf import settings
-        from django.core.files.storage import default_storage
         from pathlib import Path
 
-        from .models import FollowUpAction, FollowUpActionType
+        from django.conf import settings
+
+        from .models import FollowUpAction
 
         media_root = Path(getattr(settings, "MEDIA_ROOT", ""))
         media_url = getattr(settings, "MEDIA_URL", "/media/")
@@ -921,29 +941,31 @@ class FollowupDocumentsView(APIView):
                 except OSError:
                     continue
                 rel = str(p.relative_to(media_root))
-                results.append({
-                    "id": f"{doc_type}:{p.name}",
-                    "type": doc_type,
-                    "label": label,
-                    "filename": p.name,
-                    "url": media_url + rel,
-                    "generated_at": timezone.datetime.fromtimestamp(
-                        stat.st_mtime, tz=timezone.get_current_timezone(),
-                    ).isoformat(),
-                    "size_bytes": stat.st_size,
-                })
+                results.append(
+                    {
+                        "id": f"{doc_type}:{p.name}",
+                        "type": doc_type,
+                        "label": label,
+                        "filename": p.name,
+                        "url": media_url + rel,
+                        "generated_at": timezone.datetime.fromtimestamp(
+                            stat.st_mtime,
+                            tz=timezone.get_current_timezone(),
+                        ).isoformat(),
+                        "size_bytes": stat.st_size,
+                    }
+                )
 
         # 2) Documents prélèvements : on filtre via les sample_codes du cas
         sample_codes = list(
-            MedicalSample.objects
-            .filter(followup_case=case)
-            .values_list("sample_code", flat=True)
+            MedicalSample.objects.filter(followup_case=case).values_list("sample_code", flat=True)
         )
         # Filtrer la liste pré-construite pour ne garder que les samples du cas
         filtered = []
         for doc in results:
             if doc["type"] != "sample_report":
-                filtered.append(doc); continue
+                filtered.append(doc)
+                continue
             # Le filename est dérivé du sample_code (cf _sample_report_relative_path)
             stem = doc["filename"].removesuffix(".pdf")
             if any(stem == _sanitize_code(c) for c in sample_codes):
@@ -952,8 +974,7 @@ class FollowupDocumentsView(APIView):
 
         # 3) Enrichissement : générateur (lecture FollowUpAction metadata)
         action_qs = (
-            FollowUpAction.objects
-            .filter(
+            FollowUpAction.objects.filter(
                 followup_case=case,
                 metadata__kind="document_generated",
             )
@@ -968,10 +989,7 @@ class FollowupDocumentsView(APIView):
             actor = a.performed_by
             path_to_actor[p] = {
                 "actor_id": actor.id if actor else None,
-                "actor_name": (
-                    (actor.get_full_name() or actor.email)
-                    if actor else "Système"
-                ),
+                "actor_name": ((actor.get_full_name() or actor.email) if actor else "Système"),
             }
         for doc in results:
             actor = path_to_actor.get(doc["url"].replace(media_url, "", 1))
@@ -984,13 +1002,14 @@ class FollowupDocumentsView(APIView):
     def get(self, request, traveler_id):
         traveler, case = _resolve_case(traveler_id)
         _check_object_perm(request, self, case, CanViewFollowupDetail)
-        return Response({
-            "documents": self._list_documents(case),
-            "available_types": [
-                {"code": t, "label": label}
-                for t, _f, label in self._DOC_FOLDERS
-            ],
-        })
+        return Response(
+            {
+                "documents": self._list_documents(case),
+                "available_types": [
+                    {"code": t, "label": label} for t, _f, label in self._DOC_FOLDERS
+                ],
+            }
+        )
 
     @extend_schema(
         parameters=[
@@ -1005,10 +1024,8 @@ class FollowupDocumentsView(APIView):
         _check_object_perm(request, self, case, CanViewFollowupDetail)
 
         doc_type = (
-            request.query_params.get("type")
-            or request.data.get("type")
-            or ""
-        ).strip().lower()
+            (request.query_params.get("type") or request.data.get("type") or "").strip().lower()
+        )
 
         from .tasks import (
             generate_followup_completion_certificate,
@@ -1028,10 +1045,7 @@ class FollowupDocumentsView(APIView):
             args = (case.pk,)
             kwargs = {"agent_id": agent_id}
         elif doc_type in ("sample", "sample_report"):
-            sample_id = (
-                request.query_params.get("sample_id")
-                or request.data.get("sample_id")
-            )
+            sample_id = request.query_params.get("sample_id") or request.data.get("sample_id")
             if not sample_id:
                 return Response(
                     {"detail": "sample_id requis pour type=sample."},
@@ -1045,7 +1059,8 @@ class FollowupDocumentsView(APIView):
                     status=drf_status.HTTP_400_BAD_REQUEST,
                 )
             if not MedicalSample.objects.filter(
-                pk=sample_id, followup_case=case,
+                pk=sample_id,
+                followup_case=case,
             ).exists():
                 return Response(
                     {"detail": "Prélèvement introuvable pour ce cas."},
@@ -1060,10 +1075,11 @@ class FollowupDocumentsView(APIView):
             kwargs = {}
         else:
             return Response(
-                {"detail": (
-                    "type invalide. Attendu : "
-                    "sheet | orientation | sample | certificate."
-                )},
+                {
+                    "detail": (
+                        "type invalide. Attendu : " "sheet | orientation | sample | certificate."
+                    )
+                },
                 status=drf_status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1100,6 +1116,7 @@ class FollowupDocumentsView(APIView):
 def _sanitize_code(code: str) -> str:
     """Reproduit la sanitization de tasks._sample_report_relative_path."""
     import re as _re
+
     return _re.sub(r"[^A-Za-z0-9_-]", "_", code or "")
 
 
@@ -1131,14 +1148,12 @@ class FollowupAuditView(APIView):
         _check_object_perm(request, self, case, CanViewFollowupDetail)
 
         actions = list(
-            FollowUpAction.objects
-            .filter(followup_case=case)
+            FollowUpAction.objects.filter(followup_case=case)
             .select_related("performed_by")
             .order_by("-performed_at")[:200]
         )
         accesses = list(
-            DataAccessLog.objects
-            .filter(traveler=traveler)
+            DataAccessLog.objects.filter(traveler=traveler)
             .select_related("accessed_by")
             .order_by("-accessed_at")[:200]
         )
@@ -1146,50 +1161,57 @@ class FollowupAuditView(APIView):
         unified = []
         for a in actions:
             actor = a.performed_by
-            unified.append({
-                "type": "action",
-                "id": a.id,
-                "timestamp": a.performed_at,
-                "actor_id": actor.id if actor else None,
-                "actor_name": (actor.get_full_name() or actor.email) if actor else "Système",
-                "label": a.title,
-                "details": {
-                    "action_type": a.action_type,
-                    "status": a.status,
-                    "description": a.description,
-                    "metadata": a.metadata,
-                },
-            })
+            unified.append(
+                {
+                    "type": "action",
+                    "id": a.id,
+                    "timestamp": a.performed_at,
+                    "actor_id": actor.id if actor else None,
+                    "actor_name": (actor.get_full_name() or actor.email) if actor else "Système",
+                    "label": a.title,
+                    "details": {
+                        "action_type": a.action_type,
+                        "status": a.status,
+                        "description": a.description,
+                        "metadata": a.metadata,
+                    },
+                }
+            )
         for log in accesses:
             actor = log.accessed_by
-            unified.append({
-                "type": "access",
-                "id": log.id,
-                "timestamp": log.accessed_at,
-                "actor_id": actor.id if actor else None,
-                "actor_name": (actor.get_full_name() or actor.email) if actor else "Système",
-                "label": f"Accès {log.resource}",
-                "details": {
-                    "resource": log.resource,
-                    "reason": log.reason,
-                    "role": log.accessed_by_role,
-                    "ip_address": log.ip_address,
-                },
-            })
+            unified.append(
+                {
+                    "type": "access",
+                    "id": log.id,
+                    "timestamp": log.accessed_at,
+                    "actor_id": actor.id if actor else None,
+                    "actor_name": (actor.get_full_name() or actor.email) if actor else "Système",
+                    "label": f"Accès {log.resource}",
+                    "details": {
+                        "resource": log.resource,
+                        "reason": log.reason,
+                        "role": log.accessed_by_role,
+                        "ip_address": log.ip_address,
+                    },
+                }
+            )
         unified.sort(key=lambda x: x["timestamp"] or timezone.now(), reverse=True)
 
         # Trace cette consultation comme un access sensible
         log_data_access(
-            request=request, traveler=traveler,
+            request=request,
+            traveler=traveler,
             resource=DataAccessLog.Resource.FULL_PROFILE,
             reason=reason,
         )
 
-        return Response({
-            "results": unified,
-            "count": len(unified),
-            "reason": reason,
-        })
+        return Response(
+            {
+                "results": unified,
+                "count": len(unified),
+                "reason": reason,
+            }
+        )
 
 
 # ============================================================================
@@ -1215,32 +1237,31 @@ class FollowupLocationHistoryView(APIView):
         traveler, case = _resolve_case(traveler_id)
         _check_object_perm(request, self, case, CanViewLocationHistory)
 
-        pings = (
-            TravelerLocationPing.objects
-            .filter(traveler=traveler)
-            .order_by("-captured_at")[:50]
-        )
+        pings = TravelerLocationPing.objects.filter(traveler=traveler).order_by("-captured_at")[:50]
         log_data_access(
-            request=request, traveler=traveler,
+            request=request,
+            traveler=traveler,
             resource=DataAccessLog.Resource.LOCATION,
             reason=reason,
         )
 
-        return Response({
-            "results": [
-                {
-                    "id": p.id,
-                    "latitude": float(p.latitude),
-                    "longitude": float(p.longitude),
-                    "accuracy_m": p.accuracy_m,
-                    "event_type": p.event_type,
-                    "captured_at": p.captured_at,
-                    "consent_version": p.consent_version,
-                }
-                for p in pings
-            ],
-            "count": pings.count() if hasattr(pings, "count") else len(pings),
-        })
+        return Response(
+            {
+                "results": [
+                    {
+                        "id": p.id,
+                        "latitude": float(p.latitude),
+                        "longitude": float(p.longitude),
+                        "accuracy_m": p.accuracy_m,
+                        "event_type": p.event_type,
+                        "captured_at": p.captured_at,
+                        "consent_version": p.consent_version,
+                    }
+                    for p in pings
+                ],
+                "count": pings.count() if hasattr(pings, "count") else len(pings),
+            }
+        )
 
 
 # ============================================================================
@@ -1268,9 +1289,7 @@ class FollowupUnmaskPhoneView(APIView):
     )
     def post(self, request, traveler_id):
         reason = (
-            request.query_params.get("reason")
-            or (request.data or {}).get("reason")
-            or ""
+            request.query_params.get("reason") or (request.data or {}).get("reason") or ""
         ).strip()
         if not reason:
             return Response(
@@ -1291,11 +1310,13 @@ class FollowupUnmaskPhoneView(APIView):
         )
 
         phone_raw = traveler.phone_mobile or traveler.whatsapp_phone or ""
-        return Response({
-            "phone": phone_raw,
-            "accessed_at": (log.accessed_at if log else timezone.now()),
-            "reason": reason,
-        })
+        return Response(
+            {
+                "phone": phone_raw,
+                "accessed_at": (log.accessed_at if log else timezone.now()),
+                "reason": reason,
+            }
+        )
 
 
 # ============================================================================
@@ -1346,7 +1367,9 @@ class PublicFollowupStatusView(APIView):
             "expected_end_on": case.expected_end_on,
             "day_index": day_index,
             "total_days": total_days,
-            "current_classification_label": _public_classification_label(case.current_classification),
+            "current_classification_label": _public_classification_label(
+                case.current_classification
+            ),
             "last_checkin_date": last_check.check_date if last_check else None,
             "last_checkin_feeling": feeling,
             "days_completed": days_completed,
@@ -1382,7 +1405,8 @@ class PublicSymptomReportView(APIView):
 
         is_critical = False
         protocol = DiseaseFollowupProtocol.objects.filter(
-            disease=case.disease, is_active=True,
+            disease=case.disease,
+            is_active=True,
         ).first()
         if protocol:
             is_critical = v["symptom_code"] in set(protocol.critical_symptoms or [])
@@ -1430,7 +1454,11 @@ class PublicAssistanceView(APIView):
             action_type=FollowUpActionType.CONTACTED,
             title="Demande d'assistance voyageur",
             description=(v.get("reason") or "")[:2000],
-            status=FollowUpActionStatus.PLANNED if not is_emergency else FollowUpActionStatus.IN_PROGRESS,
+            status=(
+                FollowUpActionStatus.PLANNED
+                if not is_emergency
+                else FollowUpActionStatus.IN_PROGRESS
+            ),
             metadata={
                 "channel": "public_api",
                 "is_emergency": is_emergency,
@@ -1458,13 +1486,16 @@ class PublicAssistanceView(APIView):
             except Exception:  # pragma: no cover
                 logger.exception("trigger_alert failed for assistance request")
 
-        return Response({
-            "ok": True,
-            "action_id": action.id,
-            "alert_created": alert is not None,
-            "message": (
-                "Demande reçue. Une équipe sanitaire prendra contact rapidement."
-                if not is_emergency else
-                "Demande d'urgence transmise. Composez le 143 (Allô Santé) ou le 185 (SAMU)."
-            ),
-        }, status=drf_status.HTTP_201_CREATED)
+        return Response(
+            {
+                "ok": True,
+                "action_id": action.id,
+                "alert_created": alert is not None,
+                "message": (
+                    "Demande reçue. Une équipe sanitaire prendra contact rapidement."
+                    if not is_emergency
+                    else "Demande d'urgence transmise. Composez le 143 (Allô Santé) ou le 185 (SAMU)."
+                ),
+            },
+            status=drf_status.HTTP_201_CREATED,
+        )

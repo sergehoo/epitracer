@@ -11,6 +11,7 @@ dans /notifications et /rapports, mais jamais reçu. Causes :
 Aucun serveur SMTP réel : la connexion est remplacée par le backend mémoire
 ou par une connexion qui échoue.
 """
+
 from __future__ import annotations
 
 import re
@@ -74,9 +75,13 @@ def smtp(monkeypatch):
 
 def _email_notif(**kw) -> Notification:
     defaults = dict(
-        channel=Channel.EMAIL, recipient="dg@inhp.ci", subject="[EpiTrace] Rapport hebdomadaire",
+        channel=Channel.EMAIL,
+        recipient="dg@inhp.ci",
+        subject="[EpiTrace] Rapport hebdomadaire",
         body="<!DOCTYPE html><html><head><title>Rapport</title></head><body>OK</body></html>",
-        provider="smtp", status=NotificationStatus.QUEUED, message_type=MessageType.ADMIN_NOTICE,
+        provider="smtp",
+        status=NotificationStatus.QUEUED,
+        message_type=MessageType.ADMIN_NOTICE,
         metadata={"kind": "weekly_report"},
     )
     defaults.update(kw)
@@ -113,10 +118,14 @@ class TestNotificationEmail:
 
     def test_internal_mail_uses_internal_sender_and_traveler_mail_public(self, smtp):
         _execute_send(_email_notif())
-        _execute_send(_email_notif(
-            recipient="voyageur@example.com", message_type=MessageType.MANUAL_MESSAGE,
-            metadata={}, body="Bonjour",
-        ))
+        _execute_send(
+            _email_notif(
+                recipient="voyageur@example.com",
+                message_type=MessageType.MANUAL_MESSAGE,
+                metadata={},
+                body="Bonjour",
+            )
+        )
 
         assert smtp["profiles"] == ["internal", "public"]
         internal = SenderProfile.objects.get(code="internal").from_address
@@ -153,14 +162,18 @@ class TestWeeklyReportDelivery:
         )
 
         AutomatedReportRecipient.objects.create(
-            full_name="Directeur INHP", email="dg@inhp.ci",
-            preferred_channel=PreferredChannel.EMAIL, consent_date=date.today(),
+            full_name="Directeur INHP",
+            email="dg@inhp.ci",
+            preferred_channel=PreferredChannel.EMAIL,
+            consent_date=date.today(),
         )
         midnight = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
         start = midnight - timedelta(days=7)
         return GeneratedReport.objects.create(
-            report_type=ReportType.WEEKLY, period_start=start,
-            period_end=start + timedelta(days=6, hours=23, minutes=59), status=ReportStatus.READY,
+            report_type=ReportType.WEEKLY,
+            period_start=start,
+            period_end=start + timedelta(days=6, hours=23, minutes=59),
+            status=ReportStatus.READY,
             summary_data={},
         )
 
@@ -205,10 +218,9 @@ def test_worker_consumes_every_queue_used_by_tasks_and_beat():
     app.loader.import_default_modules()
     used = {settings.CELERY_TASK_DEFAULT_QUEUE}
     used |= {route["queue"] for route in settings.CELERY_TASK_ROUTES.values()}
-    used |= {
-        entry.get("options", {}).get("queue")
-        for entry in app.conf.beat_schedule.values()
-    } - {None}
+    used |= {entry.get("options", {}).get("queue") for entry in app.conf.beat_schedule.values()} - {
+        None
+    }
     used |= {t.queue for t in app.tasks.values() if getattr(t, "queue", None)}
 
     assert used <= worker_queues, f"Files sans worker : {sorted(used - worker_queues)}"

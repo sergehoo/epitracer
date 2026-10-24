@@ -12,6 +12,7 @@ Format cible :
     suivis. Risques : 4 critiques, 18 élevés, 62 modérés, 1161 normaux.
     7 alertes ouvertes, 5 résolues. Détails par email."
 """
+
 from __future__ import annotations
 
 MAX_SMS_LEN = 460
@@ -52,7 +53,9 @@ def render_weekly_sms(agg: dict, *, download_url: str = "", brand: str = BRAND) 
         f"Risques : {n_crit} critiques, {n_high} élevés, {n_mod} modérés, {n_norm} normaux. "
         f"Alertes : {n_open} ouvertes, {n_resolved} résolues. "
         "Détail complet par email."
-    ).replace(",", " ")  # séparateur milliers = espace (norme FR)
+    ).replace(
+        ",", " "
+    )  # séparateur milliers = espace (norme FR)
 
     if download_url:
         body_long += f" {download_url}"
@@ -87,6 +90,7 @@ def validate_no_pii(sms_body: str) -> tuple[bool, list[str]]:
     Retourne (is_clean, list_of_violations).
     """
     import re
+
     violations = []
     if re.search(r"\bTRV-[A-Z0-9]{5,}\b", sms_body):
         violations.append("Contient un identifiant voyageur TRV-XXX")

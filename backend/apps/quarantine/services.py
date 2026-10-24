@@ -1,4 +1,5 @@
 """Ouverture & gestion des quarantaines."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -11,7 +12,8 @@ from .models import QuarantineRecord, QuarantineStatus
 def open_quarantine_for_investigation(investigation, disease) -> QuarantineRecord:
     """Ouvre une quarantaine si aucune n'est déjà active pour ce voyageur+maladie."""
     return open_followup(
-        investigation.traveler, disease,
+        investigation.traveler,
+        disease,
         reference=getattr(investigation, "case_number", ""),
         duration_days=disease.quarantine_days or 21,
     )
@@ -32,7 +34,9 @@ def open_followup(traveler, disease, *, reference: str = "", duration_days: int 
     jamais dupliquée, seul le dossier de suivi est propre à chaque maladie.
     """
     existing = QuarantineRecord.objects.filter(
-        traveler=traveler, disease=disease, status=QuarantineStatus.ACTIVE,
+        traveler=traveler,
+        disease=disease,
+        status=QuarantineStatus.ACTIVE,
     ).first()
     if existing:
         return existing
@@ -51,7 +55,9 @@ def open_followup(traveler, disease, *, reference: str = "", duration_days: int 
     )
 
 
-def close_quarantine(qr: QuarantineRecord, status: str = QuarantineStatus.COMPLETED) -> QuarantineRecord:
+def close_quarantine(
+    qr: QuarantineRecord, status: str = QuarantineStatus.COMPLETED
+) -> QuarantineRecord:
     qr.status = status
     qr.actual_end_on = timezone.now().date()
     qr.save(update_fields=["status", "actual_end_on"])

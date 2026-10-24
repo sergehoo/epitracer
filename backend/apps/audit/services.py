@@ -1,4 +1,5 @@
 """Helper pour journaliser des évènements d'audit depuis le code métier."""
+
 from __future__ import annotations
 
 from typing import Any

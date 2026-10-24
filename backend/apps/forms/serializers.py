@@ -31,10 +31,24 @@ class FormFieldSerializer(serializers.ModelSerializer):
         model = FormField
         # `section` est nécessaire en write pour créer un champ via l'admin.
         fields = [
-            "id", "section", "code", "label", "help_text", "type", "is_required", "order",
-            "min_value", "max_value", "min_length", "max_length",
-            "regex", "default_value", "placeholder", "risk_weight",
-            "options", "conditions",
+            "id",
+            "section",
+            "code",
+            "label",
+            "help_text",
+            "type",
+            "is_required",
+            "order",
+            "min_value",
+            "max_value",
+            "min_length",
+            "max_length",
+            "regex",
+            "default_value",
+            "placeholder",
+            "risk_weight",
+            "options",
+            "conditions",
         ]
 
 
@@ -57,8 +71,18 @@ class DynamicFormSerializer(serializers.ModelSerializer):
     class Meta:
         model = DynamicForm
         fields = [
-            "id", "uuid", "disease", "disease_code", "code", "title", "description",
-            "version", "is_active", "is_default", "sections", "submissions_count",
+            "id",
+            "uuid",
+            "disease",
+            "disease_code",
+            "code",
+            "title",
+            "description",
+            "version",
+            "is_active",
+            "is_default",
+            "sections",
+            "submissions_count",
         ]
 
     def get_submissions_count(self, obj):
@@ -71,8 +95,14 @@ class FormAnswerSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormAnswer
         fields = [
-            "id", "field", "value_text", "value_number", "value_bool",
-            "value_date", "value_datetime", "value_options",
+            "id",
+            "field",
+            "value_text",
+            "value_number",
+            "value_bool",
+            "value_date",
+            "value_datetime",
+            "value_options",
         ]
 
 
@@ -82,8 +112,16 @@ class FormSubmissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormSubmission
         fields = [
-            "id", "uuid", "form", "traveler", "submitted_by", "submitted_at",
-            "is_complete", "raw_payload", "indexed_data", "answers",
+            "id",
+            "uuid",
+            "form",
+            "traveler",
+            "submitted_by",
+            "submitted_at",
+            "is_complete",
+            "raw_payload",
+            "indexed_data",
+            "answers",
         ]
         read_only_fields = ["submitted_by"]
 

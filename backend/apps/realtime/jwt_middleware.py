@@ -8,6 +8,7 @@ Le `AuthMiddlewareStack` de Channels ne gère que les sessions cookies.
 Pour les WS sans cookies (cas frontend SPA séparé), on lit `?token=`
 et on valide via `rest_framework_simplejwt`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,12 +26,11 @@ def _get_user_from_jwt(raw_token: str):
     """Décode un JWT SimpleJWT et retourne l'utilisateur ou AnonymousUser."""
     try:
         from rest_framework_simplejwt.tokens import UntypedToken
-        from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-        from django.contrib.auth import get_user_model
 
         UntypedToken(raw_token)  # valide signature + expiration
         # Le payload contient user_id
         from rest_framework_simplejwt.authentication import JWTAuthentication
+
         validated = JWTAuthentication().get_validated_token(raw_token)
         user = JWTAuthentication().get_user(validated)
         return user

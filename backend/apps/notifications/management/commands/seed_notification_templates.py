@@ -8,10 +8,10 @@ Ton :
 Usage :
     python manage.py seed_notification_templates
 """
+
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand
-
 
 TEMPLATES = [
     {
@@ -166,6 +166,8 @@ class Command(BaseCommand):
                 self.stdout.write(f"  ~ {spec['code']}")
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS(
-            f"=== Templates seedés : {n_created} créés, {n_updated} mis à jour ==="
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"=== Templates seedés : {n_created} créés, {n_updated} mis à jour ==="
+            )
+        )

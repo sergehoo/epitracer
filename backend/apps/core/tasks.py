@@ -9,6 +9,7 @@ Pour le moment :
 
 Le scheduling effectif est défini dans `config/celery.py`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,9 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(
-    bind=True, name="core.run_postgres_backup",
+    bind=True,
+    name="core.run_postgres_backup",
     autoretry_for=(subprocess.CalledProcessError,),
-    retry_backoff=True, max_retries=2,
+    retry_backoff=True,
+    max_retries=2,
     time_limit=60 * 30,  # 30 minutes max (kill au-delà)
 )
 def run_postgres_backup(self) -> dict:
@@ -42,8 +45,9 @@ def run_postgres_backup(self) -> dict:
     cette tâche se contente d'appeler `pg_dump` via le client psycopg
     en se connectant directement à la DB. Pas besoin de Docker socket.
     """
-    from django.conf import settings
     import gzip
+
+    from django.conf import settings
 
     backup_dir = Path(os.environ.get("BACKUP_DIR", "/backups"))
     backup_dir.mkdir(parents=True, exist_ok=True)
@@ -69,14 +73,16 @@ def run_postgres_backup(self) -> dict:
         # pg_dump → stdout, on pipe dans gzip
         proc = subprocess.Popen(
             ["pg_dump", "--no-owner", "--no-acl"],
-            env=pg_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=pg_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         with gzip.open(dump_path, "wb", compresslevel=9) as gz:
             assert proc.stdout is not None
             for chunk in iter(lambda: proc.stdout.read(64 * 1024), b""):
                 gz.write(chunk)
         rc = proc.wait()
-        stderr = (proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else "")
+        stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
         if rc != 0:
             dump_path.unlink(missing_ok=True)
             raise subprocess.CalledProcessError(rc, "pg_dump", stderr=stderr)

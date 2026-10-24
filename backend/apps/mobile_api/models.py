@@ -9,6 +9,7 @@ Couvre ce qui n'existe pas déjà côté backend :
 Les pass sanitaires et le suivi 21j réutilisent les modèles existants
 (apps.health_pass, apps.companion).
 """
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -29,6 +30,7 @@ class DevicePlatform(models.TextChoices):
 
 class MobileDevice(BaseModel):
     """Représente un appareil mobile enregistré pour les notifications push."""
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -36,10 +38,14 @@ class MobileDevice(BaseModel):
     )
     fcm_token = models.CharField(_("token FCM"), max_length=512, unique=True)
     platform = models.CharField(
-        max_length=20, choices=DevicePlatform.choices, default=DevicePlatform.ANDROID,
+        max_length=20,
+        choices=DevicePlatform.choices,
+        default=DevicePlatform.ANDROID,
     )
     device_id = models.CharField(
-        _("identifiant appareil"), max_length=200, blank=True,
+        _("identifiant appareil"),
+        max_length=200,
+        blank=True,
         help_text=_("ANDROID_ID ou identifierForVendor — non identifiant utilisateur"),
     )
     app_version = models.CharField(max_length=40, blank=True)
@@ -66,13 +72,16 @@ class MobileDevice(BaseModel):
 # ---------------------------------------------------------------------------
 class Vaccination(BaseModel):
     """Entrée du carnet de vaccination personnel."""
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="vaccinations",
     )
     disease_code = models.CharField(
-        _("code maladie"), max_length=40, db_index=True,
+        _("code maladie"),
+        max_length=40,
+        db_index=True,
         help_text=_("ex: YELLOW_FEVER, COVID19, EBOLA, MPOX, HEPATITIS_B"),
     )
     disease_name = models.CharField(_("nom maladie"), max_length=120)
@@ -87,7 +96,8 @@ class Vaccination(BaseModel):
     country_code = models.CharField(_("pays"), max_length=2, default="CI")
     certificate_pdf = models.FileField(
         upload_to="vaccinations/certificates/%Y/%m/",
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     qr_payload = models.TextField(blank=True, help_text=_("Payload QR officiel si fourni"))
     verified = models.BooleanField(
@@ -121,6 +131,7 @@ class AssistanceRequestStatus(models.TextChoices):
 
 class AssistanceRequest(BaseModel):
     """Le voyageur demande qu'un agent INHP le rappelle."""
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -133,12 +144,17 @@ class AssistanceRequest(BaseModel):
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
     status = models.CharField(
-        max_length=20, choices=AssistanceRequestStatus.choices,
-        default=AssistanceRequestStatus.PENDING, db_index=True,
+        max_length=20,
+        choices=AssistanceRequestStatus.choices,
+        default=AssistanceRequestStatus.PENDING,
+        db_index=True,
     )
     assigned_to = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name="assistance_assignments",
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assistance_assignments",
     )
     closed_at = models.DateTimeField(null=True, blank=True)
     closed_note = models.TextField(blank=True)
@@ -165,6 +181,7 @@ class LocationShare(BaseModel):
     Distinct de TravelerLocationPing (apps.companion) qui est dans le cadre
     du suivi PWA voyageur. Ici, c'est un partage manuel depuis l'app mobile.
     """
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -174,12 +191,17 @@ class LocationShare(BaseModel):
     longitude = models.FloatField()
     accuracy_m = models.FloatField(null=True, blank=True)
     context = models.CharField(
-        _("contexte"), max_length=60, blank=True,
+        _("contexte"),
+        max_length=60,
+        blank=True,
         help_text=_("ex: 'assistance_request', 'checkin', 'manual'"),
     )
     shared_with_agent = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name="shared_locations_received",
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shared_locations_received",
     )
 
     class Meta:

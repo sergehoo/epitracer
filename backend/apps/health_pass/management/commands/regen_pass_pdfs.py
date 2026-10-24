@@ -11,8 +11,10 @@ Usage :
     python manage.py regen_pass_pdfs --dry-run     # comptage uniquement
     python manage.py regen_pass_pdfs --public-id TRV-XXX  # un seul pass
 """
+
 from __future__ import annotations
 
+import json
 import logging
 
 from django.core.files.base import ContentFile
@@ -21,7 +23,6 @@ from django.core.management.base import BaseCommand
 from apps.health_pass.crypto import PREFIX, _b64u_encode, sign_payload
 from apps.health_pass.models import HealthPass
 from apps.health_pass.services import render_pass_pdf
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +62,13 @@ class Command(BaseCommand):
     help = "Régénère les PDF des Health Pass (utile après modification du template)."
 
     def add_arguments(self, parser):
-        parser.add_argument("--all", action="store_true",
-                            help="Inclure aussi les pass révoqués / expirés.")
+        parser.add_argument(
+            "--all", action="store_true", help="Inclure aussi les pass révoqués / expirés."
+        )
         parser.add_argument("--dry-run", action="store_true")
-        parser.add_argument("--public-id", default=None,
-                            help="Ne régénérer que le pass d'un voyageur donné.")
+        parser.add_argument(
+            "--public-id", default=None, help="Ne régénérer que le pass d'un voyageur donné."
+        )
 
     def handle(self, *args, **opts):
         qs = HealthPass.objects.all().select_related("traveler", "disease")
@@ -96,6 +99,4 @@ class Command(BaseCommand):
                 logger.exception("Échec régénération pour %s", hp.pass_number)
                 self.stdout.write(self.style.WARNING(f"  ✗ {hp.pass_number}: {exc}"))
 
-        self.stdout.write(self.style.SUCCESS(
-            f"Terminé : {ok} régénérés, {ko} échecs sur {total}."
-        ))
+        self.stdout.write(self.style.SUCCESS(f"Terminé : {ok} régénérés, {ko} échecs sur {total}."))

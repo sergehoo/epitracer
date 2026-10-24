@@ -5,10 +5,11 @@ géolocalisation obligatoire (Option 3) et aux signaux automatiques entre
 modèles `medical`. Les services d'orchestration plus larges
 (création de cas, transitions de classification…) arrivent en 9B.
 """
+
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
-from typing import Optional
 
 from django.utils import timezone
 
@@ -23,8 +24,6 @@ from .models import (
     FollowUpActionType,
 )
 
-import logging
-
 logger = logging.getLogger("epidemitracker.medical")
 
 
@@ -33,7 +32,7 @@ logger = logging.getLogger("epidemitracker.medical")
 # ---------------------------------------------------------------------------
 
 
-def _get_protocol(disease) -> Optional[DiseaseFollowupProtocol]:
+def _get_protocol(disease) -> DiseaseFollowupProtocol | None:
     """Renvoie le protocole actif pour cette maladie, ou None.
 
     On filtre sur `is_active=True` pour ne pas se baser sur un protocole
@@ -42,11 +41,7 @@ def _get_protocol(disease) -> Optional[DiseaseFollowupProtocol]:
     """
     if not disease:
         return None
-    return (
-        DiseaseFollowupProtocol.objects
-        .filter(disease=disease, is_active=True)
-        .first()
-    )
+    return DiseaseFollowupProtocol.objects.filter(disease=disease, is_active=True).first()
 
 
 def _has_recent_alert(case, within_hours: int) -> bool:
@@ -105,8 +100,7 @@ def check_geolocation_compliance(case) -> bool:
     last_ping = None
     if has_consent:
         last_ping = (
-            TravelerLocationPing.objects
-            .filter(traveler=case.traveler, captured_at__gte=threshold)
+            TravelerLocationPing.objects.filter(traveler=case.traveler, captured_at__gte=threshold)
             .order_by("-captured_at")
             .first()
         )

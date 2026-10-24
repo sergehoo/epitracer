@@ -18,18 +18,22 @@ Fournisseur suspendu (crédit Orange CI épuisé) : les envois non urgents passe
 en `on_hold` sans appel réseau, jusqu'à la reprise contrôlée par un admin
 (services.availability.resume_provider).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Tuple
 
 from celery import shared_task
 from django.db import transaction
 from django.utils import timezone
 
 from .models import (
-    Channel, MessageType, Notification, NotificationStatus,
-    NotificationTemplate, Provider,
+    Channel,
+    MessageType,
+    Notification,
+    NotificationStatus,
+    NotificationTemplate,
+    Provider,
 )
 from .services import availability
 from .services.audit import Actions, log_action
@@ -41,7 +45,7 @@ logger = logging.getLogger("epidemitracker.notifications.tasks")
 # ---------------------------------------------------------------------------
 # Implementation centrale d'envoi (utilisable en sync ou async)
 # ---------------------------------------------------------------------------
-def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
+def _execute_send(notif: Notification) -> tuple[bool, str, str]:
     """Exécute l'envoi via le bon provider et met à jour la Notification.
 
     Retourne (ok, provider_message_id, error_message). Une notification dont
@@ -65,22 +69,28 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
         if notif.channel == Channel.SMS and is_ci_number and notif.provider != Provider.ORANGE_CI:
             # Politique nationale : un +225 ne bascule JAMAIS vers Twilio ou
             # un autre fournisseur, même si Orange CI est indisponible.
-            ok, msg_id, err = False, "", (
-                "Numéro ivoirien : envoi hors Orange CI refusé (politique nationale)."
+            ok, msg_id, err = (
+                False,
+                "",
+                ("Numéro ivoirien : envoi hors Orange CI refusé (politique nationale)."),
             )
             error_code = ErrorCode.NATIONAL_POLICY
         elif (
-            notif.channel == Channel.SMS and not is_ci_number
+            notif.channel == Channel.SMS
+            and not is_ci_number
             and notif.provider == Provider.ORANGE_CI
         ):
             # Orange CI est réservé aux +225 : jamais de numéro étranger.
-            ok, msg_id, err = False, "", (
-                "Orange CI est réservé aux numéros ivoiriens (+225) (politique nationale)."
+            ok, msg_id, err = (
+                False,
+                "",
+                ("Orange CI est réservé aux numéros ivoiriens (+225) (politique nationale)."),
             )
             error_code = ErrorCode.NATIONAL_POLICY
         elif notif.channel == Channel.SMS:
             if notif.provider == Provider.ORANGE_CI:
                 from .services.sms_orange_ci import send_sms as send_orange
+
                 # callback_data = notif.id → permet au webhook Orange CI de
                 # mapper le delivery report sur la bonne notification.
                 res = send_orange(
@@ -92,17 +102,20 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
                 error_code = res.error_code
             elif notif.provider == Provider.TWILIO:
                 from .services.sms_twilio import send_sms as send_tw
+
                 res = send_tw(notif.normalized_phone, notif.body)
                 ok, msg_id, err = res.ok, res.provider_message_id, res.error
             else:
                 # Fallback / stub
                 from .providers import send_sms as send_legacy
+
                 res = send_legacy(notif.normalized_phone, notif.body)
                 ok, msg_id, err = res.ok, res.provider_id, res.error
 
         elif notif.channel == Channel.WHATSAPP:
             # Phase C : provider WhatsApp pluggable (Twilio ou Meta).
             from .services.whatsapp_base import get_active_provider
+
             wp = get_active_provider()
 
             # Si la notif référence un template, on tente d'abord le template.
@@ -117,15 +130,11 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
                 # Note : NotificationTemplate n'a pas (encore) de champ metadata
                 # → on lit aussi variables_schema en fallback s'il sert de map.
                 if wp.name == "twilio":
-                    template_code = (
-                        meta.get("twilio_content_sid")
-                        or notif.template.code
-                    )
+                    template_code = meta.get("twilio_content_sid") or notif.template.code
                 elif wp.name == "meta_whatsapp":
-                    template_code = (
-                        meta.get("meta_template_name")
-                        or notif.template.code.lower().replace("-", "_")
-                    )
+                    template_code = meta.get(
+                        "meta_template_name"
+                    ) or notif.template.code.lower().replace("-", "_")
                 else:
                     template_code = notif.template.code
             # Variables ordonnées pour les templates (les valeurs sont
@@ -134,9 +143,7 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
             if notif.template_id and notif.template and notif.context:
                 schema = notif.template.variables_schema or {}
                 ordered_keys = list(schema.keys()) if schema else list(notif.context.keys())
-                variables = [
-                    str(notif.context.get(k, "")) for k in ordered_keys
-                ]
+                variables = [str(notif.context.get(k, "")) for k in ordered_keys]
 
             # Stratégie :
             # 1) Si on a un template_code → tenter d'abord send_template
@@ -144,7 +151,9 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
             res = None
             if template_code:
                 res = wp.send_template(
-                    notif.normalized_phone, template_code, variables,
+                    notif.normalized_phone,
+                    template_code,
+                    variables,
                     language=(notif.context or {}).get("_lang", "fr"),
                 )
                 if not res.ok and "session" not in (res.error or "").lower():
@@ -167,10 +176,14 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
             # routeur ne faisait que mettre l'email en file et la notification
             # passait « Envoyée » même si le serveur d'envoi le refusait.
             from .providers import send_email as send_em
+
             meta = notif.metadata or {}
             res = send_em(
-                notif.recipient, notif.subject, notif.body,
-                email_type=_email_type_for(notif), deliver_now=True,
+                notif.recipient,
+                notif.subject,
+                notif.body,
+                email_type=_email_type_for(notif),
+                deliver_now=True,
                 email_log_id=meta.get("email_log_id"),
             )
             ok, msg_id, err = res.ok, res.provider_id, res.error
@@ -204,6 +217,7 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
                 # 1) FCM mobile (Flutter Mon Pass Sanitaire)
                 try:
                     from apps.companion.tasks import _send_fcm_to_traveler
+
                     fcm_sent, fcm_failed = _send_fcm_to_traveler(
                         notif.traveler,
                         title=title,
@@ -216,6 +230,7 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
                 # 2) VAPID Web Push (PWA voyageur — /voyageur/suivi, /pass, etc.)
                 try:
                     from apps.companion.push import push_notify
+
                     vapid_result = push_notify(
                         traveler=notif.traveler,
                         title=title,
@@ -224,7 +239,7 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
                         tag=f"epitrace-msg-{notif.id}",
                         notification_type="admin_message",
                         extra=extra_data,
-                        fallback_to_sms=False,      # pas de fallback SMS ici
+                        fallback_to_sms=False,  # pas de fallback SMS ici
                         fallback_to_whatsapp=False,
                     )
                 except Exception as exc:  # noqa: BLE001
@@ -236,13 +251,12 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
 
                 ok = (fcm_sent + vapid_sent) > 0
                 msg_id = f"fcm:{fcm_sent}/{fcm_failed} vapid:{vapid_sent}/{vapid_failed}"
-                err = "" if ok else (
-                    "Aucun appareil actif (FCM mobile ni PWA web) sur ce voyageur"
-                )
+                err = "" if ok else ("Aucun appareil actif (FCM mobile ni PWA web) sur ce voyageur")
             else:
                 # Fallback historique : envoi direct au token si fourni
                 # dans notif.recipient (utilisé par d'anciens callers).
                 from .providers import send_push as send_pu
+
                 res = send_pu(notif.recipient, notif.subject, notif.body)
                 ok, msg_id, err = res.ok, res.provider_id, res.error
 
@@ -251,24 +265,28 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
             # et on envoie à tous ses chats liés (téléphone + tablette). Le
             # recipient de la Notification peut aussi être directement un chat_id
             # (cas des envois techniques hors flow voyageur).
-            from .services.telegram import send_message as tg_send
             from .models import TelegramSubscription
+            from .services.telegram import send_message as tg_send
 
             chat_ids: list[str] = []
             if notif.traveler_id:
                 chat_ids = list(
-                    TelegramSubscription.objects
-                    .filter(traveler_id=notif.traveler_id, is_active=True)
-                    .values_list("chat_id", flat=True)
+                    TelegramSubscription.objects.filter(
+                        traveler_id=notif.traveler_id, is_active=True
+                    ).values_list("chat_id", flat=True)
                 )
             if not chat_ids and notif.recipient:
                 # Cas dev / envoi direct par chat_id
                 chat_ids = [notif.recipient.strip()]
 
             if not chat_ids:
-                ok, msg_id, err = False, "", (
-                    "Aucun abonnement Telegram actif pour ce voyageur "
-                    "(le voyageur doit d'abord scanner le lien /voyageur/suivi)."
+                ok, msg_id, err = (
+                    False,
+                    "",
+                    (
+                        "Aucun abonnement Telegram actif pour ce voyageur "
+                        "(le voyageur doit d'abord scanner le lien /voyageur/suivi)."
+                    ),
                 )
             else:
                 sent = 0
@@ -308,17 +326,27 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
             # Crédit épuisé : on suspend le fournisseur (alerte admin unique)
             # et on garde le message en attente, sans retry ni bascule.
             availability.suspend_provider(
-                notif.provider, reason_code=notif.error_code, detail=err,
+                notif.provider,
+                reason_code=notif.error_code,
+                detail=err,
             )
             notif.status = NotificationStatus.ON_HOLD
         else:
             notif.status = NotificationStatus.FAILED
             notif.failed_at = timezone.now()
 
-    notif.save(update_fields=[
-        "status", "sent_at", "failed_at", "error_message", "error_code",
-        "provider_message_id", "retry_count", "updated_at",
-    ])
+    notif.save(
+        update_fields=[
+            "status",
+            "sent_at",
+            "failed_at",
+            "error_message",
+            "error_code",
+            "provider_message_id",
+            "retry_count",
+            "updated_at",
+        ]
+    )
 
     _sync_report_delivery(notif)
 
@@ -332,8 +360,10 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
         notification=notif,
         action=action,
         metadata={
-            "retry_count": notif.retry_count, "provider": notif.provider,
-            "ok": ok, "error_code": notif.error_code,
+            "retry_count": notif.retry_count,
+            "provider": notif.provider,
+            "ok": ok,
+            "error_code": notif.error_code,
         },
     )
     return ok, msg_id, err
@@ -388,7 +418,7 @@ def _sync_report_delivery(notif: Notification) -> None:
             log.status = DeliveryStatus.FAILED
             from datetime import timedelta
 
-            log.next_retry_at = now + timedelta(minutes=5 * (2 ** log.retry_count))
+            log.next_retry_at = now + timedelta(minutes=5 * (2**log.retry_count))
         log.save(update_fields=["status", "error_message", "next_retry_at", "updated_at"])
 
 
@@ -399,8 +429,8 @@ def _sync_report_delivery(notif: Notification) -> None:
     name="notifications.send_notification_task",
     bind=True,
     autoretry_for=(Exception,),
-    retry_backoff=30,         # 30s, 60s, 120s
-    retry_backoff_max=600,    # plafond 10 minutes
+    retry_backoff=30,  # 30s, 60s, 120s
+    retry_backoff_max=600,  # plafond 10 minutes
     retry_jitter=True,
     max_retries=3,
 )
@@ -416,18 +446,23 @@ def send_notification_task(self, notification_id: int) -> dict:
     with transaction.atomic():
         notif = (
             Notification.objects.select_for_update(skip_locked=True)
-            .filter(pk=notification_id).first()
+            .filter(pk=notification_id)
+            .first()
         )
         if notif is None:
             if Notification.objects.filter(pk=notification_id).exists():
-                logger.info("send_notification_task: notification %s déjà en cours d'envoi", notification_id)
+                logger.info(
+                    "send_notification_task: notification %s déjà en cours d'envoi", notification_id
+                )
                 return {"ok": True, "skipped": True, "status": "locked"}
             logger.error("send_notification_task: notification %s introuvable", notification_id)
             return {"ok": False, "error": "Notification not found"}
 
         if notif.status in (
-            NotificationStatus.SENT, NotificationStatus.DELIVERED,
-            NotificationStatus.CANCELLED, NotificationStatus.READ,
+            NotificationStatus.SENT,
+            NotificationStatus.DELIVERED,
+            NotificationStatus.CANCELLED,
+            NotificationStatus.READ,
             NotificationStatus.ON_HOLD,
         ):
             return {"ok": True, "skipped": True, "status": notif.status}
@@ -451,8 +486,11 @@ def send_notification_task(self, notification_id: int) -> dict:
         # pour que le statut FAILED + retry_count soient bien persistés.
         raise RuntimeError(f"Envoi échoué (retry {notif.retry_count}/{notif.max_retries}) : {err}")
     return {
-        "ok": ok, "provider_message_id": msg_id, "error": err,
-        "status": notif.status, "error_code": notif.error_code,
+        "ok": ok,
+        "provider_message_id": msg_id,
+        "error": err,
+        "status": notif.status,
+        "error_code": notif.error_code,
     }
 
 
@@ -463,6 +501,7 @@ def send_notification_task(self, notification_id: int) -> dict:
 def retry_failed_notifications(max_age_hours: int = 24, batch: int = 100) -> dict:
     """Relance les notifications FAILED des dernières heures avec retry_count < max."""
     from datetime import timedelta
+
     cutoff = timezone.now() - timedelta(hours=max_age_hours)
     qs = (
         Notification.objects.filter(
@@ -487,6 +526,7 @@ def retry_failed_notifications(max_age_hours: int = 24, batch: int = 100) -> dic
 
 def models_F(field: str):  # pragma: no cover — petit helper local
     from django.db.models import F
+
     return F(field)
 
 

@@ -7,10 +7,10 @@ from .views import (
     EpidemiTokenObtainPairView,
     LoginEventListView,
     MeView,
+    MFADisableView,
     MfaEmailDisableView,
     MfaEmailEnableView,
     MfaEmailResendView,
-    MFADisableView,
     MFASetupView,
     MFAVerifyView,
     OrganizationViewSet,
@@ -42,8 +42,12 @@ urlpatterns = [
     path("mfa/email/disable/", MfaEmailDisableView.as_view(), name="mfa_email_disable"),
     path("mfa/email/resend/", MfaEmailResendView.as_view(), name="mfa_email_resend"),
     # Reset password public
-    path("password-reset/request/", PasswordResetRequestView.as_view(), name="password_reset_request"),
-    path("password-reset/confirm/", PasswordResetConfirmView.as_view(), name="password_reset_confirm"),
+    path(
+        "password-reset/request/", PasswordResetRequestView.as_view(), name="password_reset_request"
+    ),
+    path(
+        "password-reset/confirm/", PasswordResetConfirmView.as_view(), name="password_reset_confirm"
+    ),
     path("login-events/", LoginEventListView.as_view(), name="login_events"),
     path("", include(router.urls)),
 ]

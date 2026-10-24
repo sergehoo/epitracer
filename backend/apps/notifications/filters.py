@@ -1,4 +1,5 @@
 """Filtres de l'historique des notifications (/api/v1/notifications/)."""
+
 from __future__ import annotations
 
 import django_filters
@@ -9,8 +10,10 @@ from .models import Notification, NotificationStatus
 # Regroupements utilisés par les indicateurs et les filtres rapides.
 SENT_STATUSES = [NotificationStatus.SENT, NotificationStatus.DELIVERED, NotificationStatus.READ]
 WAITING_STATUSES = [
-    NotificationStatus.DRAFT, NotificationStatus.PENDING,
-    NotificationStatus.QUEUED, NotificationStatus.ON_HOLD,
+    NotificationStatus.DRAFT,
+    NotificationStatus.PENDING,
+    NotificationStatus.QUEUED,
+    NotificationStatus.ON_HOLD,
 ]
 STATUS_GROUPS: dict[str, list[str]] = {
     "sent_all": SENT_STATUSES,
@@ -35,8 +38,13 @@ class NotificationFilter(django_filters.FilterSet):
     class Meta:
         model = Notification
         fields = [
-            "channel", "provider", "message_type", "direction",
-            "traveler", "template", "error_code",
+            "channel",
+            "provider",
+            "message_type",
+            "direction",
+            "traveler",
+            "template",
+            "error_code",
         ]
 
     def filter_status(self, queryset, name, value):

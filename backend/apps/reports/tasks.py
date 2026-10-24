@@ -14,11 +14,11 @@ Toutes les tâches sont *idempotentes* : re-jouer 2x n'a aucun effet de bord
 double (voir invariant #2 de l'intent-compile). Verrou basé sur la contrainte
 UNIQUE (report_type, period_start, period_end) de GeneratedReport.
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 from celery import shared_task
 from django.core.files.base import ContentFile
@@ -26,9 +26,12 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .metrics import (
-    REPORT_DELIVERY_FAILED_TOTAL, REPORT_EMAIL_SENT_TOTAL,
-    REPORT_GENERATION_DURATION, REPORT_SMS_SENT_TOTAL,
-    REPORTS_FAILED_TOTAL, REPORTS_GENERATED_TOTAL,
+    REPORT_DELIVERY_FAILED_TOTAL,
+    REPORT_EMAIL_SENT_TOTAL,
+    REPORT_GENERATION_DURATION,
+    REPORT_SMS_SENT_TOTAL,
+    REPORTS_FAILED_TOTAL,
+    REPORTS_GENERATED_TOTAL,
     refresh_recipients_gauge,
 )
 
@@ -47,9 +50,12 @@ logger = logging.getLogger("epidemitracker.reports.tasks")
     retry_kwargs={"max_retries": 3},
     queue="reports",
 )
-def generate_weekly_report(self, period_start_iso: Optional[str] = None,
-                           period_end_iso: Optional[str] = None,
-                           triggered_by_user_id: Optional[int] = None) -> int:
+def generate_weekly_report(
+    self,
+    period_start_iso: str | None = None,
+    period_end_iso: str | None = None,
+    triggered_by_user_id: int | None = None,
+) -> int:
     """Génère le rapport de la semaine.
 
     Args:
@@ -61,10 +67,13 @@ def generate_weekly_report(self, period_start_iso: Optional[str] = None,
         pk du GeneratedReport créé/existant (idempotent).
     """
     from apps.reports.models import (
-        GeneratedReport, ReportStatus, ReportType,
+        GeneratedReport,
+        ReportStatus,
+        ReportType,
     )
     from apps.reports.services.weekly_aggregator import (
-        aggregate_weekly, previous_week_period,
+        aggregate_weekly,
+        previous_week_period,
     )
     from apps.reports.services.weekly_excel import render_weekly_xlsx
     from apps.reports.services.weekly_pdf import render_weekly_pdf
@@ -86,7 +95,8 @@ def generate_weekly_report(self, period_start_iso: Optional[str] = None,
     if existing and existing.status == ReportStatus.READY:
         logger.info(
             "[reports] rapport hebdo déjà généré et READY — skip (id=%s code=%s)",
-            existing.pk, existing.report_code,
+            existing.pk,
+            existing.report_code,
         )
         return existing.pk
 
@@ -110,7 +120,8 @@ def generate_weekly_report(self, period_start_iso: Optional[str] = None,
                 # Race condition : un autre worker a créé le même report en //
                 report = GeneratedReport.objects.get(
                     report_type=ReportType.WEEKLY,
-                    period_start=period_start, period_end=period_end,
+                    period_start=period_start,
+                    period_end=period_end,
                 )
                 if report.status == ReportStatus.READY:
                     return report.pk
@@ -137,8 +148,7 @@ def generate_weekly_report(self, period_start_iso: Optional[str] = None,
                 save=False,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("[reports] Excel/CSV render failed for %s: %s",
-                           report.report_code, exc)
+            logger.warning("[reports] Excel/CSV render failed for %s: %s", report.report_code, exc)
 
         report.summary_data = agg
         report.status = ReportStatus.READY
@@ -146,9 +156,12 @@ def generate_weekly_report(self, period_start_iso: Optional[str] = None,
         report.duration_ms = agg.get("meta", {}).get("generation_ms", 0)
         report.save()
 
-        logger.info("[reports] rapport %s généré (%s ms, %s KB PDF)",
-                    report.report_code, report.duration_ms,
-                    round(len(pdf_bytes) / 1024))
+        logger.info(
+            "[reports] rapport %s généré (%s ms, %s KB PDF)",
+            report.report_code,
+            report.duration_ms,
+            round(len(pdf_bytes) / 1024),
+        )
 
         # Métriques Prometheus
         REPORTS_GENERATED_TOTAL.labels(report_type=str(report.report_type)).inc()
@@ -157,8 +170,7 @@ def generate_weekly_report(self, period_start_iso: Optional[str] = None,
         ).observe(report.duration_ms / 1000.0)
 
     except Exception as exc:
-        logger.exception("[reports] génération %s a échoué : %s",
-                         report.report_code, exc)
+        logger.exception("[reports] génération %s a échoué : %s", report.report_code, exc)
         report.status = ReportStatus.FAILED
         report.error_message = str(exc)[:1000]
         report.save(update_fields=["status", "error_message", "updated_at"])
@@ -183,8 +195,13 @@ def send_weekly_report_email(self, report_id: int) -> dict:
     """Envoie le rapport par email à tous les destinataires actifs."""
     from apps.notifications.services.dispatcher import enqueue_notification
     from apps.reports.models import (
-        AutomatedReportRecipient, DeliveryChannel, DeliveryStatus,
-        GeneratedReport, PreferredChannel, ReportDeliveryLog, ReportStatus,
+        AutomatedReportRecipient,
+        DeliveryChannel,
+        DeliveryStatus,
+        GeneratedReport,
+        PreferredChannel,
+        ReportDeliveryLog,
+        ReportStatus,
     )
     from apps.reports.services.weekly_email import render_weekly_email_html
 
@@ -200,7 +217,8 @@ def send_weekly_report_email(self, report_id: int) -> dict:
 
     # Filtre par report_type autorisé (si allowed_report_types non vide)
     recipients = [
-        r for r in recipients
+        r
+        for r in recipients
         if not r.allowed_report_types or report.report_type in r.allowed_report_types
     ]
 
@@ -244,24 +262,29 @@ def send_weekly_report_email(self, report_id: int) -> dict:
                 failed += 1
                 REPORT_DELIVERY_FAILED_TOTAL.labels(
                     report_type=str(report.report_type),
-                    channel="email", reason="provider_error",
+                    channel="email",
+                    reason="provider_error",
                 ).inc()
         except Exception as exc:  # noqa: BLE001
             log.status = DeliveryStatus.FAILED
             log.error_message = str(exc)[:500]
             failed += 1
-            logger.exception("[reports] email failed for %s: %s",
-                             log.destination_masked, exc)
+            logger.exception("[reports] email failed for %s: %s", log.destination_masked, exc)
             REPORT_DELIVERY_FAILED_TOTAL.labels(
                 report_type=str(report.report_type),
-                channel="email", reason=type(exc).__name__,
+                channel="email",
+                reason=type(exc).__name__,
             ).inc()
         log.save()
 
-    logger.info("[reports] email %s : %s sent / %s failed",
-                report.report_code, sent, failed)
-    return {"ok": True, "sent": sent, "failed": failed, "queued": queued,
-            "report_code": report.report_code}
+    logger.info("[reports] email %s : %s sent / %s failed", report.report_code, sent, failed)
+    return {
+        "ok": True,
+        "sent": sent,
+        "failed": failed,
+        "queued": queued,
+        "report_code": report.report_code,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -279,11 +302,17 @@ def send_weekly_report_sms(self, report_id: int) -> dict:
     """
     from apps.notifications.services.dispatcher import enqueue_notification
     from apps.reports.models import (
-        AutomatedReportRecipient, DeliveryChannel, DeliveryStatus,
-        GeneratedReport, PreferredChannel, ReportDeliveryLog, ReportStatus,
+        AutomatedReportRecipient,
+        DeliveryChannel,
+        DeliveryStatus,
+        GeneratedReport,
+        PreferredChannel,
+        ReportDeliveryLog,
+        ReportStatus,
     )
     from apps.reports.services.weekly_sms import (
-        render_weekly_sms, validate_no_pii,
+        render_weekly_sms,
+        validate_no_pii,
     )
 
     report = GeneratedReport.objects.get(pk=report_id)
@@ -297,10 +326,10 @@ def send_weekly_report_sms(self, report_id: int) -> dict:
     if not is_clean:
         logger.error(
             "[reports] SMS refusé — PII détectée dans %s : %s",
-            report.report_code, violations,
+            report.report_code,
+            violations,
         )
-        return {"ok": False, "reason": "PII detected in SMS body",
-                "violations": violations}
+        return {"ok": False, "reason": "PII detected in SMS body", "violations": violations}
 
     recipients = AutomatedReportRecipient.objects.filter(
         is_active=True,
@@ -309,7 +338,8 @@ def send_weekly_report_sms(self, report_id: int) -> dict:
     ).exclude(phone_number="")
 
     recipients = [
-        r for r in recipients
+        r
+        for r in recipients
         if not r.allowed_report_types or report.report_type in r.allowed_report_types
     ]
 
@@ -344,7 +374,8 @@ def send_weekly_report_sms(self, report_id: int) -> dict:
                 failed += 1
                 REPORT_DELIVERY_FAILED_TOTAL.labels(
                     report_type=str(report.report_type),
-                    channel="sms", reason="provider_error",
+                    channel="sms",
+                    reason="provider_error",
                 ).inc()
         except Exception as exc:  # noqa: BLE001
             log.status = DeliveryStatus.FAILED
@@ -352,14 +383,19 @@ def send_weekly_report_sms(self, report_id: int) -> dict:
             failed += 1
             REPORT_DELIVERY_FAILED_TOTAL.labels(
                 report_type=str(report.report_type),
-                channel="sms", reason=type(exc).__name__,
+                channel="sms",
+                reason=type(exc).__name__,
             ).inc()
         log.save()
 
-    logger.info("[reports] SMS %s : %s sent / %s failed",
-                report.report_code, sent, failed)
-    return {"ok": True, "sent": sent, "failed": failed, "queued": queued,
-            "report_code": report.report_code}
+    logger.info("[reports] SMS %s : %s sent / %s failed", report.report_code, sent, failed)
+    return {
+        "ok": True,
+        "sent": sent,
+        "failed": failed,
+        "queued": queued,
+        "report_code": report.report_code,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -379,7 +415,8 @@ def dispatch_weekly_report(self) -> dict:
 
     # Sanity check : y a-t-il un schedule actif pour WEEKLY ?
     schedule = AutomatedReportSchedule.objects.filter(
-        report_type=ReportType.WEEKLY, is_active=True,
+        report_type=ReportType.WEEKLY,
+        is_active=True,
     ).first()
     if not schedule:
         logger.info("[reports] aucun schedule WEEKLY actif — skip dispatch")
@@ -422,7 +459,9 @@ def retry_failed_weekly_reports() -> dict:
     """
     from apps.notifications.services.dispatcher import enqueue_notification
     from apps.reports.models import (
-        DeliveryChannel, DeliveryStatus, ReportDeliveryLog,
+        DeliveryChannel,
+        DeliveryStatus,
+        ReportDeliveryLog,
     )
     from apps.reports.services.weekly_email import render_weekly_email_html
     from apps.reports.services.weekly_sms import render_weekly_sms
@@ -450,16 +489,22 @@ def retry_failed_weekly_reports() -> dict:
                 body = render_weekly_email_html(report.summary_data)
                 subject = f"[EpiTrace] Rapport — {report.report_code} (relance)"
                 result = enqueue_notification(
-                    channel="email", recipient=rec.email,
-                    body=body, subject=subject,
-                    traveler=None, message_type="admin_notice",
+                    channel="email",
+                    recipient=rec.email,
+                    body=body,
+                    subject=subject,
+                    traveler=None,
+                    message_type="admin_notice",
                     metadata={"kind": "weekly_report", "report_id": report.pk},
                 )
             elif log.channel == DeliveryChannel.SMS:
                 body = render_weekly_sms(report.summary_data)
                 result = enqueue_notification(
-                    channel="sms", recipient=rec.phone_number,
-                    body=body, traveler=None, message_type="admin_notice",
+                    channel="sms",
+                    recipient=rec.phone_number,
+                    body=body,
+                    traveler=None,
+                    message_type="admin_notice",
                     metadata={"kind": "weekly_report", "report_id": report.pk},
                 )
             else:
@@ -479,14 +524,13 @@ def retry_failed_weekly_reports() -> dict:
                     permanently_failed += 1
                 else:
                     # Backoff exponentiel
-                    delay_min = 5 * (2 ** log.retry_count)
+                    delay_min = 5 * (2**log.retry_count)
                     log.next_retry_at = now + timedelta(minutes=delay_min)
             log.save()
         except Exception as exc:  # noqa: BLE001
             logger.exception("[reports] retry failed: %s", exc)
 
-    logger.info("[reports] retry : %s retried, %s permanent failure",
-                retried, permanently_failed)
+    logger.info("[reports] retry : %s retried, %s permanent failure", retried, permanently_failed)
     return {"retried": retried, "permanently_failed": permanently_failed}
 
 
@@ -520,10 +564,13 @@ def cleanup_expired_report_files(days_to_keep: int = 90) -> dict:
     # Rafraîchit la Gauge des destinataires (une fois par semaine suffit)
     refresh_recipients_gauge()
 
-    logger.info("[reports] cleanup : %s PDFs + %s Excel supprimés (>%s j)",
-                freed_pdf, freed_excel, days_to_keep)
-    return {"freed_pdf": freed_pdf, "freed_excel": freed_excel,
-            "days_to_keep": days_to_keep}
+    logger.info(
+        "[reports] cleanup : %s PDFs + %s Excel supprimés (>%s j)",
+        freed_pdf,
+        freed_excel,
+        days_to_keep,
+    )
+    return {"freed_pdf": freed_pdf, "freed_excel": freed_excel, "days_to_keep": days_to_keep}
 
 
 # ---------------------------------------------------------------------------
@@ -548,7 +595,9 @@ def _apply_dispatch_result(log, result) -> str:
     log.notification_id = result.notification_id
     notif = Notification.objects.filter(pk=result.notification_id).first()
     if notif is not None and notif.status in (
-        NotificationStatus.SENT, NotificationStatus.DELIVERED, NotificationStatus.READ,
+        NotificationStatus.SENT,
+        NotificationStatus.DELIVERED,
+        NotificationStatus.READ,
     ):
         log.status = DeliveryStatus.SENT
         log.sent_at = notif.sent_at or timezone.now()

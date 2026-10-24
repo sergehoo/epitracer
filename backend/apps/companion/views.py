@@ -10,9 +10,10 @@ Convention de rate-limiting (configurée dans settings) :
 - companion_consent :   30/heure
 - companion_push :      30/heure
 """
+
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -38,7 +39,6 @@ from .serializers import (
     PushSubscribeSerializer,
     PushUnsubscribeSerializer,
 )
-
 
 # ----------------------------------------------------------------------------
 # Helpers
@@ -98,13 +98,16 @@ class ConsentView(APIView):
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             revocation_reason=ser.validated_data.get("revocation_reason", ""),
         )
-        return Response({
-            "consent_id": consent.uuid,
-            "scope": consent.scope,
-            "granted": consent.granted,
-            "granted_at": consent.granted_at,
-            "consent_version": consent.consent_version,
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "consent_id": consent.uuid,
+                "scope": consent.scope,
+                "granted": consent.granted,
+                "granted_at": consent.granted_at,
+                "consent_version": consent.consent_version,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # ----------------------------------------------------------------------------
@@ -131,6 +134,7 @@ class CheckinView(APIView):
         # 1. Créer le DailyCheck dans apps.quarantine (logique métier déjà
         #    existante : day_index, alert_raised, etc.)
         from apps.quarantine.models import DailyCheck
+
         quarantine = _get_active_quarantine(traveler)
         symptoms = data.get("symptoms") or {}
         has_symptoms = any(bool(v) for v in symptoms.values())
@@ -148,8 +152,11 @@ class CheckinView(APIView):
                     "check_date": date.today(),
                     "temperature_celsius": data.get("temperature_celsius"),
                     "has_symptoms": has_symptoms,
-                    "symptoms_details": {**symptoms, "feeling": feeling,
-                                          "needs_contact": bool(data.get("needs_contact"))},
+                    "symptoms_details": {
+                        **symptoms,
+                        "feeling": feeling,
+                        "needs_contact": bool(data.get("needs_contact")),
+                    },
                     "is_self_reported": True,
                     "notes": data.get("notes", ""),
                 },
@@ -159,9 +166,13 @@ class CheckinView(APIView):
         location = None
         if data.get("latitude") is not None and data.get("longitude") is not None:
             event_type = (
-                LocationEventType.ASSISTANCE_REQUEST if needs_assistance
-                else LocationEventType.SYMPTOM_REPORT if has_symptoms
-                else LocationEventType.DAILY_CHECKIN
+                LocationEventType.ASSISTANCE_REQUEST
+                if needs_assistance
+                else (
+                    LocationEventType.SYMPTOM_REPORT
+                    if has_symptoms
+                    else LocationEventType.DAILY_CHECKIN
+                )
             )
             location = services.record_location_ping(
                 traveler=traveler,
@@ -200,15 +211,20 @@ class CheckinView(APIView):
                 "pas à nous prévenir si votre état évolue."
             )
         else:
-            message = "Merci d'avoir pris ce moment pour nous donner de vos nouvelles. Bonne journée !"
+            message = (
+                "Merci d'avoir pris ce moment pour nous donner de vos nouvelles. Bonne journée !"
+            )
 
-        return Response({
-            "ok": True,
-            "message": message,
-            "alert_created": bool(alert),
-            "alert_severity": alert.severity if alert else None,
-            "location_recorded": bool(location),
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "ok": True,
+                "message": message,
+                "alert_created": bool(alert),
+                "alert_severity": alert.severity if alert else None,
+                "location_recorded": bool(location),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # ----------------------------------------------------------------------------
@@ -245,16 +261,22 @@ class LocationPingView(APIView):
         )
         if ping is None:
             return Response(
-                {"ok": False, "reason": "consent_required",
-                 "message": "Veuillez d'abord autoriser le partage de votre position dans la PWA."},
+                {
+                    "ok": False,
+                    "reason": "consent_required",
+                    "message": "Veuillez d'abord autoriser le partage de votre position dans la PWA.",
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
-        return Response({
-            "ok": True,
-            "ping_id": ping.uuid,
-            "captured_at": ping.captured_at,
-            "message": "Position partagée — merci. L'INHP pourra vous orienter plus rapidement si besoin.",
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "ok": True,
+                "ping_id": ping.uuid,
+                "captured_at": ping.captured_at,
+                "message": "Position partagée — merci. L'INHP pourra vous orienter plus rapidement si besoin.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # ----------------------------------------------------------------------------
@@ -293,23 +315,27 @@ class FollowUpStatusView(APIView):
                 details = check_obj.symptoms_details or {}
                 # Liste des symptômes effectivement déclarés
                 positive_symptoms = [
-                    k for k, v in details.items()
+                    k
+                    for k, v in details.items()
                     if v is True and k not in ("feeling", "needs_contact")
                 ]
-                all_checks.append({
-                    "check_date": check_obj.check_date,
-                    "day_index": check_obj.day_index,
-                    "has_symptoms": check_obj.has_symptoms,
-                    "temperature_celsius": (
-                        float(check_obj.temperature_celsius)
-                        if check_obj.temperature_celsius is not None else None
-                    ),
-                    "feeling": details.get("feeling"),
-                    "needs_contact": bool(details.get("needs_contact")),
-                    "positive_symptoms": positive_symptoms,
-                    "notes": check_obj.notes,
-                    "alert_raised": bool(check_obj.alert_raised),
-                })
+                all_checks.append(
+                    {
+                        "check_date": check_obj.check_date,
+                        "day_index": check_obj.day_index,
+                        "has_symptoms": check_obj.has_symptoms,
+                        "temperature_celsius": (
+                            float(check_obj.temperature_celsius)
+                            if check_obj.temperature_celsius is not None
+                            else None
+                        ),
+                        "feeling": details.get("feeling"),
+                        "needs_contact": bool(details.get("needs_contact")),
+                        "positive_symptoms": positive_symptoms,
+                        "notes": check_obj.notes,
+                        "alert_raised": bool(check_obj.alert_raised),
+                    }
+                )
             if all_checks:
                 last_check = all_checks[0]
             day_index = max(0, (date.today() - quarantine.started_on).days)
@@ -319,30 +345,33 @@ class FollowUpStatusView(APIView):
         for scope_value, _label in ConsentScope.choices:
             consents[scope_value] = services.has_consent(traveler, scope_value)
 
-        return Response({
-            "traveler": {
-                "public_id": traveler.public_id,
-                "full_name": traveler.full_name,
-            },
-            "quarantine": {
-                "active": bool(quarantine),
-                "started_on": quarantine.started_on if quarantine else None,
-                "expected_end_on": quarantine.expected_end_on if quarantine else None,
-                "day_index": day_index,
-                "total_days": (
-                    (quarantine.expected_end_on - quarantine.started_on).days
-                    if quarantine else None
-                ),
-            },
-            "last_check": last_check,
-            "checks": all_checks,
-            "consents": consents,
-            "assistance": {
-                "samu": "185",
-                "allo_sante": "143",
-                "secours": "101",
-            },
-        })
+        return Response(
+            {
+                "traveler": {
+                    "public_id": traveler.public_id,
+                    "full_name": traveler.full_name,
+                },
+                "quarantine": {
+                    "active": bool(quarantine),
+                    "started_on": quarantine.started_on if quarantine else None,
+                    "expected_end_on": quarantine.expected_end_on if quarantine else None,
+                    "day_index": day_index,
+                    "total_days": (
+                        (quarantine.expected_end_on - quarantine.started_on).days
+                        if quarantine
+                        else None
+                    ),
+                },
+                "last_check": last_check,
+                "checks": all_checks,
+                "consents": consents,
+                "assistance": {
+                    "samu": "185",
+                    "allo_sante": "143",
+                    "secours": "101",
+                },
+            }
+        )
 
 
 # ----------------------------------------------------------------------------
@@ -377,27 +406,33 @@ class MyDataSummaryView(APIView):
         for scope_value, scope_label in ConsentScope.choices:
             qs = traveler.privacy_consents.filter(scope=scope_value).order_by("-granted_at")
             last = qs.first()
-            consents_summary.append({
-                "scope": scope_value,
-                "label": str(scope_label),
-                "granted": services.has_consent(traveler, scope_value),
-                "last_decision_at": last.granted_at if last else None,
-                "history_count": qs.count(),
-            })
+            consents_summary.append(
+                {
+                    "scope": scope_value,
+                    "label": str(scope_label),
+                    "granted": services.has_consent(traveler, scope_value),
+                    "last_decision_at": last.granted_at if last else None,
+                    "history_count": qs.count(),
+                }
+            )
 
-        return Response({
-            "traveler": {
-                "public_id": traveler.public_id,
-                "full_name": traveler.full_name,
-                "registered_at": traveler.created_at,
-            },
-            "consents": consents_summary,
-            "counters": {
-                "checkins": sum(q.daily_checks.count() for q in traveler.quarantines.all()),
-                "location_pings": traveler.location_pings.count(),
-                "push_subscriptions_active": traveler.push_subscriptions.filter(is_active=True).count(),
-            },
-        })
+        return Response(
+            {
+                "traveler": {
+                    "public_id": traveler.public_id,
+                    "full_name": traveler.full_name,
+                    "registered_at": traveler.created_at,
+                },
+                "consents": consents_summary,
+                "counters": {
+                    "checkins": sum(q.daily_checks.count() for q in traveler.quarantines.all()),
+                    "location_pings": traveler.location_pings.count(),
+                    "push_subscriptions_active": traveler.push_subscriptions.filter(
+                        is_active=True
+                    ).count(),
+                },
+            }
+        )
 
 
 class MyDataExportView(APIView):
@@ -415,8 +450,10 @@ class MyDataExportView(APIView):
     throttle_scope = "companion_consent"
 
     def get(self, request):
-        from django.http import HttpResponse
         import json
+
+        from django.http import HttpResponse
+
         public_id = request.query_params.get("public_id", "")
         if not public_id:
             return Response({"detail": "public_id requis."}, status=400)
@@ -437,7 +474,8 @@ class MyDataExportView(APIView):
             },
             "consents": [
                 {
-                    "scope": c.scope, "granted": c.granted,
+                    "scope": c.scope,
+                    "granted": c.granted,
                     "version": c.consent_version,
                     "granted_at": c.granted_at.isoformat() if c.granted_at else None,
                     "revoked_at": c.revoked_at.isoformat() if c.revoked_at else None,
@@ -447,9 +485,11 @@ class MyDataExportView(APIView):
             ],
             "location_pings": [
                 {
-                    "latitude": float(p.latitude), "longitude": float(p.longitude),
+                    "latitude": float(p.latitude),
+                    "longitude": float(p.longitude),
                     "accuracy_m": p.accuracy_m,
-                    "event_type": p.event_type, "source": p.source,
+                    "event_type": p.event_type,
+                    "source": p.source,
                     "captured_at": p.captured_at.isoformat(),
                     "consent_version": p.consent_version,
                 }
@@ -461,7 +501,8 @@ class MyDataExportView(APIView):
                     "day_index": check.day_index,
                     "temperature_celsius": (
                         float(check.temperature_celsius)
-                        if check.temperature_celsius is not None else None
+                        if check.temperature_celsius is not None
+                        else None
                     ),
                     "has_symptoms": check.has_symptoms,
                     "symptoms_details": check.symptoms_details,
@@ -472,7 +513,8 @@ class MyDataExportView(APIView):
             ],
             "push_subscriptions": [
                 {
-                    "device_type": s.device_type, "locale": s.locale,
+                    "device_type": s.device_type,
+                    "locale": s.locale,
                     "is_active": s.is_active,
                     "created_at": s.created_at.isoformat(),
                     "last_used_at": s.last_used_at.isoformat() if s.last_used_at else None,
@@ -502,6 +544,7 @@ class PushPublicKeyView(APIView):
     def get(self, request):
         try:
             from .push import get_vapid_public_key_b64url
+
             key = get_vapid_public_key_b64url()
         except RuntimeError as exc:
             return Response({"detail": str(exc)}, status=503)
@@ -531,8 +574,11 @@ class PushSubscribeView(APIView):
         # Vérification du consentement push
         if not services.has_consent(traveler, ConsentScope.PUSH_NOTIFICATIONS):
             return Response(
-                {"ok": False, "reason": "consent_required",
-                 "message": "Veuillez d'abord accepter de recevoir les rappels sanitaires."},
+                {
+                    "ok": False,
+                    "reason": "consent_required",
+                    "message": "Veuillez d'abord accepter de recevoir les rappels sanitaires.",
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -546,18 +592,23 @@ class PushSubscribeView(APIView):
                 "traveler": traveler,
                 "p256dh": keys["p256dh"],
                 "auth": keys["auth"],
-                "user_agent": (data.get("user_agent") or request.META.get("HTTP_USER_AGENT", ""))[:300],
+                "user_agent": (data.get("user_agent") or request.META.get("HTTP_USER_AGENT", ""))[
+                    :300
+                ],
                 "device_type": device,
                 "locale": data.get("locale", "")[:10],
                 "is_active": True,
                 "failure_count": 0,
             },
         )
-        return Response({
-            "ok": True,
-            "subscription_id": obj.uuid,
-            "is_active": obj.is_active,
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "ok": True,
+                "subscription_id": obj.uuid,
+                "is_active": obj.is_active,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class PushUnsubscribeView(APIView):
@@ -576,6 +627,8 @@ class PushUnsubscribeView(APIView):
         data = ser.validated_data
         traveler = _get_traveler(data["public_id"])
         n = PushSubscription.objects.filter(
-            traveler=traveler, endpoint=data["endpoint"], is_active=True,
+            traveler=traveler,
+            endpoint=data["endpoint"],
+            is_active=True,
         ).update(is_active=False, updated_at=timezone.now())
         return Response({"ok": True, "unsubscribed": n})

@@ -1,8 +1,11 @@
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    DynamicFormViewSet, FieldOptionViewSet, FormFieldViewSet,
-    FormSectionViewSet, FormSubmissionViewSet,
+    DynamicFormViewSet,
+    FieldOptionViewSet,
+    FormFieldViewSet,
+    FormSectionViewSet,
+    FormSubmissionViewSet,
 )
 
 router = DefaultRouter()

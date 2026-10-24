@@ -6,6 +6,7 @@ Distincts des vues d'export à la volée dans views.py :
   - GeneratedReport          : rapport archivé (PDF + Excel + résumé JSON)
   - ReportDeliveryLog        : traçabilité de chaque tentative d'envoi
 """
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -64,6 +65,7 @@ class Frequency(models.TextChoices):
 
 class Weekday(models.IntegerChoices):
     """ISO 8601 — 1 = lundi ... 7 = dimanche."""
+
     MONDAY = 1, _("Lundi")
     TUESDAY = 2, _("Mardi")
     WEDNESDAY = 3, _("Mercredi")
@@ -84,15 +86,20 @@ class AutomatedReportSchedule(BaseModel):
     Le Super Admin peut modifier le jour/heure/timezone depuis l'admin ou
     l'endpoint DRF ; la tâche Celery Beat lit ce modèle au boot.
     """
+
     name = models.CharField(
         max_length=120,
         help_text=_("Étiquette humaine, ex. 'Rapport hebdomadaire INHP'."),
     )
     report_type = models.CharField(
-        max_length=20, choices=ReportType.choices, default=ReportType.WEEKLY,
+        max_length=20,
+        choices=ReportType.choices,
+        default=ReportType.WEEKLY,
     )
     frequency = models.CharField(
-        max_length=20, choices=Frequency.choices, default=Frequency.WEEKLY,
+        max_length=20,
+        choices=Frequency.choices,
+        default=Frequency.WEEKLY,
     )
     weekday = models.IntegerField(
         choices=Weekday.choices,
@@ -112,8 +119,11 @@ class AutomatedReportSchedule(BaseModel):
     include_pdf = models.BooleanField(default=True)
     include_excel = models.BooleanField(default=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="report_schedules_created",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="report_schedules_created",
     )
 
     class Meta:
@@ -142,11 +152,14 @@ class AutomatedReportRecipient(BaseModel):
     Le consentement (`consent_date`) est OBLIGATOIRE (AC-08) : l'envoi sera
     refusé si null. Historique conservé même après désactivation pour audit.
     """
+
     full_name = models.CharField(max_length=180)
     job_title = models.CharField(max_length=120, blank=True)
     organization = models.CharField(max_length=180, blank=True)
     phone_number = models.CharField(
-        max_length=32, blank=True, db_index=True,
+        max_length=32,
+        blank=True,
+        db_index=True,
         help_text=_("Format international E.164 (+225XXXXXXXXXX)."),
     )
     email = models.EmailField(blank=True, db_index=True)
@@ -156,33 +169,43 @@ class AutomatedReportRecipient(BaseModel):
         default=PreferredChannel.EMAIL,
     )
     language = models.CharField(
-        max_length=8, default="fr",
+        max_length=8,
+        default="fr",
         help_text=_("Code ISO 639-1 (fr, en, ...)."),
     )
     district = models.ForeignKey(
-        "geo.HealthZone", null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="report_recipients",
+        "geo.HealthZone",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="report_recipients",
         help_text=_("District sanitaire ou périmètre géographique optionnel."),
     )
     allowed_report_types = models.JSONField(
-        default=list, blank=True,
+        default=list,
+        blank=True,
         help_text=_("Liste des report_type autorisés — vide = tous."),
     )
     is_active = models.BooleanField(default=True, db_index=True)
 
     # ── Consentement (obligatoire — AC-08) ───────────────────────────────
     consent_date = models.DateField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text=_("Date de recueil du consentement écrit du destinataire."),
     )
     consent_evidence = models.CharField(
-        max_length=500, blank=True,
+        max_length=500,
+        blank=True,
         help_text=_("Référence du document ou URL de preuve du consentement."),
     )
 
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="report_recipients_created",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="report_recipients_created",
     )
 
     class Meta:
@@ -200,25 +223,25 @@ class AutomatedReportRecipient(BaseModel):
         """Validations métier appliquées AVANT save (via admin/DRF)."""
         super().clean()
         needs_phone = self.preferred_channel in (
-            PreferredChannel.SMS, PreferredChannel.BOTH,
+            PreferredChannel.SMS,
+            PreferredChannel.BOTH,
         )
         needs_email = self.preferred_channel in (
-            PreferredChannel.EMAIL, PreferredChannel.BOTH,
+            PreferredChannel.EMAIL,
+            PreferredChannel.BOTH,
         )
         if needs_phone and not self.phone_number:
-            raise ValidationError(
-                {"phone_number": _("Requis pour le canal SMS.")}
-            )
+            raise ValidationError({"phone_number": _("Requis pour le canal SMS.")})
         if needs_email and not self.email:
-            raise ValidationError(
-                {"email": _("Requis pour le canal Email.")}
-            )
+            raise ValidationError({"email": _("Requis pour le canal Email.")})
         if self.is_active and not self.consent_date:
             raise ValidationError(
-                {"consent_date": _(
-                    "Le consentement est obligatoire pour activer un destinataire "
-                    "(conformité RGPD nationale INHP)."
-                )}
+                {
+                    "consent_date": _(
+                        "Le consentement est obligatoire pour activer un destinataire "
+                        "(conformité RGPD nationale INHP)."
+                    )
+                }
             )
 
     @property
@@ -239,36 +262,50 @@ class GeneratedReport(BaseModel):
       - WEEKLY : RAP-HEBDO-2026-S24
       - MONTHLY : RAP-MENS-2026-06
     """
+
     report_code = models.CharField(
-        max_length=32, unique=True, db_index=True,
+        max_length=32,
+        unique=True,
+        db_index=True,
         help_text=_("Ex. RAP-HEBDO-2026-S24 — généré au save si vide."),
     )
     report_type = models.CharField(
-        max_length=20, choices=ReportType.choices,
+        max_length=20,
+        choices=ReportType.choices,
     )
     period_start = models.DateTimeField(db_index=True)
     period_end = models.DateTimeField(db_index=True)
     status = models.CharField(
-        max_length=20, choices=ReportStatus.choices, default=ReportStatus.PENDING,
+        max_length=20,
+        choices=ReportStatus.choices,
+        default=ReportStatus.PENDING,
     )
     # summary_data contient TOUTES les KPI agrégées (compteurs, breakdowns).
     # Aucun PII individuel — que des agrégats (AC-01).
     summary_data = models.JSONField(default=dict, blank=True)
     pdf_file = models.FileField(
-        upload_to="reports/weekly/%Y/%m/", null=True, blank=True,
+        upload_to="reports/weekly/%Y/%m/",
+        null=True,
+        blank=True,
     )
     excel_file = models.FileField(
-        upload_to="reports/weekly/%Y/%m/", null=True, blank=True,
+        upload_to="reports/weekly/%Y/%m/",
+        null=True,
+        blank=True,
     )
     generated_at = models.DateTimeField(null=True, blank=True)
     generated_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="reports_generated",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reports_generated",
         help_text=_("Null si généré par la tâche Celery Beat."),
     )
     error_message = models.TextField(blank=True)
     duration_ms = models.PositiveIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text=_("Durée de génération en millisecondes (monitoring)."),
     )
 
@@ -322,8 +359,11 @@ class ReportDeliveryLog(BaseModel):
     Retry safe : `retry_count` borné à 3 (voir tasks.retry_failed_weekly_reports).
     Adresse toujours masquée dans les logs (voir masked_destination).
     """
+
     report = models.ForeignKey(
-        GeneratedReport, on_delete=models.CASCADE, related_name="deliveries",
+        GeneratedReport,
+        on_delete=models.CASCADE,
+        related_name="deliveries",
     )
     recipient = models.ForeignKey(
         AutomatedReportRecipient,
@@ -332,7 +372,8 @@ class ReportDeliveryLog(BaseModel):
     )
     channel = models.CharField(max_length=20, choices=DeliveryChannel.choices)
     provider = models.CharField(
-        max_length=40, blank=True,
+        max_length=40,
+        blank=True,
         help_text=_("Ex. orange_ci, twilio, smtp, ses."),
     )
     destination_masked = models.CharField(
@@ -346,7 +387,8 @@ class ReportDeliveryLog(BaseModel):
         db_index=True,
     )
     notification_id = models.PositiveBigIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text=_("FK logique vers apps.notifications.Notification."),
     )
     sent_at = models.DateTimeField(null=True, blank=True)

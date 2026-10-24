@@ -16,21 +16,25 @@ Architecture :
     Le worker Celery prend ensuite la main et appelle _execute_email_send()
     qui crée la connexion SMTP correcte (PUBLIC=SES, INTERNAL=SMTP local).
 """
+
 from __future__ import annotations
 
 import logging
 import secrets
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Optional
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.utils import timezone
 
 from ..email_models import (
-    EmailLog, EmailStatus, EmailTemplate, EmailType,
-    PasswordResetToken, SenderProfile,
+    EmailLog,
+    EmailStatus,
+    EmailTemplate,
+    EmailType,
+    PasswordResetToken,
+    SenderProfile,
     get_sender_profile_code_for_type,
 )
 
@@ -41,16 +45,18 @@ logger = logging.getLogger("epidemitracker.email_router")
 # RÉSULTATS
 # ===========================================================================
 
+
 @dataclass
 class EmailResult:
     ok: bool
-    log_id: Optional[int] = None
+    log_id: int | None = None
     error: str = ""
 
 
 @dataclass
 class _SafeFormatDict(dict):
     """dict qui retourne `{key}` au lieu de raise KeyError."""
+
     def __missing__(self, key):  # type: ignore[override]
         return "{" + key + "}"
 
@@ -58,6 +64,7 @@ class _SafeFormatDict(dict):
 # ===========================================================================
 # RÉSOLUTION PROFIL EXPÉDITEUR
 # ===========================================================================
+
 
 def get_sender_profile(email_type: str) -> SenderProfile:
     """Retourne le SenderProfile DB correspondant au type d'email.
@@ -79,9 +86,7 @@ def _get_smtp_settings(profile_code: str) -> dict:
     profiles = getattr(settings, "EMAIL_PROFILES", {})
     cfg = profiles.get(profile_code)
     if not cfg:
-        raise RuntimeError(
-            f"EMAIL_PROFILES['{profile_code}'] non configuré dans settings."
-        )
+        raise RuntimeError(f"EMAIL_PROFILES['{profile_code}'] non configuré dans settings.")
     return cfg
 
 
@@ -109,6 +114,7 @@ def _build_connection(profile_code: str):
 # RENDU TEMPLATE
 # ===========================================================================
 
+
 def _render(text: str, context: dict) -> str:
     """Substitue `{nom_variable}` par sa valeur dans `context`.
 
@@ -121,6 +127,7 @@ def _render(text: str, context: dict) -> str:
         return text or ""
     ctx = context or {}
     import re
+
     return re.sub(
         r"\{(\w+)\}",
         lambda m: str(ctx.get(m.group(1), m.group(0))),
@@ -128,7 +135,7 @@ def _render(text: str, context: dict) -> str:
     )
 
 
-def render_template(template_code: str, context: Optional[dict] = None):
+def render_template(template_code: str, context: dict | None = None):
     """Charge un EmailTemplate par code et rend ses champs.
 
     Retourne (subject, body_html, body_text, template_obj).
@@ -149,6 +156,7 @@ def render_template(template_code: str, context: Optional[dict] = None):
 def _html_to_text(html: str) -> str:
     """Fallback texte naïf à partir du HTML — strip des balises."""
     import re
+
     if not html:
         return ""
     text = re.sub(r"<br\s*/?>", "\n", html)
@@ -161,19 +169,20 @@ def _html_to_text(html: str) -> str:
 # CRÉATION + LOG
 # ===========================================================================
 
+
 def send_email_by_type(
     email_type: str,
     recipient: str,
     *,
-    context: Optional[dict] = None,
-    template_code: Optional[str] = None,
-    subject: Optional[str] = None,
-    body_html: Optional[str] = None,
-    body_text: Optional[str] = None,
+    context: dict | None = None,
+    template_code: str | None = None,
+    subject: str | None = None,
+    body_html: str | None = None,
+    body_text: str | None = None,
     related_user=None,
     related_traveler=None,
     sent_by=None,
-    metadata: Optional[dict] = None,
+    metadata: dict | None = None,
     deliver_now: bool = False,
 ) -> EmailResult:
     """Point d'entrée unique pour tout envoi email.
@@ -209,7 +218,8 @@ def send_email_by_type(
     if template_code:
         try:
             rendered_subject, rendered_html, rendered_text, tpl = render_template(
-                template_code, ctx,
+                template_code,
+                ctx,
             )
         except ValueError as exc:
             return EmailResult(ok=False, error=str(exc))
@@ -247,6 +257,7 @@ def send_email_by_type(
     # 7) Enqueue Celery — fallback sync si Celery KO
     try:
         from ..tasks_email import send_email_task
+
         send_email_task.delay(log.id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Celery enqueue email failed, fallback sync: %s", exc)
@@ -259,6 +270,7 @@ def send_email_by_type(
 # ===========================================================================
 # EXÉCUTION (appelée par Celery — séparé pour pouvoir être testée en sync)
 # ===========================================================================
+
 
 def resend_email_log(log_id: int) -> EmailResult:
     """Nouvel essai SMTP sur un EmailLog existant (pas de doublon de journal)."""
@@ -288,7 +300,8 @@ def _execute_email_send(log: EmailLog) -> bool:
         connection = _build_connection(profile_code)
         from_header = (
             f"{profile.from_name} <{profile.from_address}>"
-            if profile.from_name else profile.from_address
+            if profile.from_name
+            else profile.from_address
         )
         reply_to = [profile.reply_to] if profile.reply_to else None
 
@@ -308,30 +321,48 @@ def _execute_email_send(log: EmailLog) -> bool:
             log.status = EmailStatus.SENT
             log.sent_at = timezone.now()
             log.error_message = ""
-            log.save(update_fields=[
-                "status", "sent_at", "error_message", "retry_count", "updated_at",
-            ])
-            logger.info("Email %s sent to %s via %s", log.email_type,
-                        log.masked_recipient, profile_code)
+            log.save(
+                update_fields=[
+                    "status",
+                    "sent_at",
+                    "error_message",
+                    "retry_count",
+                    "updated_at",
+                ]
+            )
+            logger.info(
+                "Email %s sent to %s via %s", log.email_type, log.masked_recipient, profile_code
+            )
             return True
 
         log.status = EmailStatus.FAILED
         log.error_message = "SMTP a renvoyé 0 message envoyé"
         log.failed_at = timezone.now()
-        log.save(update_fields=[
-            "status", "failed_at", "error_message", "retry_count", "updated_at",
-        ])
+        log.save(
+            update_fields=[
+                "status",
+                "failed_at",
+                "error_message",
+                "retry_count",
+                "updated_at",
+            ]
+        )
         return False
 
     except Exception as exc:  # noqa: BLE001
         log.status = EmailStatus.FAILED
         log.error_message = str(exc)[:1000]
         log.failed_at = timezone.now()
-        log.save(update_fields=[
-            "status", "failed_at", "error_message", "retry_count", "updated_at",
-        ])
-        logger.error("Email %s FAILED to %s : %s", log.email_type,
-                     log.masked_recipient, exc)
+        log.save(
+            update_fields=[
+                "status",
+                "failed_at",
+                "error_message",
+                "retry_count",
+                "updated_at",
+            ]
+        )
+        logger.error("Email %s FAILED to %s : %s", log.email_type, log.masked_recipient, exc)
         return False
 
 
@@ -355,6 +386,7 @@ def log_email_status(log_id: int, new_status: str, error: str = "") -> bool:
 # UTILITAIRES SPÉCIFIQUES (utilisés par les services métier)
 # ===========================================================================
 
+
 def generate_password_reset_token(user, *, request=None) -> tuple[str, PasswordResetToken]:
     """Génère un token de reset password à usage unique avec hash sécurisé.
 
@@ -363,6 +395,7 @@ def generate_password_reset_token(user, *, request=None) -> tuple[str, PasswordR
     seul son SHA-256 l'est.
     """
     import hashlib
+
     ttl_hours = getattr(settings, "PASSWORD_RESET_TOKEN_TTL_HOURS", 24)
     raw = secrets.token_urlsafe(48)
     token_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -381,6 +414,7 @@ def generate_password_reset_token(user, *, request=None) -> tuple[str, PasswordR
 def consume_password_reset_token(raw_token: str):
     """Vérifie + consomme un token reset. Retourne le User ou None si invalide."""
     import hashlib
+
     token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
     obj = PasswordResetToken.objects.filter(token_hash=token_hash).select_related("user").first()
     if not obj or not obj.is_valid:
@@ -390,7 +424,7 @@ def consume_password_reset_token(raw_token: str):
     return obj.user
 
 
-def _get_client_ip(request) -> Optional[str]:
+def _get_client_ip(request) -> str | None:
     if not request:
         return None
     xff = request.META.get("HTTP_X_FORWARDED_FOR", "")

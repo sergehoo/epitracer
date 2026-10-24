@@ -1,10 +1,11 @@
 """Tests des tokens de reset password — hash SHA-256, expiration, usage unique."""
+
 import hashlib
-import pytest
 from datetime import timedelta
+
+import pytest
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-
 
 User = get_user_model()
 
@@ -12,7 +13,8 @@ User = get_user_model()
 @pytest.fixture
 def user(db):
     return User.objects.create_user(
-        username="agent.test", email="agent.test@example.com",
+        username="agent.test",
+        email="agent.test@example.com",
         password="initial_pwd_123",
     )
 
@@ -40,7 +42,8 @@ class TestPasswordResetToken:
 
     def test_consume_returns_user_and_marks_used(self, user):
         from apps.notifications.services.email_router import (
-            generate_password_reset_token, consume_password_reset_token,
+            consume_password_reset_token,
+            generate_password_reset_token,
         )
 
         raw, obj = generate_password_reset_token(user)
@@ -53,7 +56,8 @@ class TestPasswordResetToken:
     def test_consume_twice_fails_second_time(self, user):
         """Token à usage unique."""
         from apps.notifications.services.email_router import (
-            generate_password_reset_token, consume_password_reset_token,
+            consume_password_reset_token,
+            generate_password_reset_token,
         )
 
         raw, _ = generate_password_reset_token(user)
@@ -75,11 +79,13 @@ class TestPasswordResetToken:
 
     def test_consume_unknown_token_returns_none(self, user):
         from apps.notifications.services.email_router import consume_password_reset_token
+
         assert consume_password_reset_token("token-qui-nexiste-pas") is None
 
     def test_used_token_cannot_be_consumed(self, user):
         from apps.notifications.services.email_router import (
-            generate_password_reset_token, consume_password_reset_token,
+            consume_password_reset_token,
+            generate_password_reset_token,
         )
 
         raw, obj = generate_password_reset_token(user)

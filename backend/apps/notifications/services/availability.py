@@ -11,6 +11,7 @@ Cycle de vie (ex. Orange CI) :
      l'état redevient `available` et les messages en attente encore pertinents
      sont renvoyés ; les rappels datés devenus obsolètes sont annulés.
 """
+
 from __future__ import annotations
 
 import logging
@@ -57,9 +58,13 @@ def get_state(provider: str) -> ProviderAvailability | None:
 def is_suspended(provider: str) -> bool:
     if not provider:
         return False
-    return ProviderAvailability.objects.filter(provider=provider).exclude(
-        state=ProviderState.AVAILABLE,
-    ).exists()
+    return (
+        ProviderAvailability.objects.filter(provider=provider)
+        .exclude(
+            state=ProviderState.AVAILABLE,
+        )
+        .exists()
+    )
 
 
 def suspend_provider(
@@ -95,7 +100,8 @@ def suspend_provider(
         row.save()
     logger.error(
         "Fournisseur %s suspendu (%s) — envois automatiques mis en attente.",
-        provider, reason_code,
+        provider,
+        reason_code,
     )
     transaction.on_commit(lambda: _alert_admins(provider, reason_code))
     return True
@@ -137,7 +143,8 @@ def _alert_admins(provider: str, reason_code: str) -> int:
         "page Notifications du tableau de bord (bouton « Reprendre les envois »)."
     )
     return alert_admins(
-        f"[EpiTrace] {label} — {title}", body,
+        f"[EpiTrace] {label} — {title}",
+        body,
         kind="provider_suspended",
     )
 
@@ -149,7 +156,8 @@ def hold_notification(notif: Notification, *, error_code: str, detail: str = "")
     notif.error_message = (detail or "")[:1000]
     notif.save(update_fields=["status", "error_code", "error_message", "updated_at"])
     log_action(
-        notification=notif, action=Actions.HOLD,
+        notification=notif,
+        action=Actions.HOLD,
         metadata={"provider": notif.provider, "error_code": error_code},
     )
 
@@ -176,7 +184,11 @@ def _is_expired_reminder(notif: Notification, today) -> bool:
 
 
 def resume_provider(
-    provider: str, *, user=None, request=None, requeue: bool = True,
+    provider: str,
+    *,
+    user=None,
+    request=None,
+    requeue: bool = True,
 ) -> ResumeResult:
     """Reprise contrôlée après réapprovisionnement (action administrateur)."""
     now = timezone.now()
@@ -205,7 +217,10 @@ def resume_provider(
                 notif.error_code = ErrorCode.EXPIRED_ON_HOLD if requeue else notif.error_code
                 notif.save(update_fields=["status", "error_code", "updated_at"])
                 log_action(
-                    notification=notif, action=Actions.CANCEL, actor=user, request=request,
+                    notification=notif,
+                    action=Actions.CANCEL,
+                    actor=user,
+                    request=request,
                     metadata={
                         "provider_resumed": True,
                         "reason": "expired" if requeue else "not_requeued",
@@ -217,11 +232,20 @@ def resume_provider(
             notif.error_code = ""
             notif.error_message = ""
             notif.queued_at = now
-            notif.save(update_fields=[
-                "status", "error_code", "error_message", "queued_at", "updated_at",
-            ])
+            notif.save(
+                update_fields=[
+                    "status",
+                    "error_code",
+                    "error_message",
+                    "queued_at",
+                    "updated_at",
+                ]
+            )
             log_action(
-                notification=notif, action=Actions.RETRY, actor=user, request=request,
+                notification=notif,
+                action=Actions.RETRY,
+                actor=user,
+                request=request,
                 metadata={"provider_resumed": True},
             )
             to_send.append(notif.id)
@@ -233,6 +257,9 @@ def resume_provider(
         transaction.on_commit(lambda nid=notif_id: send_notification_task.delay(nid))
     logger.warning(
         "Fournisseur %s repris par %s — %s renvoyé(s), %s obsolète(s).",
-        provider, getattr(user, "email", "system"), result.requeued, result.expired,
+        provider,
+        getattr(user, "email", "system"),
+        result.requeued,
+        result.expired,
     )
     return result

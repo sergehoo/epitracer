@@ -30,6 +30,7 @@ ATTENTION :
     dans `apps/travelers/models.py`. Mettre à jour PII_FIELDS lors d'un
     ajout de champ chiffré.
 """
+
 from __future__ import annotations
 
 import time
@@ -61,19 +62,26 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--dry-run", action="store_true",
+            "--dry-run",
+            action="store_true",
             help="N'écrit rien — affiche seulement le nombre de lignes qui seraient traitées.",
         )
         parser.add_argument(
-            "--batch-size", type=int, default=500,
+            "--batch-size",
+            type=int,
+            default=500,
             help="Nombre de lignes par batch (défaut: 500).",
         )
         parser.add_argument(
-            "--sleep", type=float, default=0.0,
+            "--sleep",
+            type=float,
+            default=0.0,
             help="Pause entre batchs (secondes) pour soulager la DB en prod.",
         )
         parser.add_argument(
-            "--model", type=str, default=None,
+            "--model",
+            type=str,
+            default=None,
             help="Filtrer sur un seul modèle app_label.ModelName (sinon : tous).",
         )
 
@@ -84,11 +92,13 @@ class Command(BaseCommand):
         filter_model: str | None = opts["model"]
 
         if not PII_FIELDS:
-            self.stdout.write(self.style.WARNING(
-                "PII_FIELDS est vide — aucun champ à re-chiffrer pour l'instant.\n"
-                "Mettre à jour apps/core/management/commands/migrate_pii_to_encrypted.py\n"
-                "après avoir migré les modèles vers EncryptedCharField."
-            ))
+            self.stdout.write(
+                self.style.WARNING(
+                    "PII_FIELDS est vide — aucun champ à re-chiffrer pour l'instant.\n"
+                    "Mettre à jour apps/core/management/commands/migrate_pii_to_encrypted.py\n"
+                    "après avoir migré les modèles vers EncryptedCharField."
+                )
+            )
             return
 
         total = 0
@@ -99,9 +109,7 @@ class Command(BaseCommand):
             Model = apps.get_model(app_label, model_name)
             qs = Model.objects.all().order_by("pk")
             count = qs.count()
-            self.stdout.write(
-                f"=> {dotted} : {count} lignes, champs={list(fields)}"
-            )
+            self.stdout.write(f"=> {dotted} : {count} lignes, champs={list(fields)}")
             if dry_run:
                 total += count
                 continue
@@ -118,19 +126,13 @@ class Command(BaseCommand):
                         # champ chiffré qui re-encrypte le ciphertext.
                         instance.save(update_fields=list(fields))
                 processed += len(pk_chunk)
-                self.stdout.write(
-                    f"   {dotted}: {processed}/{count}"
-                )
+                self.stdout.write(f"   {dotted}: {processed}/{count}")
                 if sleep_between:
                     time.sleep(sleep_between)
 
             total += processed
 
         if dry_run:
-            self.stdout.write(self.style.SUCCESS(
-                f"DRY-RUN : {total} lignes seraient traitées."
-            ))
+            self.stdout.write(self.style.SUCCESS(f"DRY-RUN : {total} lignes seraient traitées."))
         else:
-            self.stdout.write(self.style.SUCCESS(
-                f"OK — {total} lignes re-chiffrées."
-            ))
+            self.stdout.write(self.style.SUCCESS(f"OK — {total} lignes re-chiffrées."))

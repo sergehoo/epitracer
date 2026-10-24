@@ -1,8 +1,16 @@
 from rest_framework import serializers
 
 from .models import (
-    Channel, MessageType, Notification, NotificationAuditLog, NotificationProviderConfig,
-    NotificationTemplate, Provider, ProviderAvailability, ProviderState, SmsSecurityEvent,
+    Channel,
+    MessageType,
+    Notification,
+    NotificationAuditLog,
+    NotificationProviderConfig,
+    NotificationTemplate,
+    Provider,
+    ProviderAvailability,
+    ProviderState,
+    SmsSecurityEvent,
 )
 from .services.errors import friendly_error
 
@@ -27,16 +35,29 @@ def sms_segments(body: str) -> int:
 
 class NotificationTemplateSerializer(serializers.ModelSerializer):
     disease_code = serializers.CharField(source="disease.code", read_only=True, default=None)
-    created_by_email = serializers.CharField(source="created_by.email", read_only=True, default=None)
+    created_by_email = serializers.CharField(
+        source="created_by.email", read_only=True, default=None
+    )
 
     class Meta:
         model = NotificationTemplate
         fields = [
-            "id", "uuid", "code", "name", "description",
-            "subject", "body", "channels",
-            "is_active", "disease", "disease_code",
-            "variables_schema", "created_by", "created_by_email",
-            "created_at", "updated_at",
+            "id",
+            "uuid",
+            "code",
+            "name",
+            "description",
+            "subject",
+            "body",
+            "channels",
+            "is_active",
+            "disease",
+            "disease_code",
+            "variables_schema",
+            "created_by",
+            "created_by_email",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = ["created_by", "created_by_email"]
 
@@ -45,9 +66,17 @@ class NotificationProviderConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = NotificationProviderConfig
         fields = [
-            "id", "uuid", "provider", "channel", "is_enabled", "priority",
-            "country_code", "sender_name", "metadata",
-            "created_at", "updated_at",
+            "id",
+            "uuid",
+            "provider",
+            "channel",
+            "is_enabled",
+            "priority",
+            "country_code",
+            "sender_name",
+            "metadata",
+            "created_at",
+            "updated_at",
         ]
 
 
@@ -57,8 +86,15 @@ class NotificationAuditLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = NotificationAuditLog
         fields = [
-            "id", "uuid", "action", "actor", "actor_email",
-            "ip_address", "user_agent", "metadata", "created_at",
+            "id",
+            "uuid",
+            "action",
+            "actor",
+            "actor_email",
+            "ip_address",
+            "user_agent",
+            "metadata",
+            "created_at",
         ]
         read_only_fields = ["created_at"]
 
@@ -67,7 +103,9 @@ class NotificationSerializer(serializers.ModelSerializer):
     template_code = serializers.CharField(source="template.code", read_only=True, default=None)
     template_name = serializers.CharField(source="template.name", read_only=True, default=None)
     traveler_public_id = serializers.CharField(
-        source="traveler.public_id", read_only=True, default=None,
+        source="traveler.public_id",
+        read_only=True,
+        default=None,
     )
     sent_by_email = serializers.CharField(source="sent_by.email", read_only=True, default=None)
     masked_recipient = serializers.CharField(read_only=True)
@@ -82,25 +120,60 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = [
-            "id", "uuid",
-            "channel", "template", "template_code", "template_name",
-            "traveler", "traveler_public_id",
-            "recipient", "normalized_phone", "masked_recipient",
-            "subject", "body", "context",
-            "direction", "message_type",
-            "status", "provider", "provider_message_id",
-            "error_message", "error_code", "error_label", "technical_error",
-            "retry_count", "max_retries",
-            "sent_by", "sent_by_email",
-            "queued_at", "sent_at", "delivered_at", "failed_at",
-            "metadata", "created_at", "updated_at",
-            "traveler_name", "sms_segments",
+            "id",
+            "uuid",
+            "channel",
+            "template",
+            "template_code",
+            "template_name",
+            "traveler",
+            "traveler_public_id",
+            "recipient",
+            "normalized_phone",
+            "masked_recipient",
+            "subject",
+            "body",
+            "context",
+            "direction",
+            "message_type",
+            "status",
+            "provider",
+            "provider_message_id",
+            "error_message",
+            "error_code",
+            "error_label",
+            "technical_error",
+            "retry_count",
+            "max_retries",
+            "sent_by",
+            "sent_by_email",
+            "queued_at",
+            "sent_at",
+            "delivered_at",
+            "failed_at",
+            "metadata",
+            "created_at",
+            "updated_at",
+            "traveler_name",
+            "sms_segments",
         ]
         read_only_fields = [
-            "status", "provider", "provider_message_id", "error_message",
-            "error_code", "retry_count", "queued_at", "sent_at", "delivered_at", "failed_at",
-            "normalized_phone", "masked_recipient", "sent_by_email",
-            "template_code", "template_name", "traveler_public_id",
+            "status",
+            "provider",
+            "provider_message_id",
+            "error_message",
+            "error_code",
+            "retry_count",
+            "queued_at",
+            "sent_at",
+            "delivered_at",
+            "failed_at",
+            "normalized_phone",
+            "masked_recipient",
+            "sent_by_email",
+            "template_code",
+            "template_name",
+            "traveler_public_id",
         ]
 
     def _technical_allowed(self) -> bool:
@@ -179,15 +252,26 @@ class ProviderAvailabilitySerializer(serializers.Serializer):
 
 class SmsSecurityEventSerializer(serializers.ModelSerializer):
     traveler_public_id = serializers.CharField(
-        source="traveler.public_id", read_only=True, default=None,
+        source="traveler.public_id",
+        read_only=True,
+        default=None,
     )
     user_email = serializers.CharField(source="user.email", read_only=True, default=None)
 
     class Meta:
         model = SmsSecurityEvent
         fields = [
-            "id", "uuid", "kind", "severity", "source", "ip_address", "phone_masked",
-            "traveler_public_id", "user_email", "details", "created_at",
+            "id",
+            "uuid",
+            "kind",
+            "severity",
+            "source",
+            "ip_address",
+            "phone_masked",
+            "traveler_public_id",
+            "user_email",
+            "details",
+            "created_at",
         ]
 
 
@@ -204,6 +288,7 @@ def provider_state_rows(providers: list[str]) -> list[ProviderAvailability]:
 
 class SendNotificationSerializer(serializers.Serializer):
     """Payload pour POST /api/v1/notifications/send/"""
+
     # Canaux supportés :
     #   sms / whatsapp — routés selon le téléphone
     #   email          — routé via EmailRouter (PUBLIC SES pour voyageurs)
@@ -222,20 +307,14 @@ class SendNotificationSerializer(serializers.Serializer):
 
     def validate(self, data):
         if not data.get("template_code") and not data.get("body"):
-            raise serializers.ValidationError(
-                "Fournir au moins un template_code OU un body."
-            )
+            raise serializers.ValidationError("Fournir au moins un template_code OU un body.")
         if not data.get("recipient") and not data.get("traveler"):
-            raise serializers.ValidationError(
-                "Fournir au moins un recipient OU un traveler."
-            )
+            raise serializers.ValidationError("Fournir au moins un recipient OU un traveler.")
         # Pour email : valider grossièrement le format
         if data.get("channel") == "email" and data.get("recipient"):
             r = data["recipient"].strip()
             if "@" not in r or "." not in r.split("@")[-1]:
-                raise serializers.ValidationError(
-                    {"recipient": "Adresse email invalide."}
-                )
+                raise serializers.ValidationError({"recipient": "Adresse email invalide."})
         return data
 
 
@@ -243,7 +322,9 @@ class SendNotificationSerializer(serializers.Serializer):
 # Email multi-expéditeur — serializers
 # ===========================================================================
 from .email_models import (  # noqa: E402
-    EmailLog, EmailTemplate, SenderProfile,
+    EmailLog,
+    EmailTemplate,
+    SenderProfile,
 )
 
 
@@ -253,26 +334,46 @@ class SenderProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = SenderProfile
         fields = [
-            "id", "uuid", "code", "name", "from_address", "from_name",
-            "reply_to", "usage_scope", "is_active", "formatted_from",
-            "created_at", "updated_at",
+            "id",
+            "uuid",
+            "code",
+            "name",
+            "from_address",
+            "from_name",
+            "reply_to",
+            "usage_scope",
+            "is_active",
+            "formatted_from",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = ["id", "uuid", "code", "formatted_from", "created_at", "updated_at"]
 
 
 class EmailTemplateSerializer(serializers.ModelSerializer):
     sender_profile_code = serializers.CharField(
-        source="sender_profile.code", read_only=True, default=None,
+        source="sender_profile.code",
+        read_only=True,
+        default=None,
     )
 
     class Meta:
         model = EmailTemplate
         fields = [
-            "id", "uuid", "code", "name", "email_type",
-            "subject", "body_html", "body_text",
-            "sender_profile", "sender_profile_code",
-            "variables_schema", "is_active",
-            "created_at", "updated_at",
+            "id",
+            "uuid",
+            "code",
+            "name",
+            "email_type",
+            "subject",
+            "body_html",
+            "body_text",
+            "sender_profile",
+            "sender_profile_code",
+            "variables_schema",
+            "is_active",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = ["id", "uuid", "created_at", "updated_at"]
 
@@ -281,23 +382,43 @@ class EmailLogSerializer(serializers.ModelSerializer):
     masked_recipient = serializers.CharField(read_only=True)
     template_code = serializers.CharField(source="template.code", read_only=True, default=None)
     sent_by_email = serializers.CharField(source="sent_by.email", read_only=True, default=None)
-    related_user_email = serializers.CharField(source="related_user.email", read_only=True, default=None)
+    related_user_email = serializers.CharField(
+        source="related_user.email", read_only=True, default=None
+    )
     related_traveler_public_id = serializers.CharField(
-        source="related_traveler.public_id", read_only=True, default=None,
+        source="related_traveler.public_id",
+        read_only=True,
+        default=None,
     )
 
     class Meta:
         model = EmailLog
         fields = [
-            "id", "uuid", "recipient", "masked_recipient",
-            "email_type", "sender_address", "subject",
-            "status", "provider_message_id", "error_message",
-            "retry_count", "max_retries",
-            "template", "template_code", "context",
-            "related_user", "related_user_email",
-            "related_traveler", "related_traveler_public_id",
-            "sent_by", "sent_by_email",
-            "sent_at", "delivered_at", "failed_at",
-            "created_at", "updated_at",
+            "id",
+            "uuid",
+            "recipient",
+            "masked_recipient",
+            "email_type",
+            "sender_address",
+            "subject",
+            "status",
+            "provider_message_id",
+            "error_message",
+            "retry_count",
+            "max_retries",
+            "template",
+            "template_code",
+            "context",
+            "related_user",
+            "related_user_email",
+            "related_traveler",
+            "related_traveler_public_id",
+            "sent_by",
+            "sent_by_email",
+            "sent_at",
+            "delivered_at",
+            "failed_at",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = fields  # lecture seule depuis l'API

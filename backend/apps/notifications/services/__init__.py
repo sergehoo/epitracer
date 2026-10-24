@@ -7,18 +7,19 @@ Architecture :
     dispatcher.py        → orchestre : routage + envoi + persistance
     audit.py             → helper pour logger les actions en DB
 """
+
+from .dispatcher import (
+    SendResult,
+    enqueue_notification,
+    send_manual_message,
+    send_template_message,
+)
 from .router import (
     NotificationProviderRouter,
     detect_provider,
     is_ivoirian_number,
     normalize_phone_number,
     validate_phone_number,
-)
-from .dispatcher import (
-    SendResult,
-    enqueue_notification,
-    send_manual_message,
-    send_template_message,
 )
 
 __all__ = [

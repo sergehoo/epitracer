@@ -1,11 +1,14 @@
 """Serializers DRF pour les rapports automatisés."""
+
 from __future__ import annotations
 
 from rest_framework import serializers
 
 from .models import (
-    AutomatedReportRecipient, AutomatedReportSchedule,
-    GeneratedReport, ReportDeliveryLog,
+    AutomatedReportRecipient,
+    AutomatedReportSchedule,
+    GeneratedReport,
+    ReportDeliveryLog,
 )
 
 
@@ -20,12 +23,23 @@ class AutomatedReportScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = AutomatedReportSchedule
         fields = [
-            "id", "uuid",
-            "name", "report_type", "report_type_label",
-            "frequency", "frequency_label",
-            "weekday", "weekday_label", "time", "timezone",
-            "is_active", "include_pdf", "include_excel",
-            "created_by", "created_at", "updated_at",
+            "id",
+            "uuid",
+            "name",
+            "report_type",
+            "report_type_label",
+            "frequency",
+            "frequency_label",
+            "weekday",
+            "weekday_label",
+            "time",
+            "timezone",
+            "is_active",
+            "include_pdf",
+            "include_excel",
+            "created_by",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = ["uuid", "created_by", "created_at", "updated_at"]
 
@@ -36,54 +50,86 @@ class AutomatedReportScheduleSerializer(serializers.ModelSerializer):
 class AutomatedReportRecipientSerializer(serializers.ModelSerializer):
     masked_phone = serializers.ReadOnlyField()
     preferred_channel_label = serializers.CharField(
-        source="get_preferred_channel_display", read_only=True,
+        source="get_preferred_channel_display",
+        read_only=True,
     )
     district_name = serializers.CharField(
-        source="district.name", read_only=True, default=None,
+        source="district.name",
+        read_only=True,
+        default=None,
     )
 
     class Meta:
         model = AutomatedReportRecipient
         fields = [
-            "id", "uuid",
-            "full_name", "job_title", "organization",
-            "phone_number", "masked_phone", "email",
-            "preferred_channel", "preferred_channel_label",
-            "language", "district", "district_name",
+            "id",
+            "uuid",
+            "full_name",
+            "job_title",
+            "organization",
+            "phone_number",
+            "masked_phone",
+            "email",
+            "preferred_channel",
+            "preferred_channel_label",
+            "language",
+            "district",
+            "district_name",
             "allowed_report_types",
             "is_active",
-            "consent_date", "consent_evidence",
-            "created_by", "created_at", "updated_at",
+            "consent_date",
+            "consent_evidence",
+            "created_by",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = [
-            "uuid", "masked_phone", "created_by", "created_at", "updated_at",
+            "uuid",
+            "masked_phone",
+            "created_by",
+            "created_at",
+            "updated_at",
         ]
 
     def validate(self, attrs):
         # Reprendre la logique clean() du modèle pour renvoyer 400 propre au client
-        instance = AutomatedReportRecipient(**{
-            k: v for k, v in attrs.items()
-            if k in {"full_name", "phone_number", "email", "preferred_channel",
-                     "is_active", "consent_date"}
-        })
+        instance = AutomatedReportRecipient(
+            **{
+                k: v
+                for k, v in attrs.items()
+                if k
+                in {
+                    "full_name",
+                    "phone_number",
+                    "email",
+                    "preferred_channel",
+                    "is_active",
+                    "consent_date",
+                }
+            }
+        )
         try:
             instance.clean()
         except Exception as exc:  # noqa: BLE001
-            raise serializers.ValidationError(
-                getattr(exc, "message_dict", str(exc))
-            )
+            raise serializers.ValidationError(getattr(exc, "message_dict", str(exc)))
         return attrs
 
 
 class AutomatedReportRecipientLightSerializer(serializers.ModelSerializer):
     """Version light pour listes — pas de PII en clair (jamais phone_number)."""
+
     masked_phone = serializers.ReadOnlyField()
 
     class Meta:
         model = AutomatedReportRecipient
         fields = [
-            "id", "full_name", "organization", "preferred_channel",
-            "masked_phone", "email", "is_active",
+            "id",
+            "full_name",
+            "organization",
+            "preferred_channel",
+            "masked_phone",
+            "email",
+            "is_active",
         ]
 
 
@@ -92,6 +138,7 @@ class AutomatedReportRecipientLightSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 class GeneratedReportLightSerializer(serializers.ModelSerializer):
     """Version light pour liste (sans summary_data qui peut être lourd)."""
+
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     report_type_label = serializers.CharField(source="get_report_type_display", read_only=True)
     has_pdf = serializers.SerializerMethodField()
@@ -103,13 +150,21 @@ class GeneratedReportLightSerializer(serializers.ModelSerializer):
     class Meta:
         model = GeneratedReport
         fields = [
-            "id", "uuid", "report_code",
-            "report_type", "report_type_label",
-            "period_start", "period_end",
-            "status", "status_label",
-            "generated_at", "duration_ms",
-            "has_pdf", "has_excel",
-            "delivery_count", "delivery_stats",
+            "id",
+            "uuid",
+            "report_code",
+            "report_type",
+            "report_type_label",
+            "period_start",
+            "period_end",
+            "status",
+            "status_label",
+            "generated_at",
+            "duration_ms",
+            "has_pdf",
+            "has_excel",
+            "delivery_count",
+            "delivery_stats",
         ]
 
     def get_has_pdf(self, obj) -> bool:
@@ -127,15 +182,24 @@ class GeneratedReportLightSerializer(serializers.ModelSerializer):
         from .models import DeliveryStatus
 
         return obj.deliveries.aggregate(
-            sent=Count("id", filter=Q(
-                status__in=[DeliveryStatus.SENT, DeliveryStatus.DELIVERED],
-            )),
-            failed=Count("id", filter=Q(
-                status__in=[DeliveryStatus.FAILED, DeliveryStatus.PERMANENTLY_FAILED],
-            )),
-            pending=Count("id", filter=Q(
-                status__in=[DeliveryStatus.QUEUED, DeliveryStatus.RETRYING],
-            )),
+            sent=Count(
+                "id",
+                filter=Q(
+                    status__in=[DeliveryStatus.SENT, DeliveryStatus.DELIVERED],
+                ),
+            ),
+            failed=Count(
+                "id",
+                filter=Q(
+                    status__in=[DeliveryStatus.FAILED, DeliveryStatus.PERMANENTLY_FAILED],
+                ),
+            ),
+            pending=Count(
+                "id",
+                filter=Q(
+                    status__in=[DeliveryStatus.QUEUED, DeliveryStatus.RETRYING],
+                ),
+            ),
         )
 
 
@@ -144,7 +208,9 @@ class GeneratedReportDetailSerializer(GeneratedReportLightSerializer):
 
     class Meta(GeneratedReportLightSerializer.Meta):
         fields = GeneratedReportLightSerializer.Meta.fields + [
-            "summary_data", "error_message", "generated_by",
+            "summary_data",
+            "error_message",
+            "generated_by",
         ]
 
 
@@ -156,6 +222,7 @@ class ReportDeliveryLogSerializer(serializers.ModelSerializer):
 
     `destination_masked` est la seule projection visible côté API.
     """
+
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     channel_label = serializers.CharField(source="get_channel_display", read_only=True)
     report_code = serializers.CharField(source="report.report_code", read_only=True)
@@ -165,16 +232,25 @@ class ReportDeliveryLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReportDeliveryLog
         fields = [
-            "id", "uuid",
-            "report", "report_code",
-            "recipient", "recipient_name", "recipient_org",
-            "channel", "channel_label",
+            "id",
+            "uuid",
+            "report",
+            "report_code",
+            "recipient",
+            "recipient_name",
+            "recipient_org",
+            "channel",
+            "channel_label",
             "provider",
             "destination_masked",
-            "status", "status_label",
+            "status",
+            "status_label",
             "notification_id",
-            "sent_at", "delivered_at",
-            "error_message", "retry_count", "next_retry_at",
+            "sent_at",
+            "delivered_at",
+            "error_message",
+            "retry_count",
+            "next_retry_at",
             "created_at",
         ]
         read_only_fields = fields
@@ -185,6 +261,7 @@ class ReportDeliveryLogSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 class GenerateReportInputSerializer(serializers.Serializer):
     """Input pour POST /weekly/generate/ — période optionnelle."""
+
     period_start = serializers.DateTimeField(required=False, allow_null=True)
     period_end = serializers.DateTimeField(required=False, allow_null=True)
 
@@ -205,10 +282,12 @@ class GenerateReportInputSerializer(serializers.Serializer):
 
 class TestSendInputSerializer(serializers.Serializer):
     """Input pour POST /recipients/{id}/test/ — canal explicite."""
+
     channel = serializers.ChoiceField(choices=["sms", "email"])
 
 
 class RecipientImportCsvInputSerializer(serializers.Serializer):
     """Input pour POST /recipients/import-csv/."""
+
     csv_file = serializers.FileField()
     dry_run = serializers.BooleanField(default=False)

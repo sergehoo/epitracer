@@ -8,13 +8,13 @@ ENTRY_POINT, BORDER_AGENT, FIELD_AGENT.
 CHAQUE accès à des données de localisation est journalisé via
 `services.log_data_access()` (DataAccessLog) pour audit.
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
 
-from django.db.models import Count, Exists, F, Max, OuterRef, Q, Subquery
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
-from rest_framework import status as http_status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -25,11 +25,14 @@ from apps.travelers.models import Traveler
 from . import services
 from .models import DataAccessLog, TravelerLocationPing
 
-
 ALLOWED_ROLES = [
-    RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-    RoleCode.DISTRICT, RoleCode.ENTRY_POINT,
-    RoleCode.BORDER_AGENT, RoleCode.FIELD_AGENT,
+    RoleCode.NATIONAL_ADMIN,
+    RoleCode.MINISTRY,
+    RoleCode.INHP,
+    RoleCode.DISTRICT,
+    RoleCode.ENTRY_POINT,
+    RoleCode.BORDER_AGENT,
+    RoleCode.FIELD_AGENT,
 ]
 
 
@@ -71,22 +74,18 @@ class FollowupsOverviewView(APIView):
 
         from apps.ebola.models import EbolaInvestigation
 
-        last_check_sq = (
-            DailyCheck.objects.filter(quarantine=OuterRef("pk"))
-            .order_by("-check_date")
+        last_check_sq = DailyCheck.objects.filter(quarantine=OuterRef("pk")).order_by("-check_date")
+        last_ping_sq = TravelerLocationPing.objects.filter(traveler=OuterRef("traveler")).order_by(
+            "-captured_at"
         )
-        last_ping_sq = (
-            TravelerLocationPing.objects.filter(traveler=OuterRef("traveler"))
-            .order_by("-captured_at")
-        )
-        last_investigation_sq = (
-            EbolaInvestigation.objects.filter(traveler=OuterRef("traveler"))
-            .order_by("-created_at")
-        )
+        last_investigation_sq = EbolaInvestigation.objects.filter(
+            traveler=OuterRef("traveler")
+        ).order_by("-created_at")
 
         active = (
-            QuarantineRecord.objects
-            .filter(status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED])
+            QuarantineRecord.objects.filter(
+                status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED]
+            )
             .select_related("traveler", "traveler__entry_point")
             .annotate(
                 last_check_date=Subquery(last_check_sq.values("check_date")[:1]),
@@ -102,7 +101,9 @@ class FollowupsOverviewView(APIView):
         kpis_qs = active.aggregate(
             active_count=Count("id"),
             checked_today=Count("id", filter=Q(last_check_date=today)),
-            missed_48h=Count("id", filter=Q(last_check_date__lt=cutoff_48h) | Q(last_check_date__isnull=True)),
+            missed_48h=Count(
+                "id", filter=Q(last_check_date__lt=cutoff_48h) | Q(last_check_date__isnull=True)
+            ),
         )
         kpis = {
             "active": kpis_qs["active_count"] or 0,
@@ -111,9 +112,10 @@ class FollowupsOverviewView(APIView):
             "open_alerts": HealthAlert.objects.filter(
                 status__in=["open", "ack", "investigating", "OPEN", "ACK", "INVESTIGATING"],
             ).count(),
-            "with_recent_location": TravelerLocationPing.objects
-                .filter(captured_at__gte=cutoff_7d)
-                .values("traveler").distinct().count(),
+            "with_recent_location": TravelerLocationPing.objects.filter(captured_at__gte=cutoff_7d)
+            .values("traveler")
+            .distinct()
+            .count(),
         }
 
         # Liste (limitée à 200) — itération sur queryset annoté → 1 SQL
@@ -122,25 +124,27 @@ class FollowupsOverviewView(APIView):
             t = q.traveler
             day_index = max(0, (today - q.started_on).days)
             feeling = (q.last_check_details or {}).get("feeling") if q.last_check_details else None
-            rows.append({
-                "public_id": t.public_id,
-                "full_name": t.full_name,
-                "phone": t.phone_mobile,
-                "entry_point": t.entry_point.name if t.entry_point else None,
-                "arrival_date": t.arrival_date,
-                "confinement_city": t.confinement_city or None,
-                "confinement_commune": t.confinement_commune or None,
-                "confinement_neighborhood": t.confinement_neighborhood or None,
-                "risk_level": (getattr(q, "last_risk_level", None) or "low"),
-                "started_on": q.started_on,
-                "day_index": day_index,
-                "total_days": (q.expected_end_on - q.started_on).days,
-                "last_check_date": q.last_check_date,
-                "last_check_feeling": feeling,
-                "has_symptoms": bool(q.last_check_has_symptoms),
-                "last_location_at": q.last_location_at,
-                "current_health_status": t.current_health_status,
-            })
+            rows.append(
+                {
+                    "public_id": t.public_id,
+                    "full_name": t.full_name,
+                    "phone": t.phone_mobile,
+                    "entry_point": t.entry_point.name if t.entry_point else None,
+                    "arrival_date": t.arrival_date,
+                    "confinement_city": t.confinement_city or None,
+                    "confinement_commune": t.confinement_commune or None,
+                    "confinement_neighborhood": t.confinement_neighborhood or None,
+                    "risk_level": (getattr(q, "last_risk_level", None) or "low"),
+                    "started_on": q.started_on,
+                    "day_index": day_index,
+                    "total_days": (q.expected_end_on - q.started_on).days,
+                    "last_check_date": q.last_check_date,
+                    "last_check_feeling": feeling,
+                    "has_symptoms": bool(q.last_check_has_symptoms),
+                    "last_location_at": q.last_location_at,
+                    "current_health_status": t.current_health_status,
+                }
+            )
 
         return Response({"kpis": kpis, "rows": rows})
 
@@ -164,7 +168,9 @@ class TravelerLocationsView(APIView):
         traveler = get_object_or_404(Traveler, public_id=public_id)
 
         services.log_data_access(
-            traveler=traveler, user=request.user, resource="location",
+            traveler=traveler,
+            user=request.user,
+            resource="location",
             reason=request.query_params.get("reason", "Consultation suivi"),
             ip=_client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
@@ -191,11 +197,13 @@ class TravelerLocationsView(APIView):
             }
             for p in qs[:500]
         ]
-        return Response({
-            "traveler": {"public_id": traveler.public_id, "full_name": traveler.full_name},
-            "count": len(pings),
-            "pings": pings,
-        })
+        return Response(
+            {
+                "traveler": {"public_id": traveler.public_id, "full_name": traveler.full_name},
+                "count": len(pings),
+                "pings": pings,
+            }
+        )
 
 
 class TravelerAccessLogView(APIView):
@@ -223,7 +231,9 @@ class TravelerAccessLogView(APIView):
             }
             for log in qs[:300]
         ]
-        return Response({"traveler": {"public_id": traveler.public_id}, "count": len(rows), "rows": rows})
+        return Response(
+            {"traveler": {"public_id": traveler.public_id}, "count": len(rows), "rows": rows}
+        )
 
 
 # ============================================================================
@@ -254,15 +264,17 @@ class ActiveFollowupsMapView(APIView):
             last_ping = t.location_pings.order_by("-captured_at").first()
             if not last_ping:
                 continue
-            markers.append({
-                "public_id": t.public_id,
-                "full_name": t.full_name,
-                "latitude": float(last_ping.latitude),
-                "longitude": float(last_ping.longitude),
-                "captured_at": last_ping.captured_at,
-                "event_type": last_ping.event_type,
-                "health_status": t.current_health_status,
-            })
+            markers.append(
+                {
+                    "public_id": t.public_id,
+                    "full_name": t.full_name,
+                    "latitude": float(last_ping.latitude),
+                    "longitude": float(last_ping.longitude),
+                    "captured_at": last_ping.captured_at,
+                    "event_type": last_ping.event_type,
+                    "health_status": t.current_health_status,
+                }
+            )
 
         return Response({"count": len(markers), "markers": markers})
 
@@ -291,7 +303,9 @@ class GlobalAuditLogView(APIView):
 
     permission_classes = [IsAuthenticatedAndActive, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
     ]
 
     def get(self, request):
@@ -321,10 +335,8 @@ class GlobalAuditLogView(APIView):
 
         # --- 1. DataAccessLog ----------------------------------------------
         if not source or source == "data_access":
-            qs = (
-                DataAccessLog.objects
-                .select_related("accessed_by", "traveler")
-                .order_by("-created_at")
+            qs = DataAccessLog.objects.select_related("accessed_by", "traveler").order_by(
+                "-created_at"
             )
             if traveler_pid:
                 qs = qs.filter(traveler__public_id=traveler_pid)
@@ -340,32 +352,32 @@ class GlobalAuditLogView(APIView):
                     | Q(accessed_by__username__icontains=q)
                 )
             for r in qs[:500]:
-                items.append({
-                    "id": f"data_{r.pk}",
-                    "source": "data_access",
-                    "occurred_at": r.created_at,
-                    "user_label": (r.accessed_by.email if r.accessed_by else "—"),
-                    "user_role": r.accessed_by_role or "",
-                    "action": r.get_resource_display(),
-                    "action_code": (r.resource or "").lower(),
-                    "target": (r.traveler.public_id if r.traveler else "—"),
-                    "target_kind": "traveler",
-                    "reason": r.reason or "",
-                    "ip_address": r.ip_address,
-                    "user_agent": getattr(r, "user_agent", "") or "",
-                    "payload": {},
-                    "request_id": "",
-                    "severity": "info",
-                    "ok": True,
-                })
+                items.append(
+                    {
+                        "id": f"data_{r.pk}",
+                        "source": "data_access",
+                        "occurred_at": r.created_at,
+                        "user_label": (r.accessed_by.email if r.accessed_by else "—"),
+                        "user_role": r.accessed_by_role or "",
+                        "action": r.get_resource_display(),
+                        "action_code": (r.resource or "").lower(),
+                        "target": (r.traveler.public_id if r.traveler else "—"),
+                        "target_kind": "traveler",
+                        "reason": r.reason or "",
+                        "ip_address": r.ip_address,
+                        "user_agent": getattr(r, "user_agent", "") or "",
+                        "payload": {},
+                        "request_id": "",
+                        "severity": "info",
+                        "ok": True,
+                    }
+                )
 
         # --- 2. PassVerificationLog (scans QR) -----------------------------
         if not source or source == "pass_scan":
-            qs = (
-                PassVerificationLog.objects
-                .select_related("verified_by", "pass_obj", "pass_obj__traveler", "entry_point")
-                .order_by("-verified_at")
-            )
+            qs = PassVerificationLog.objects.select_related(
+                "verified_by", "pass_obj", "pass_obj__traveler", "entry_point"
+            ).order_by("-verified_at")
             if traveler_pid:
                 qs = qs.filter(pass_obj__traveler__public_id=traveler_pid)
             if date_from:
@@ -379,40 +391,36 @@ class GlobalAuditLogView(APIView):
                     | Q(verified_by__email__icontains=q)
                 )
             for r in qs[:500]:
-                pid = (
-                    r.pass_obj.traveler.public_id
-                    if r.pass_obj and r.pass_obj.traveler else None
+                pid = r.pass_obj.traveler.public_id if r.pass_obj and r.pass_obj.traveler else None
+                items.append(
+                    {
+                        "id": f"scan_{r.pk}",
+                        "source": "pass_scan",
+                        "occurred_at": r.verified_at,
+                        "user_label": (r.verified_by.email if r.verified_by else "Agent terrain"),
+                        "user_role": "",
+                        "action": ("Scan QR valide" if r.is_valid else "Scan QR refusé"),
+                        "action_code": "scan_ok" if r.is_valid else "scan_denied",
+                        "target": pid or r.pass_number,
+                        "target_kind": "pass",
+                        "reason": r.reason or "",
+                        "ip_address": None,
+                        "entry_point": (r.entry_point.name if r.entry_point else None),
+                        "pass_number": r.pass_number,
+                        "user_agent": getattr(r, "user_agent", "") or "",
+                        "payload": {},
+                        "request_id": "",
+                        "severity": "success" if r.is_valid else "danger",
+                        "ok": bool(r.is_valid),
+                    }
                 )
-                items.append({
-                    "id": f"scan_{r.pk}",
-                    "source": "pass_scan",
-                    "occurred_at": r.verified_at,
-                    "user_label": (r.verified_by.email if r.verified_by else "Agent terrain"),
-                    "user_role": "",
-                    "action": ("Scan QR valide" if r.is_valid else "Scan QR refusé"),
-                    "action_code": "scan_ok" if r.is_valid else "scan_denied",
-                    "target": pid or r.pass_number,
-                    "target_kind": "pass",
-                    "reason": r.reason or "",
-                    "ip_address": None,
-                    "entry_point": (r.entry_point.name if r.entry_point else None),
-                    "pass_number": r.pass_number,
-                    "user_agent": getattr(r, "user_agent", "") or "",
-                    "payload": {},
-                    "request_id": "",
-                    "severity": "success" if r.is_valid else "danger",
-                    "ok": bool(r.is_valid),
-                })
 
         # --- 3. AuditLog générique -----------------------------------------
         if not source or source == "admin":
             try:
                 from apps.audit.models import AuditLog
 
-                qs = (
-                    AuditLog.objects.select_related("actor")
-                    .order_by("-created_at")
-                )
+                qs = AuditLog.objects.select_related("actor").order_by("-created_at")
                 if date_from:
                     qs = qs.filter(created_at__gte=date_from)
                 if date_to:
@@ -428,9 +436,15 @@ class GlobalAuditLogView(APIView):
                     action_str = str(r.action or "")
                     action_lower = action_str.lower()
                     # Inférence de sévérité pour coloration côté front
-                    if any(k in action_lower for k in ("delete", "revoke", "denied", "fail", "error", "block")):
+                    if any(
+                        k in action_lower
+                        for k in ("delete", "revoke", "denied", "fail", "error", "block")
+                    ):
                         sev = "danger"
-                    elif any(k in action_lower for k in ("login", "logout", "read", "view", "list", "export")):
+                    elif any(
+                        k in action_lower
+                        for k in ("login", "logout", "read", "view", "list", "export")
+                    ):
                         sev = "info"
                     elif any(k in action_lower for k in ("update", "edit", "change", "assign")):
                         sev = "warning"
@@ -442,24 +456,26 @@ class GlobalAuditLogView(APIView):
                     target = ""
                     if getattr(r, "target_ct_id", None) and getattr(r, "target_id", None):
                         target = f"{r.target_ct.model}#{r.target_id}"
-                    items.append({
-                        "id": f"audit_{r.pk}",
-                        "source": "admin",
-                        "occurred_at": r.created_at,
-                        "user_label": (r.actor.email if r.actor else "Système"),
-                        "user_role": "",
-                        "action": action_str,
-                        "action_code": action_lower,
-                        "target": target,
-                        "target_kind": "generic",
-                        "reason": r.summary or "",
-                        "ip_address": getattr(r, "ip_address", None),
-                        "user_agent": getattr(r, "user_agent", "") or "",
-                        "payload": getattr(r, "payload", {}) or {},
-                        "request_id": getattr(r, "request_id", "") or "",
-                        "severity": sev,
-                        "ok": sev != "danger",
-                    })
+                    items.append(
+                        {
+                            "id": f"audit_{r.pk}",
+                            "source": "admin",
+                            "occurred_at": r.created_at,
+                            "user_label": (r.actor.email if r.actor else "Système"),
+                            "user_role": "",
+                            "action": action_str,
+                            "action_code": action_lower,
+                            "target": target,
+                            "target_kind": "generic",
+                            "reason": r.summary or "",
+                            "ip_address": getattr(r, "ip_address", None),
+                            "user_agent": getattr(r, "user_agent", "") or "",
+                            "payload": getattr(r, "payload", {}) or {},
+                            "request_id": getattr(r, "request_id", "") or "",
+                            "severity": sev,
+                            "ok": sev != "danger",
+                        }
+                    )
             except Exception:
                 # AuditLog optionnel — l'app peut ne pas être branchée
                 pass
@@ -473,13 +489,16 @@ class GlobalAuditLogView(APIView):
 
         # Stats par source (avant pagination)
         from collections import Counter
+
         by_source = Counter([i["source"] for i in items])
 
-        return Response({
-            "count": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": max(1, (total + page_size - 1) // page_size),
-            "by_source": dict(by_source),
-            "rows": items[start:end],
-        })
+        return Response(
+            {
+                "count": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": max(1, (total + page_size - 1) // page_size),
+                "by_source": dict(by_source),
+                "rows": items[start:end],
+            }
+        )

@@ -20,11 +20,13 @@ class EbolaExposureSerializer(serializers.ModelSerializer):
         model = EbolaExposureAssessment
         fields = [
             "id",
-            "visited_ebola_zone", "visited_ebola_zone_details",
+            "visited_ebola_zone",
+            "visited_ebola_zone_details",
             "contact_with_case",
             "attended_funeral_or_touched_corpse",
             "visited_ebola_healthcare_facility",
-            "raw_exposure_score", "positive_answers_count",
+            "raw_exposure_score",
+            "positive_answers_count",
         ]
         read_only_fields = ["raw_exposure_score", "positive_answers_count"]
 
@@ -37,12 +39,23 @@ class EbolaSymptomReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = EbolaSymptomReport
         fields = [
-            "id", "investigation",
-            "reported_at", "temperature_celsius",
-            "fever", "intense_fatigue", "muscle_joint_pain", "severe_headache",
-            "sore_throat_or_abdominal", "diarrhea_nausea_vomiting", "unexplained_bleeding",
-            "other_symptoms", "notes", "reported_by",
-            "has_red_flag", "has_high_fever", "positive_symptoms_count",
+            "id",
+            "investigation",
+            "reported_at",
+            "temperature_celsius",
+            "fever",
+            "intense_fatigue",
+            "muscle_joint_pain",
+            "severe_headache",
+            "sore_throat_or_abdominal",
+            "diarrhea_nausea_vomiting",
+            "unexplained_bleeding",
+            "other_symptoms",
+            "notes",
+            "reported_by",
+            "has_red_flag",
+            "has_high_fever",
+            "positive_symptoms_count",
         ]
         read_only_fields = ["reported_by"]
 
@@ -51,11 +64,18 @@ class EbolaDeclarationSerializer(serializers.ModelSerializer):
     class Meta:
         model = EbolaDeclaration
         fields = [
-            "id", "investigation", "declared_at", "declarant_full_name", "signed_place",
+            "id",
+            "investigation",
+            "declared_at",
+            "declarant_full_name",
+            "signed_place",
             "truthful_declaration",
-            "consent_data_processing", "consent_health_followup",
+            "consent_data_processing",
+            "consent_health_followup",
             "consent_quarantine_if_needed",
-            "signature", "signature_hash", "extra",
+            "signature",
+            "signature_hash",
+            "extra",
         ]
 
 
@@ -70,18 +90,38 @@ class EbolaInvestigationSerializer(serializers.ModelSerializer):
     class Meta:
         model = EbolaInvestigation
         fields = [
-            "id", "uuid", "case_number",
-            "traveler", "traveler_detail",
-            "submission", "investigator", "investigator_name",
-            "entry_point", "entry_point_name",
-            "status", "risk_level", "risk_score",
-            "surveillance_start", "surveillance_end",
-            "notes", "exposure", "declaration", "last_symptoms",
-            "created_at", "updated_at",
+            "id",
+            "uuid",
+            "case_number",
+            "traveler",
+            "traveler_detail",
+            "submission",
+            "investigator",
+            "investigator_name",
+            "entry_point",
+            "entry_point_name",
+            "status",
+            "risk_level",
+            "risk_score",
+            "surveillance_start",
+            "surveillance_end",
+            "notes",
+            "exposure",
+            "declaration",
+            "last_symptoms",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = [
-            "id", "uuid", "case_number", "risk_level", "risk_score",
-            "surveillance_start", "surveillance_end", "created_at", "updated_at",
+            "id",
+            "uuid",
+            "case_number",
+            "risk_level",
+            "risk_score",
+            "surveillance_start",
+            "surveillance_end",
+            "created_at",
+            "updated_at",
         ]
 
     def get_last_symptoms(self, obj):
@@ -99,8 +139,13 @@ class EbolaInvestigationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = EbolaInvestigation
         fields = [
-            "traveler", "entry_point", "status", "notes",
-            "exposure", "symptoms", "declaration",
+            "traveler",
+            "entry_point",
+            "status",
+            "notes",
+            "exposure",
+            "symptoms",
+            "declaration",
         ]
 
     def create(self, validated):
@@ -128,12 +173,16 @@ class TravelHistoryItemPublicSerializer(serializers.Serializer):
     role = serializers.ChoiceField(choices=["origin", "transit", "visited"])
     country_code = serializers.CharField(max_length=3)
     city = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
-    residence_address = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+    residence_address = serializers.CharField(
+        max_length=300, required=False, allow_blank=True, default=""
+    )
     hotel = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     room_number = serializers.CharField(max_length=40, required=False, allow_blank=True, default="")
     arrival_date = serializers.DateField(required=False, allow_null=True)
     departure_date = serializers.DateField(required=False, allow_null=True)
-    duration_text = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
+    duration_text = serializers.CharField(
+        max_length=120, required=False, allow_blank=True, default=""
+    )
 
 
 class ScreeningAnswerSerializer(serializers.Serializer):
@@ -141,10 +190,16 @@ class ScreeningAnswerSerializer(serializers.Serializer):
 
     disease = serializers.CharField(max_length=40)
     exposures = serializers.ListField(
-        child=serializers.CharField(max_length=60), required=False, default=list, max_length=50,
+        child=serializers.CharField(max_length=60),
+        required=False,
+        default=list,
+        max_length=50,
     )
     symptoms = serializers.ListField(
-        child=serializers.CharField(max_length=60), required=False, default=list, max_length=50,
+        child=serializers.CharField(max_length=60),
+        required=False,
+        default=list,
+        max_length=50,
     )
 
 
@@ -161,7 +216,9 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
     identite = serializers.DictField()
     # --- Section 3 : historique ---
     historique = serializers.ListField(
-        child=TravelHistoryItemPublicSerializer(), required=False, default=list,
+        child=TravelHistoryItemPublicSerializer(),
+        required=False,
+        default=list,
     )
     # --- Section 4 : confinement ---
     confinement = serializers.DictField()
@@ -173,11 +230,17 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
     declaration = serializers.DictField()
     # --- Questionnaires des autres maladies sous surveillance (protocoles configurés) ---
     screenings = serializers.ListField(
-        child=ScreeningAnswerSerializer(), required=False, default=list, max_length=30,
+        child=ScreeningAnswerSerializer(),
+        required=False,
+        default=list,
+        max_length=30,
     )
     # Symptômes cochés hors tronc commun (« autres symptômes », codes du référentiel)
     symptom_codes = serializers.ListField(
-        child=serializers.CharField(max_length=60), required=False, default=list, max_length=60,
+        child=serializers.CharField(max_length=60),
+        required=False,
+        default=list,
+        max_length=60,
     )
 
     def validate_voyage(self, voyage: dict) -> dict:
@@ -207,11 +270,13 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
         Auparavant, une étape dont le pays manquait au référentiel était
         abandonnée sans erreur : la fiche partait sans provenance.
         """
-        unknown = sorted({
-            str(item.get("country_code") or "").upper()
-            for item in items
-            if resolve_country(item.get("country_code")) is None
-        })
+        unknown = sorted(
+            {
+                str(item.get("country_code") or "").upper()
+                for item in items
+                if resolve_country(item.get("country_code")) is None
+            }
+        )
         if unknown:
             raise serializers.ValidationError(
                 f"Pays inconnu dans l'historique des déplacements : {', '.join(unknown)}."

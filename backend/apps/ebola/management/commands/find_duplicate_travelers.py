@@ -16,6 +16,7 @@ transaction déclarée READ ONLY.
 
     python manage.py find_duplicate_travelers [--since AAAA-MM-JJ] [--csv]
 """
+
 from __future__ import annotations
 
 import csv
@@ -88,19 +89,39 @@ class Command(BaseCommand):
 
     def _write_csv(self, groups):
         writer = csv.writer(self.stdout)
-        writer.writerow([
-            "critere", "groupe", "public_id", "created_at", "ecart_s", "arrival_date",
-            "vol", "telephone_masque", "pass", "suivis_actifs",
-        ])
+        writer.writerow(
+            [
+                "critere",
+                "groupe",
+                "public_id",
+                "created_at",
+                "ecart_s",
+                "arrival_date",
+                "vol",
+                "telephone_masque",
+                "pass",
+                "suivis_actifs",
+            ]
+        )
         for criterion, label, members in groups:
             previous = None
             for t in members:
                 gap = "" if previous is None else _seconds(t.created_at - previous)
                 previous = t.created_at
-                writer.writerow([
-                    criterion, label, t.public_id, t.created_at.isoformat(), gap, t.arrival_date,
-                    t.flight_or_voyage_number, _mask(t.phone_mobile), t.passes, t.active_followups,
-                ])
+                writer.writerow(
+                    [
+                        criterion,
+                        label,
+                        t.public_id,
+                        t.created_at.isoformat(),
+                        gap,
+                        t.arrival_date,
+                        t.flight_or_voyage_number,
+                        _mask(t.phone_mobile),
+                        t.passes,
+                        t.active_followups,
+                    ]
+                )
 
 
 def _duplicate_groups(since: date | None) -> list[tuple[str, str, list[Traveler]]]:
@@ -131,7 +152,8 @@ def _duplicate_groups(since: date | None) -> list[tuple[str, str, list[Traveler]
                 .annotate(
                     passes=Count("health_passes", distinct=True),
                     active_followups=Count(
-                        "quarantines", filter=Q(quarantines__status__in=_ACTIVE_FOLLOWUP),
+                        "quarantines",
+                        filter=Q(quarantines__status__in=_ACTIVE_FOLLOWUP),
                         distinct=True,
                     ),
                 )

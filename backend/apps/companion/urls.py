@@ -5,6 +5,7 @@ Toutes les routes sont mountées sous /api/v1/public/ (voir
 config/urls.py). Le préfixe `public/` signale clairement qu'il s'agit
 d'endpoints non authentifiés (lookup par public_id voyageur).
 """
+
 from django.urls import path
 
 from .views import (

@@ -13,8 +13,14 @@ class CountryRiskAssessmentForm(forms.ModelForm):
     class Meta:
         model = CountryRiskAssessment
         fields = [
-            "country", "disease", "risk_level", "valid_from", "valid_until",
-            "justification", "source_alert", "source_reference",
+            "country",
+            "disease",
+            "risk_level",
+            "valid_from",
+            "valid_until",
+            "justification",
+            "source_alert",
+            "source_reference",
         ]
 
     def clean(self):
@@ -54,12 +60,21 @@ class CountryAdmin(admin.ModelAdmin):
 class CountryRiskAssessmentAdmin(SimpleHistoryAdmin):
     form = CountryRiskAssessmentForm
     list_display = (
-        "country", "disease", "risk_level", "valid_from", "valid_until",
-        "superseded_by", "decided_by",
+        "country",
+        "disease",
+        "risk_level",
+        "valid_from",
+        "valid_until",
+        "superseded_by",
+        "decided_by",
     )
     list_filter = ("risk_level", "disease", "country__is_monitored")
     search_fields = (
-        "country__code", "country__code3", "country__name", "justification", "source_reference",
+        "country__code",
+        "country__code3",
+        "country__name",
+        "justification",
+        "source_reference",
     )
     autocomplete_fields = ("country",)
     raw_id_fields = ("source_alert",)
@@ -97,8 +112,13 @@ class EntryPointAdmin(GISModelAdmin):
 @admin.register(HealthZone)
 class HealthZoneAdmin(GISModelAdmin):
     list_display = (
-        "name", "level_badge", "parent_name", "risk_level", "population",
-        "has_geometry", "code",
+        "name",
+        "level_badge",
+        "parent_name",
+        "risk_level",
+        "population",
+        "has_geometry",
+        "code",
     )
     list_filter = ("level", "risk_level")
     list_select_related = ("parent",)
@@ -117,14 +137,19 @@ class HealthZoneAdmin(GISModelAdmin):
     @admin.display(description="Niveau")
     def level_badge(self, obj):
         colors = {
-            "country": "#0B1820", "pres": "#FF7F00", "region": "#009E60",
-            "district": "#0EA5E9", "commune": "#7C3AED", "quartier": "#94A3B8",
+            "country": "#0B1820",
+            "pres": "#FF7F00",
+            "region": "#009E60",
+            "district": "#0EA5E9",
+            "commune": "#7C3AED",
+            "quartier": "#94A3B8",
             "custom": "#64748B",
         }
         color = colors.get(obj.level, "#64748B")
         return format_html(
             '<span style="background:{};color:white;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">{}</span>',
-            color, obj.get_level_display(),
+            color,
+            obj.get_level_display(),
         )
 
     @admin.display(description="Géom.", boolean=True)

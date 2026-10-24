@@ -1,4 +1,5 @@
 """Alertes sanitaires + indicateurs de surveillance globale."""
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -6,6 +7,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+
 from apps.core.models import BaseModel
 
 
@@ -31,8 +33,12 @@ class HealthAlert(BaseModel):
     code = models.SlugField(max_length=60, db_index=True)
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    severity = models.CharField(max_length=20, choices=AlertSeverity.choices, default=AlertSeverity.INFO, db_index=True)
-    status = models.CharField(max_length=20, choices=AlertStatus.choices, default=AlertStatus.OPEN, db_index=True)
+    severity = models.CharField(
+        max_length=20, choices=AlertSeverity.choices, default=AlertSeverity.INFO, db_index=True
+    )
+    status = models.CharField(
+        max_length=20, choices=AlertStatus.choices, default=AlertStatus.OPEN, db_index=True
+    )
 
     disease = models.ForeignKey(
         "diseases.Disease", null=True, blank=True, on_delete=models.SET_NULL, related_name="alerts"
@@ -50,12 +56,18 @@ class HealthAlert(BaseModel):
     target = GenericForeignKey("target_ct", "target_id")
 
     triggered_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="triggered_alerts",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="triggered_alerts",
     )
     acknowledged_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="ack_alerts",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ack_alerts",
     )
     acknowledged_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)

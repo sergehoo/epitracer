@@ -14,19 +14,29 @@ Endpoints exposés (préfixés par /api/v1/notifications/) :
     POST /webhooks/twilio/sms/status/      — delivery report Twilio
     POST /webhooks/orange-ci/sms/status/   — delivery report Orange CI
 """
+
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .telegram_views import (
-    MyTelegramStatusView, TelegramConfigView, TelegramLinkStatusView,
-    TelegramUnlinkView, TelegramWebhookView,
+    MyTelegramStatusView,
+    TelegramConfigView,
+    TelegramLinkStatusView,
+    TelegramUnlinkView,
+    TelegramWebhookView,
 )
 from .views import (
-    AwsSesEventWebhookView, EmailLogViewSet, EmailSmtpTestView,
-    EmailTemplateViewSet, MetaWhatsAppWebhookView,
-    NotificationTemplateViewSet, NotificationViewSet,
-    OrangeCiSmsStatusWebhookView, SenderProfileViewSet,
-    TravelerNotificationsView, TwilioSmsStatusWebhookView,
+    AwsSesEventWebhookView,
+    EmailLogViewSet,
+    EmailSmtpTestView,
+    EmailTemplateViewSet,
+    MetaWhatsAppWebhookView,
+    NotificationTemplateViewSet,
+    NotificationViewSet,
+    OrangeCiSmsStatusWebhookView,
+    SenderProfileViewSet,
+    TravelerNotificationsView,
+    TwilioSmsStatusWebhookView,
     TwilioWhatsAppStatusWebhookView,
 )
 

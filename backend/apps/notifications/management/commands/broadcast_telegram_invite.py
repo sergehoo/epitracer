@@ -23,6 +23,7 @@ Contrôles :
     - Requiert le template TELEGRAM_INVITE_SMS ou TELEGRAM_INVITE_EMAIL
     - Requiert TELEGRAM_BOT_USERNAME configuré (sinon deep-link vide)
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -32,7 +33,8 @@ from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from apps.notifications.models import (
-    Channel, NotificationTemplate, TelegramSubscription,
+    NotificationTemplate,
+    TelegramSubscription,
 )
 from apps.notifications.services.dispatcher import send_template_message
 from apps.notifications.services.telegram import get_bot_username
@@ -103,11 +105,10 @@ class Command(BaseCommand):
                 "le deep-link. Ajoutez-le au .env puis relancez."
             )
 
-        template_code = (
-            "TELEGRAM_INVITE_EMAIL" if channel == "email" else "TELEGRAM_INVITE_SMS"
-        )
+        template_code = "TELEGRAM_INVITE_EMAIL" if channel == "email" else "TELEGRAM_INVITE_SMS"
         template = NotificationTemplate.objects.filter(
-            code=template_code, is_active=True,
+            code=template_code,
+            is_active=True,
         ).first()
         if not template:
             raise CommandError(
@@ -120,7 +121,8 @@ class Command(BaseCommand):
 
         # Sous-requête EXISTS = plus rapide qu'un exclude sur reverse FK
         active_subs = TelegramSubscription.objects.filter(
-            traveler_id=OuterRef("pk"), is_active=True,
+            traveler_id=OuterRef("pk"),
+            is_active=True,
         )
         qs = Traveler.objects.annotate(has_tg=Exists(active_subs)).filter(has_tg=False)
 
@@ -149,7 +151,8 @@ class Command(BaseCommand):
         sent, failed = 0, 0
         for traveler in qs:
             recipient = (
-                traveler.email if channel == "email"
+                traveler.email
+                if channel == "email"
                 else (getattr(traveler, "whatsapp_phone", "") or traveler.phone_mobile)
             )
             if not recipient:
@@ -172,6 +175,4 @@ class Command(BaseCommand):
                 self.stdout.write(f"  ✗ {traveler.public_id} : {result.error}")
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS(
-            f"Terminé — {sent} envois OK, {failed} échecs."
-        ))
+        self.stdout.write(self.style.SUCCESS(f"Terminé — {sent} envois OK, {failed} échecs."))

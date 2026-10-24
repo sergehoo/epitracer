@@ -9,6 +9,7 @@ Les templates sont écrits en HTML inline (CSS dans `style=`) parce que les
 clients email (Outlook, Gmail mobile, Apple Mail) ignorent les feuilles CSS
 externes ou <style> dans <head>. Tableau-based layout pour compat Outlook.
 """
+
 from __future__ import annotations
 
 # ----------------------------------------------------------------------------
@@ -53,7 +54,8 @@ def public_layout(
     intro_html = (
         f"""<tr><td style="padding:0 32px 16px 32px;color:{SLATE_700};
         font-family:Arial,sans-serif;font-size:15px;line-height:1.6">{intro}</td></tr>"""
-        if intro else ""
+        if intro
+        else ""
     )
 
     return f"""<!doctype html>
@@ -169,7 +171,8 @@ def internal_layout(
     intro_html = (
         f"""<tr><td style="padding:0 32px 16px 32px;color:{SLATE_700};
         font-family:Arial,sans-serif;font-size:14px;line-height:1.6">{intro}</td></tr>"""
-        if intro else ""
+        if intro
+        else ""
     )
 
     security_html = ""
@@ -258,7 +261,7 @@ def internal_layout(
 ADMIN_ACCOUNT_CREATED_HTML = internal_layout(
     title="Création de votre compte",
     intro="Bonjour <strong>{full_name}</strong>, votre compte vient d'être "
-          "créé sur la console INHP Veille Sanitaire (plateforme EpiTrace).",
+    "créé sur la console INHP Veille Sanitaire (plateforme EpiTrace).",
     body_blocks=f"""
 <table width="100%" cellpadding="0" cellspacing="0"
        style="border-collapse:collapse;margin:8px 0 0 0">
@@ -318,7 +321,7 @@ connexion. Le mot de passe temporaire expire dans 24 heures.
 ADMIN_PASSWORD_RESET_HTML = internal_layout(
     title="Réinitialisation de votre mot de passe",
     intro="Bonjour <strong>{full_name}</strong>, une demande de réinitialisation "
-          "de votre mot de passe a été enregistrée sur la console INHP.",
+    "de votre mot de passe a été enregistrée sur la console INHP.",
     body_blocks="""
 <p>Pour définir un nouveau mot de passe, cliquez sur le bouton ci-dessous.</p>
 <p style="font-size:12px;color:#64748B">
@@ -357,8 +360,8 @@ Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.
 PASS_CONFIRMATION_HTML = public_layout(
     title="Votre pass sanitaire est prêt",
     intro="Bonjour <strong>{full_name}</strong>, votre fiche d'accompagnement "
-          "sanitaire vient d'être enregistrée. Voici les informations utiles "
-          "pour votre arrivée en Côte d'Ivoire.",
+    "sanitaire vient d'être enregistrée. Voici les informations utiles "
+    "pour votre arrivée en Côte d'Ivoire.",
     body_blocks=f"""
 <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px">
   <tr><td style="padding:10px 14px;background:{SLATE_50};
@@ -409,7 +412,7 @@ Besoin d'assistance : appelez le 143 (gratuit).
 FOLLOWUP_REMINDER_HTML = public_layout(
     title="Votre suivi sanitaire du jour",
     intro="Bonjour <strong>{full_name}</strong>, c'est l'heure de votre "
-          "check-in sanitaire quotidien (jour <strong>{day}</strong>/21).",
+    "check-in sanitaire quotidien (jour <strong>{day}</strong>/21).",
     body_blocks="""
 <p>Quelques secondes suffisent pour confirmer votre état de santé et
 faciliter votre accompagnement par les équipes INHP.</p>
@@ -438,7 +441,7 @@ inhabituels), appelez le 143 immédiatement.
 FOLLOWUP_COMPLETED_HTML = public_layout(
     title="Votre suivi est terminé — Merci !",
     intro="Bonjour <strong>{full_name}</strong>, vous arrivez au terme de "
-          "vos 21 jours de suivi sanitaire en Côte d'Ivoire.",
+    "vos 21 jours de suivi sanitaire en Côte d'Ivoire.",
     body_blocks="""
 <p>Au nom du Ministère de la Santé et de l'INHP, nous vous remercions
 sincèrement pour votre coopération tout au long de cet accompagnement.</p>

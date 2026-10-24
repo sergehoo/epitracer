@@ -3,6 +3,7 @@
 Champs strictement alignés sur la fiche officielle INHP "FICHE PASSAGER EBOLA RDC 2026"
 (MINISTÈRE DE LA SANTÉ - INHP - République de Côte d'Ivoire).
 """
+
 from __future__ import annotations
 
 from django.contrib.gis.db import models as gis_models
@@ -54,7 +55,9 @@ class Traveler(BaseModel):
     arrival_time = models.TimeField(_("Heure d'arrivée"), null=True, blank=True)
     # Déclaratif, optionnel : sert au calcul de la durée de séjour (exports).
     planned_departure_date = models.DateField(
-        _("Date de départ prévue de Côte d'Ivoire"), null=True, blank=True,
+        _("Date de départ prévue de Côte d'Ivoire"),
+        null=True,
+        blank=True,
     )
     transport_mode = models.CharField(
         _("Moyen de transport"), max_length=20, choices=TransportMode.choices, blank=True
@@ -64,8 +67,12 @@ class Traveler(BaseModel):
     )
     seat_number = models.CharField(_("N° de siège"), max_length=20, blank=True)
     entry_point = models.ForeignKey(
-        "geo.EntryPoint", null=True, blank=True, on_delete=models.SET_NULL,
-        related_name="arrivals", verbose_name=_("Point d'entrée"),
+        "geo.EntryPoint",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="arrivals",
+        verbose_name=_("Point d'entrée"),
     )
 
     # -------------------------------------------------------------------
@@ -84,29 +91,42 @@ class Traveler(BaseModel):
 
     # Document d'identité (formulaire INHP demande "N° Passeport")
     id_document_type = models.CharField(
-        _("Type pièce d'identité"), max_length=20,
-        choices=IDDocumentType.choices, default=IDDocumentType.PASSPORT,
+        _("Type pièce d'identité"),
+        max_length=20,
+        choices=IDDocumentType.choices,
+        default=IDDocumentType.PASSPORT,
     )
     id_document_number = models.CharField(_("N° Passeport / pièce"), max_length=60, db_index=True)
     id_document_country = models.ForeignKey(
-        "geo.Country", null=True, blank=True, on_delete=models.SET_NULL,
+        "geo.Country",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="id_documents_issued",
         verbose_name=_("Pays émetteur"),
     )
     nationality = models.ForeignKey(
-        "geo.Country", null=True, blank=True, on_delete=models.SET_NULL, related_name="nationals",
+        "geo.Country",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="nationals",
         verbose_name=_("Nationalité"),
     )
 
     # Contacts (formulaire INHP)
-    phone_mobile = models.CharField(_("Téléphone portable"), max_length=32, blank=True, db_index=True)
+    phone_mobile = models.CharField(
+        _("Téléphone portable"), max_length=32, blank=True, db_index=True
+    )
     email = models.EmailField(_("Adresse e-mail"), blank=True, db_index=True)
     postal_address = models.CharField(_("Adresse postale"), max_length=300, blank=True)
 
     # Pièce d'identité / document de voyage scanné
     passport_document = models.FileField(
         _("Copie du passeport / document de voyage"),
-        upload_to="passports/%Y/%m/", null=True, blank=True,
+        upload_to="passports/%Y/%m/",
+        null=True,
+        blank=True,
         help_text=_("PDF, JPG ou PNG — 8 Mo maximum."),
     )
     passport_uploaded_at = models.DateTimeField(null=True, blank=True)
@@ -124,28 +144,43 @@ class Traveler(BaseModel):
     confinement_neighborhood = models.CharField(_("Quartier (CI)"), max_length=160, blank=True)
     confinement_street_number = models.CharField(_("N° de rue"), max_length=120, blank=True)
     confinement_lot = models.CharField(_("N° de lot"), max_length=120, blank=True)
-    confinement_hotel = models.CharField(_("Hôtel / lieu d'hébergement"), max_length=200, blank=True)
+    confinement_hotel = models.CharField(
+        _("Hôtel / lieu d'hébergement"), max_length=200, blank=True
+    )
     confinement_room_number = models.CharField(_("N° de chambre"), max_length=120, blank=True)
     emergency_phone_ci = models.CharField(
-        _("Téléphone d'urgence obligatoire en CI"), max_length=32, blank=True,
+        _("Téléphone d'urgence obligatoire en CI"),
+        max_length=32,
+        blank=True,
     )
     whatsapp_phone = models.CharField(
-        _("Numéro WhatsApp international"), max_length=32, blank=True,
+        _("Numéro WhatsApp international"),
+        max_length=32,
+        blank=True,
         help_text=_("Format E.164 (ex : +22507XXXXXXXX)."),
     )
     confinement_address = models.CharField(
-        _("Adresse de confinement consolidée"), max_length=300, blank=True,
+        _("Adresse de confinement consolidée"),
+        max_length=300,
+        blank=True,
         help_text=_("Champ calculé pour exports et affichage."),
     )
     confinement_location = gis_models.PointField(
-        _("Géolocalisation du confinement"), srid=4326, null=True, blank=True, geography=True,
+        _("Géolocalisation du confinement"),
+        srid=4326,
+        null=True,
+        blank=True,
+        geography=True,
     )
 
     # -------------------------------------------------------------------
     # Lien optionnel à un compte utilisateur (espace voyageur)
     # -------------------------------------------------------------------
     user = models.OneToOneField(
-        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="traveler_profile",
     )
 
@@ -169,7 +204,8 @@ class Traveler(BaseModel):
 
     # Consentement & signature (Section 7 du formulaire)
     consented_data_processing = models.BooleanField(
-        _("Certification sur l'honneur"), default=False,
+        _("Certification sur l'honneur"),
+        default=False,
         help_text=_("Je certifie sur l'honneur l'exactitude des renseignements."),
     )
     signed_at = models.DateTimeField(_("Date de signature"), null=True, blank=True)
@@ -226,7 +262,9 @@ class TravelHistoryEntry(BaseModel):
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.VISITED)
     country = models.ForeignKey("geo.Country", on_delete=models.PROTECT)
     province = models.CharField(
-        _("Province / Région"), max_length=160, blank=True,
+        _("Province / Région"),
+        max_length=160,
+        blank=True,
         help_text=_("Subdivision administrative à l'intérieur du pays (ex: Nord-Kivu)."),
     )
     city = models.CharField(max_length=120, blank=True)

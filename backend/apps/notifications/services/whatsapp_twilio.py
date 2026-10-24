@@ -6,6 +6,7 @@ Le numéro Twilio doit être préfixé par "whatsapp:" dans l'API.
 Pour utiliser un template approuvé, on passe son SID via le param
 `ContentSid` (et les variables via `ContentVariables`).
 """
+
 from __future__ import annotations
 
 import hmac
@@ -13,13 +14,14 @@ import json
 import logging
 from base64 import b64encode
 from hashlib import sha1
-from typing import Optional
 
 import httpx
 from django.conf import settings
 
 from .whatsapp_base import (
-    WhatsAppProviderBase, WhatsAppSendResult, WhatsAppStatusEvent,
+    WhatsAppProviderBase,
+    WhatsAppSendResult,
+    WhatsAppStatusEvent,
 )
 
 logger = logging.getLogger("epidemitracker.notifications.whatsapp_twilio")
@@ -30,11 +32,7 @@ def _cfg() -> dict:
     return {
         "account_sid": c.get("TWILIO_ACCOUNT_SID", ""),
         "auth_token": c.get("TWILIO_AUTH_TOKEN", ""),
-        "from_number": (
-            c.get("TWILIO_WHATSAPP_FROM")
-            or c.get("WHATSAPP_FROM_NUMBER")
-            or ""
-        ),
+        "from_number": (c.get("TWILIO_WHATSAPP_FROM") or c.get("WHATSAPP_FROM_NUMBER") or ""),
         "timeout": int(c.get("WHATSAPP_TIMEOUT", 15)),
         "callback_base": c.get("TWILIO_STATUS_CALLBACK_BASE", ""),
         "enabled": c.get("WHATSAPP_ENABLED", False),
@@ -67,7 +65,8 @@ class TwilioWhatsAppProvider(WhatsAppProviderBase):
 
         try:
             r = httpx.post(
-                url, data=data,
+                url,
+                data=data,
                 auth=(cfg["account_sid"], cfg["auth_token"]),
                 timeout=cfg["timeout"],
             )
@@ -77,8 +76,10 @@ class TwilioWhatsAppProvider(WhatsAppProviderBase):
         return self._parse_twilio_response(r)
 
     def send_template(
-        self, to: str, template_code: str,
-        variables: Optional[list] = None,
+        self,
+        to: str,
+        template_code: str,
+        variables: list | None = None,
         language: str = "fr",
     ) -> WhatsAppSendResult:
         cfg = _cfg()
@@ -108,7 +109,8 @@ class TwilioWhatsAppProvider(WhatsAppProviderBase):
 
         try:
             r = httpx.post(
-                url, data=data,
+                url,
+                data=data,
                 auth=(cfg["account_sid"], cfg["auth_token"]),
                 timeout=cfg["timeout"],
             )
@@ -133,15 +135,18 @@ class TwilioWhatsAppProvider(WhatsAppProviderBase):
         expected = b64encode(mac.digest()).decode()
         return hmac.compare_digest(expected, signature)
 
-    def parse_status_webhook(self, payload) -> Optional[WhatsAppStatusEvent]:
+    def parse_status_webhook(self, payload) -> WhatsAppStatusEvent | None:
         sid = payload.get("MessageSid") or payload.get("SmsSid")
         raw_status = (payload.get("MessageStatus") or payload.get("SmsStatus") or "").lower()
         if not (sid and raw_status):
             return None
         mapped = {
-            "queued": "queued", "sent": "sent",
-            "delivered": "delivered", "read": "read",
-            "failed": "failed", "undelivered": "failed",
+            "queued": "queued",
+            "sent": "sent",
+            "delivered": "delivered",
+            "read": "read",
+            "failed": "failed",
+            "undelivered": "failed",
         }.get(raw_status, raw_status)
         return WhatsAppStatusEvent(
             provider_message_id=sid,

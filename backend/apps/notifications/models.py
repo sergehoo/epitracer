@@ -1,4 +1,5 @@
 """Modèles de notifications : templates + journal d'envoi + config providers."""
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -23,6 +24,7 @@ class Channel(models.TextChoices):
 
 class Provider(models.TextChoices):
     """Fournisseurs d'envoi supportés."""
+
     ORANGE_CI = "orange_ci", _("Orange Côte d'Ivoire")
     TWILIO = "twilio", _("Twilio")
     META_WHATSAPP = "meta_whatsapp", _("Meta WhatsApp Cloud API")
@@ -53,6 +55,7 @@ class Direction(models.TextChoices):
 
 class MessageType(models.TextChoices):
     """Catégorise les notifications pour reporting et permissions."""
+
     AUTOMATIC_REMINDER = "automatic_reminder", _("Rappel automatique")
     MANUAL_MESSAGE = "manual_message", _("Message manuel agent")
     SYMPTOM_ALERT = "symptom_alert", _("Alerte symptômes")
@@ -79,17 +82,26 @@ class NotificationTemplate(BaseModel):
     is_active = models.BooleanField(default=True)
     # Optionnel : associer une maladie pour filtrer côté UI
     disease = models.ForeignKey(
-        "diseases.Disease", null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="notification_templates",
+        "diseases.Disease",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="notification_templates",
     )
     # Schema documentaire des variables attendues (pour la modal d'édition)
     variables_schema = models.JSONField(
-        default=dict, blank=True,
-        help_text=_("Schema des variables disponibles dans le template. Ex: {'first_name': 'str', 'checkin_link': 'url'}"),
+        default=dict,
+        blank=True,
+        help_text=_(
+            "Schema des variables disponibles dans le template. Ex: {'first_name': 'str', 'checkin_link': 'url'}"
+        ),
     )
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="created_templates",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_templates",
     )
 
     class Meta(BaseModel.Meta):
@@ -112,21 +124,29 @@ class Notification(BaseModel):
 
     channel = models.CharField(max_length=20, choices=Channel.choices, db_index=True)
     template = models.ForeignKey(
-        NotificationTemplate, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="notifications",
+        NotificationTemplate,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="notifications",
     )
 
     # ── Destinataire ──
     traveler = models.ForeignKey(
-        "travelers.Traveler", null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="notifications",
+        "travelers.Traveler",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="notifications",
     )
     recipient = models.CharField(
         max_length=200,
         help_text=_("Adresse brute saisie (téléphone, email, FCM token)."),
     )
     normalized_phone = models.CharField(
-        max_length=24, blank=True, db_index=True,
+        max_length=24,
+        blank=True,
+        db_index=True,
         help_text=_("Numéro normalisé au format E.164 (+225XXXXXXXXXX)."),
     )
 
@@ -137,25 +157,38 @@ class Notification(BaseModel):
 
     # ── Classification ──
     direction = models.CharField(
-        max_length=12, choices=Direction.choices, default=Direction.OUTBOUND, db_index=True,
+        max_length=12,
+        choices=Direction.choices,
+        default=Direction.OUTBOUND,
+        db_index=True,
     )
     message_type = models.CharField(
-        max_length=32, choices=MessageType.choices, default=MessageType.AUTOMATIC_REMINDER, db_index=True,
+        max_length=32,
+        choices=MessageType.choices,
+        default=MessageType.AUTOMATIC_REMINDER,
+        db_index=True,
     )
 
     # ── État ──
     status = models.CharField(
-        max_length=20, choices=NotificationStatus.choices,
-        default=NotificationStatus.PENDING, db_index=True,
+        max_length=20,
+        choices=NotificationStatus.choices,
+        default=NotificationStatus.PENDING,
+        db_index=True,
     )
     provider = models.CharField(max_length=40, choices=Provider.choices, blank=True, db_index=True)
     provider_message_id = models.CharField(
-        max_length=200, blank=True, db_index=True,
+        max_length=200,
+        blank=True,
+        db_index=True,
         help_text=_("ID de message côté fournisseur (utilisé pour les webhooks de statut)."),
     )
     error_message = models.TextField(blank=True)
     error_code = models.CharField(
-        max_length=40, blank=True, default="", db_index=True,
+        max_length=40,
+        blank=True,
+        default="",
+        db_index=True,
         help_text=_("Catégorie d'erreur normalisée (cf. services.errors)."),
     )
     retry_count = models.PositiveSmallIntegerField(default=0)
@@ -169,8 +202,11 @@ class Notification(BaseModel):
 
     # ── Audit & timestamps ──
     sent_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="sent_notifications",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sent_notifications",
         help_text=_("Agent qui a envoyé le message (null pour envois automatiques)."),
     )
     queued_at = models.DateTimeField(null=True, blank=True)
@@ -227,18 +263,24 @@ class NotificationProviderConfig(BaseModel):
     is_enabled = models.BooleanField(default=True, db_index=True)
     priority = models.PositiveSmallIntegerField(
         default=100,
-        help_text=_("Ordre de préférence si plusieurs providers couvrent le même canal. Plus bas = prioritaire."),
+        help_text=_(
+            "Ordre de préférence si plusieurs providers couvrent le même canal. Plus bas = prioritaire."
+        ),
     )
     country_code = models.CharField(
-        max_length=4, blank=True, db_index=True,
+        max_length=4,
+        blank=True,
+        db_index=True,
         help_text=_("Code pays ISO (ex: CI) pour routage géographique. Vide = international."),
     )
     sender_name = models.CharField(
-        max_length=40, blank=True,
+        max_length=40,
+        blank=True,
         help_text=_("Nom d'expéditeur affiché (Sender ID Orange CI, ou numéro Twilio)."),
     )
     metadata = models.JSONField(
-        default=dict, blank=True,
+        default=dict,
+        blank=True,
         help_text=_("Réglages spécifiques (timeout, quotas, etc.)."),
     )
 
@@ -282,23 +324,30 @@ class ProviderAvailability(BaseModel):
 
     provider = models.CharField(max_length=40, choices=Provider.choices, unique=True)
     state = models.CharField(
-        max_length=20, choices=ProviderState.choices,
-        default=ProviderState.AVAILABLE, db_index=True,
+        max_length=20,
+        choices=ProviderState.choices,
+        default=ProviderState.AVAILABLE,
+        db_index=True,
     )
     reason_code = models.CharField(max_length=40, blank=True, default="")
     technical_detail = models.TextField(
-        blank=True, help_text=_("Réponse brute du fournisseur (administrateurs uniquement)."),
+        blank=True,
+        help_text=_("Réponse brute du fournisseur (administrateurs uniquement)."),
     )
     suspended_at = models.DateTimeField(null=True, blank=True)
     last_failure_at = models.DateTimeField(null=True, blank=True)
     blocked_attempts = models.PositiveIntegerField(
-        default=0, help_text=_("Envois mis en attente depuis la suspension."),
+        default=0,
+        help_text=_("Envois mis en attente depuis la suspension."),
     )
     alert_sent_at = models.DateTimeField(null=True, blank=True)
     resumed_at = models.DateTimeField(null=True, blank=True)
     resumed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="resumed_providers",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resumed_providers",
     )
 
     history = HistoricalRecords()
@@ -329,7 +378,9 @@ class ReminderDispatch(BaseModel):
     """
 
     traveler = models.ForeignKey(
-        "travelers.Traveler", on_delete=models.CASCADE, related_name="reminder_dispatches",
+        "travelers.Traveler",
+        on_delete=models.CASCADE,
+        related_name="reminder_dispatches",
     )
     kind = models.CharField(max_length=40, db_index=True)
     reminder_date = models.DateField(db_index=True)
@@ -368,20 +419,28 @@ class SmsSecurityEvent(BaseModel):
 
     kind = models.CharField(max_length=40, db_index=True)
     severity = models.CharField(
-        max_length=10, choices=SecurityEventSeverity.choices,
-        default=SecurityEventSeverity.WARNING, db_index=True,
+        max_length=10,
+        choices=SecurityEventSeverity.choices,
+        default=SecurityEventSeverity.WARNING,
+        db_index=True,
     )
     source = models.CharField(max_length=60, blank=True, help_text=_("Endpoint, tâche ou règle."))
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     phone_hash = models.CharField(max_length=20, blank=True, db_index=True)
     phone_masked = models.CharField(max_length=24, blank=True)
     traveler = models.ForeignKey(
-        "travelers.Traveler", null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="sms_security_events",
+        "travelers.Traveler",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sms_security_events",
     )
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="sms_security_events",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sms_security_events",
     )
     details = models.JSONField(default=dict, blank=True)
 
@@ -415,11 +474,16 @@ class NotificationAuditLog(BaseModel):
     """Trace de chaque action sur une notification (qui, quand, depuis quelle IP)."""
 
     notification = models.ForeignKey(
-        Notification, on_delete=models.CASCADE, related_name="audit_logs",
+        Notification,
+        on_delete=models.CASCADE,
+        related_name="audit_logs",
     )
     actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="notification_actions",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="notification_actions",
     )
     action = models.CharField(max_length=20, choices=NotificationAuditAction.choices, db_index=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
@@ -453,17 +517,21 @@ class TelegramSubscription(BaseModel):
     un seul voyageur. Un voyageur peut par contre avoir plusieurs chats
     (téléphone + tablette) — chaque `chat_id` distinct = ligne distincte.
     """
+
     traveler = models.ForeignKey(
         "travelers.Traveler",
         on_delete=models.CASCADE,
         related_name="telegram_subs",
     )
     chat_id = models.CharField(
-        max_length=64, unique=True, db_index=True,
+        max_length=64,
+        unique=True,
+        db_index=True,
         help_text=_("ID de chat Telegram (int stocké en str pour éviter la limite bigint)."),
     )
     username = models.CharField(
-        max_length=64, blank=True,
+        max_length=64,
+        blank=True,
         help_text=_("@username Telegram du voyageur, s'il en a un."),
     )
     first_name = models.CharField(max_length=120, blank=True)
@@ -491,12 +559,12 @@ class TelegramSubscription(BaseModel):
 # Django les détecte automatiquement et applique les migrations.
 # ---------------------------------------------------------------------------
 from .email_models import (  # noqa: E402, F401
+    INTERNAL_EMAIL_TYPES,
+    PUBLIC_EMAIL_TYPES,
     EmailLog,
     EmailStatus,
     EmailTemplate,
     EmailType,
-    INTERNAL_EMAIL_TYPES,
-    PUBLIC_EMAIL_TYPES,
     PasswordResetToken,
     SenderProfile,
     SenderProfileCode,

@@ -30,10 +30,11 @@ Si `python-magic` (libmagic) est dispo, on l'utilise pour identifier le
 MIME effectif ; sinon on retombe sur un sniff pur-Python des premiers
 bytes (suffisant pour les 4 formats whitelistés).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from collections.abc import Iterable
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -111,7 +112,8 @@ def validate_uploaded_file(
     # Defaults from settings (centralisation cf. base.py)
     if allowed_mimes is None:
         allowed_mimes = getattr(
-            settings, "ALLOWED_UPLOAD_MIMES",
+            settings,
+            "ALLOWED_UPLOAD_MIMES",
             ["image/jpeg", "image/png", "image/webp", "application/pdf"],
         )
     allowed_mimes = set(allowed_mimes)
@@ -135,8 +137,7 @@ def validate_uploaded_file(
             pass
     if size > max_bytes:
         raise ValidationError(
-            f"Fichier trop volumineux ({size // 1024} Ko). "
-            f"Maximum autorisé : {max_size_mb} Mo."
+            f"Fichier trop volumineux ({size // 1024} Ko). " f"Maximum autorisé : {max_size_mb} Mo."
         )
     if size == 0:
         raise ValidationError("Fichier vide.")
@@ -148,9 +149,7 @@ def validate_uploaded_file(
         # générique (application/octet-stream), on laisse les magic bytes
         # trancher. Sinon on rejette tout de suite — c'est un signal fort.
         if declared_ct not in ("", "application/octet-stream", "binary/octet-stream"):
-            raise ValidationError(
-                "Format de fichier non supporté."
-            )
+            raise ValidationError("Format de fichier non supporté.")
 
     # ── 3. Magic bytes (la garde sérieuse) ──────────────────────────────
     pos = 0
@@ -174,10 +173,10 @@ def validate_uploaded_file(
         # /!\ on ne logge JAMAIS le contenu ni le nom du fichier (peut être PII).
         logger.info(
             "upload rejected: declared_ct=%s detected_mime=%s size=%s",
-            declared_ct or "-", real_mime or "-", size,
+            declared_ct or "-",
+            real_mime or "-",
+            size,
         )
-        raise ValidationError(
-            "Format de fichier non supporté."
-        )
+        raise ValidationError("Format de fichier non supporté.")
 
     return real_mime

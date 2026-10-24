@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-from .models import EbolaDeclaration, EbolaExposureAssessment, EbolaInvestigation, EbolaSymptomReport
+from .models import (
+    EbolaDeclaration,
+    EbolaExposureAssessment,
+    EbolaInvestigation,
+    EbolaSymptomReport,
+)
 
 
 class EbolaExposureInline(admin.StackedInline):
@@ -23,8 +28,14 @@ class EbolaSymptomReportInline(admin.TabularInline):
 @admin.register(EbolaInvestigation)
 class EbolaInvestigationAdmin(admin.ModelAdmin):
     list_display = (
-        "case_number", "traveler", "status", "risk_level", "risk_score",
-        "entry_point", "surveillance_start", "surveillance_end",
+        "case_number",
+        "traveler",
+        "status",
+        "risk_level",
+        "risk_score",
+        "entry_point",
+        "surveillance_start",
+        "surveillance_end",
     )
     list_filter = ("status", "risk_level", "entry_point")
     search_fields = ("case_number", "traveler__public_id", "traveler__last_name")

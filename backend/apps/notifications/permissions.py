@@ -6,21 +6,27 @@ Politique :
       BORDER_AGENT, FIELD_AGENT, ENTRY_POINT
     - Retry / cancel : NATIONAL_ADMIN, MINISTRY, INHP
 """
+
 from __future__ import annotations
 
 from rest_framework.permissions import BasePermission
 
 from apps.accounts.models import RoleCode
 
-
 SEND_ROLES = {
-    RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-    RoleCode.DISTRICT, RoleCode.BORDER_AGENT, RoleCode.FIELD_AGENT,
+    RoleCode.NATIONAL_ADMIN,
+    RoleCode.MINISTRY,
+    RoleCode.INHP,
+    RoleCode.DISTRICT,
+    RoleCode.BORDER_AGENT,
+    RoleCode.FIELD_AGENT,
     RoleCode.ENTRY_POINT,
 }
 
 ADMIN_ROLES = {
-    RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
+    RoleCode.NATIONAL_ADMIN,
+    RoleCode.MINISTRY,
+    RoleCode.INHP,
 }
 
 

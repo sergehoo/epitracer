@@ -9,19 +9,20 @@ Webhook : Meta envoie un POST JSON sur l'endpoint configuré dans la
 console développeur. Il faut répondre 200 OK rapidement.
 Vérification : X-Hub-Signature-256 = HMAC-SHA256 (secret défini côté Meta).
 """
+
 from __future__ import annotations
 
 import hmac
-import json
 import logging
 from hashlib import sha256
-from typing import Optional
 
 import httpx
 from django.conf import settings
 
 from .whatsapp_base import (
-    WhatsAppProviderBase, WhatsAppSendResult, WhatsAppStatusEvent,
+    WhatsAppProviderBase,
+    WhatsAppSendResult,
+    WhatsAppStatusEvent,
 )
 
 logger = logging.getLogger("epidemitracker.notifications.whatsapp_meta")
@@ -53,7 +54,8 @@ class MetaWhatsAppProvider(WhatsAppProviderBase):
 
         if not (cfg["token"] and cfg["phone_number_id"]):
             return WhatsAppSendResult(
-                ok=False, error="Meta WhatsApp : token ou phone_number_id manquant.",
+                ok=False,
+                error="Meta WhatsApp : token ou phone_number_id manquant.",
             )
 
         url = f"https://graph.facebook.com/{cfg['api_version']}/{cfg['phone_number_id']}/messages"
@@ -68,8 +70,10 @@ class MetaWhatsAppProvider(WhatsAppProviderBase):
         return self._post(url, cfg["token"], payload, cfg["timeout"])
 
     def send_template(
-        self, to: str, template_code: str,
-        variables: Optional[list] = None,
+        self,
+        to: str,
+        template_code: str,
+        variables: list | None = None,
         language: str = "fr",
     ) -> WhatsAppSendResult:
         cfg = _cfg()
@@ -79,18 +83,19 @@ class MetaWhatsAppProvider(WhatsAppProviderBase):
 
         if not (cfg["token"] and cfg["phone_number_id"]):
             return WhatsAppSendResult(
-                ok=False, error="Meta WhatsApp : token ou phone_number_id manquant.",
+                ok=False,
+                error="Meta WhatsApp : token ou phone_number_id manquant.",
             )
 
         # Construit le composant body avec les variables ordonnées
         components = []
         if variables:
-            components.append({
-                "type": "body",
-                "parameters": [
-                    {"type": "text", "text": str(v)} for v in variables
-                ],
-            })
+            components.append(
+                {
+                    "type": "body",
+                    "parameters": [{"type": "text", "text": str(v)} for v in variables],
+                }
+            )
 
         url = f"https://graph.facebook.com/{cfg['api_version']}/{cfg['phone_number_id']}/messages"
         payload = {
@@ -117,12 +122,12 @@ class MetaWhatsAppProvider(WhatsAppProviderBase):
         sig_header = request.headers.get("X-Hub-Signature-256", "")
         if not sig_header.startswith("sha256="):
             return False
-        expected = sig_header[len("sha256="):]
+        expected = sig_header[len("sha256=") :]
         raw_body = request.body if hasattr(request, "body") else b""
         mac = hmac.new(secret.encode(), raw_body, sha256).hexdigest()
         return hmac.compare_digest(mac, expected)
 
-    def parse_status_webhook(self, payload) -> Optional[WhatsAppStatusEvent]:
+    def parse_status_webhook(self, payload) -> WhatsAppStatusEvent | None:
         """Format Meta : entry[].changes[].value.statuses[].
 
         Exemple :
@@ -149,8 +154,10 @@ class MetaWhatsAppProvider(WhatsAppProviderBase):
                 for st in value.get("statuses", []) or []:
                     raw_status = (st.get("status") or "").lower()
                     mapped = {
-                        "sent": "sent", "delivered": "delivered",
-                        "read": "read", "failed": "failed",
+                        "sent": "sent",
+                        "delivered": "delivered",
+                        "read": "read",
+                        "failed": "failed",
                     }.get(raw_status, raw_status)
                     err_msg = ""
                     if st.get("errors"):
@@ -192,7 +199,8 @@ class MetaWhatsAppProvider(WhatsAppProviderBase):
             except Exception:  # noqa: BLE001
                 full_err = f"Meta HTTP {r.status_code} : {r.text[:200]}"
             return WhatsAppSendResult(
-                ok=False, error=full_err,
+                ok=False,
+                error=full_err,
                 raw_response={"status": r.status_code, "body": r.text[:500]},
             )
 
@@ -204,7 +212,9 @@ class MetaWhatsAppProvider(WhatsAppProviderBase):
         msgs = body.get("messages", []) or []
         msg_id = msgs[0].get("id", "") if msgs else ""
         return WhatsAppSendResult(
-            ok=True, provider_message_id=msg_id, raw_response=body,
+            ok=True,
+            provider_message_id=msg_id,
+            raw_response=body,
         )
 
 

@@ -16,7 +16,9 @@ from .serializers import (
 class TravelerViewSet(viewsets.ModelViewSet):
     queryset = (
         Traveler.objects.select_related(
-            "nationality", "id_document_country", "entry_point",
+            "nationality",
+            "id_document_country",
+            "entry_point",
         )
         .prefetch_related("travel_history", "companions")
         .all()
@@ -24,31 +26,46 @@ class TravelerViewSet(viewsets.ModelViewSet):
     serializer_class = TravelerSerializer
     permission_classes = [IsAuthenticatedAndActive, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT,
-        RoleCode.BORDER_AGENT, RoleCode.FIELD_AGENT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.BORDER_AGENT,
+        RoleCode.FIELD_AGENT,
+        RoleCode.OBSERVER,
     ]
     lookup_field = "public_id"
     search_fields = [
-        "public_id", "first_name", "last_name", "id_document_number",
-        "phone_mobile", "email",
+        "public_id",
+        "first_name",
+        "last_name",
+        "id_document_number",
+        "phone_mobile",
+        "email",
     ]
     filterset_fields = [
-        "current_health_status", "entry_point", "nationality",
-        "arrival_date", "gender", "transport_mode",
+        "current_health_status",
+        "entry_point",
+        "nationality",
+        "arrival_date",
+        "gender",
+        "transport_mode",
     ]
 
     @action(detail=True, methods=["get"], url_path="summary")
     def summary(self, request, public_id=None):
         t = self.get_object()
-        return Response({
-            "public_id": t.public_id,
-            "full_name": t.full_name,
-            "arrival_date": t.arrival_date,
-            "entry_point": t.entry_point.name if t.entry_point_id else None,
-            "nationality": t.nationality.code if t.nationality_id else None,
-            "current_health_status": t.current_health_status,
-        })
+        return Response(
+            {
+                "public_id": t.public_id,
+                "full_name": t.full_name,
+                "arrival_date": t.arrival_date,
+                "entry_point": t.entry_point.name if t.entry_point_id else None,
+                "nationality": t.nationality.code if t.nationality_id else None,
+                "current_health_status": t.current_health_status,
+            }
+        )
 
 
 class TravelHistoryViewSet(viewsets.ModelViewSet):

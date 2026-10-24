@@ -75,9 +75,7 @@ def log_security_event(
     severity = (
         SecurityEventSeverity.CRITICAL
         if kind in _CRITICAL
-        else SecurityEventSeverity.INFO
-        if kind in _INFO
-        else SecurityEventSeverity.WARNING
+        else SecurityEventSeverity.INFO if kind in _INFO else SecurityEventSeverity.WARNING
     )
     logger.warning(
         "SMS security event %s source=%s ip=%s phone=%s details=%s",

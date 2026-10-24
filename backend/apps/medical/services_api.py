@@ -4,6 +4,7 @@ Séparé de `services.py` (Phase 9A, géoloc + helpers) pour ne pas
 mélanger les responsabilités. Toutes les opérations modifiant l'état
 d'un cas passent par `transaction.atomic()` pour garantir l'intégrité.
 """
+
 from __future__ import annotations
 
 import logging
@@ -11,7 +12,6 @@ from datetime import date
 
 from django.db import transaction
 from django.http import Http404
-from django.utils import timezone
 
 from .models import (
     CaseClassification,
@@ -46,8 +46,7 @@ def generate_sample_code(disease_code: str, *, year: int | None = None) -> str:
         # même "dernier code" en parallèle. Sur SQLite (tests), le lock
         # est noop mais le test pytest est en single-thread donc OK.
         last = (
-            MedicalSample.objects
-            .select_for_update()
+            MedicalSample.objects.select_for_update()
             .filter(sample_code__startswith=prefix)
             .order_by("-sample_code")
             .first()
@@ -74,7 +73,8 @@ def update_case_classification(*, case, classification: str, reason: str, classi
     """
     with transaction.atomic():
         CaseClassification.objects.filter(
-            followup_case=case, is_current=True,
+            followup_case=case,
+            is_current=True,
         ).update(is_current=False)
 
         new_class = CaseClassification.objects.create(
@@ -92,8 +92,7 @@ def update_case_classification(*, case, classification: str, reason: str, classi
 # ---------------------------------------------------------------------------
 
 
-def close_followup(*, case, closure_reason: str, final_status: str,
-                   notes: str, performed_by):
+def close_followup(*, case, closure_reason: str, final_status: str, notes: str, performed_by):
     """Clôture un cas de suivi (transactionnel).
 
     `final_status` accepte 'completed' ou 'cancelled' et est mappé vers
@@ -134,8 +133,14 @@ def close_followup(*, case, closure_reason: str, final_status: str,
 # ---------------------------------------------------------------------------
 
 
-def assign_followup(*, case, assigned_agent_id=None, assigned_district_id=None,
-                    assigned_team: str = "", performed_by=None):
+def assign_followup(
+    *,
+    case,
+    assigned_agent_id=None,
+    assigned_district_id=None,
+    assigned_team: str = "",
+    performed_by=None,
+):
     """Met à jour les assignations (agent / district / équipe) sur le cas."""
     from apps.accounts.models import User
     from apps.geo.models import HealthZone
@@ -194,8 +199,8 @@ def get_traveler_followup(traveler_id_or_public_id):
 
     Raises Http404 si traveler introuvable OU pas de QuarantineRecord.
     """
+    from apps.quarantine.models import QuarantineStatus
     from apps.travelers.models import Traveler
-    from apps.quarantine.models import QuarantineRecord, QuarantineStatus
 
     raw = traveler_id_or_public_id
     traveler = None
@@ -211,8 +216,7 @@ def get_traveler_followup(traveler_id_or_public_id):
             raise Http404("Voyageur introuvable.")
 
     case = (
-        traveler.quarantines
-        .filter(status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED])
+        traveler.quarantines.filter(status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED])
         .order_by("-started_on")
         .first()
     )

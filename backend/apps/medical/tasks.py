@@ -39,13 +39,13 @@ Contraintes :
   - on utilise `traveler.public_id` partout comme identifiant
     non-PII (slug 24 chars destiné aux deep-links/logs).
 """
+
 from __future__ import annotations
 
 import io
 import logging
 import re
 from datetime import date, timedelta
-from typing import Optional
 
 from celery import shared_task
 from django.db import transaction
@@ -93,13 +93,10 @@ def _public_id(traveler) -> str:
     return getattr(traveler, "public_id", "") or "?"
 
 
-def _get_protocol(disease) -> Optional[DiseaseFollowupProtocol]:
+def _get_protocol(disease) -> DiseaseFollowupProtocol | None:
     if disease is None:
         return None
-    return (
-        DiseaseFollowupProtocol.objects.filter(disease=disease, is_active=True)
-        .first()
-    )
+    return DiseaseFollowupProtocol.objects.filter(disease=disease, is_active=True).first()
 
 
 def _today() -> date:
@@ -149,7 +146,8 @@ def _ensure_classification(
 
     with transaction.atomic():
         CaseClassification.objects.filter(
-            followup_case=case, is_current=True,
+            followup_case=case,
+            is_current=True,
         ).update(is_current=False)
         new = CaseClassification.objects.create(
             followup_case=case,
@@ -205,7 +203,8 @@ def check_geolocation_compliance_all() -> dict:
             ok = check_geolocation_compliance(case)
         except Exception:  # pragma: no cover - défense
             logger.exception(
-                "Erreur check_geolocation_compliance pour case=%s", case.pk,
+                "Erreur check_geolocation_compliance pour case=%s",
+                case.pk,
             )
             continue
         if ok:
@@ -245,8 +244,8 @@ def create_followup_schedule(self, traveler_id: int, disease_code: str | None = 
     Idempotent : si la quarantaine existe déjà ET que les DailyCheck sont
     déjà créés, ne duplique rien. Retourne un dict avec compteurs.
     """
-    from apps.travelers.models import Traveler
     from apps.diseases.models import Disease
+    from apps.travelers.models import Traveler
 
     stats = {
         "traveler_id": traveler_id,
@@ -295,7 +294,8 @@ def create_followup_schedule(self, traveler_id: int, disease_code: str | None = 
 
         existing_days = set(
             DailyCheck.objects.filter(quarantine=case).values_list(
-                "day_index", flat=True,
+                "day_index",
+                flat=True,
             )
         )
         to_create: list[DailyCheck] = []
@@ -337,7 +337,10 @@ def create_followup_schedule(self, traveler_id: int, disease_code: str | None = 
 
     logger.info(
         "create_followup_schedule: traveler=%s case=%s created=%s days=%s",
-        _public_id(traveler), case.pk, stats["quarantine_created"], stats["days_created"],
+        _public_id(traveler),
+        case.pk,
+        stats["quarantine_created"],
+        stats["days_created"],
     )
     return stats
 
@@ -378,7 +381,8 @@ def send_daily_followup_reminders(self) -> dict:
     }
     reminded_ids = set(
         ReminderDispatch.objects.filter(
-            kind=ReminderKind.DAILY_CHECKIN, reminder_date=today,
+            kind=ReminderKind.DAILY_CHECKIN,
+            reminder_date=today,
         ).values_list("traveler_id", flat=True)
     )
 
@@ -399,7 +403,8 @@ def send_daily_followup_reminders(self) -> dict:
                 continue
 
         day = DailyCheck.objects.filter(
-            quarantine=case, check_date=today,
+            quarantine=case,
+            check_date=today,
         ).first()
         if day is None:
             continue
@@ -467,20 +472,20 @@ def mark_missed_checkins(self) -> dict:
     for case in qs.iterator(chunk_size=500):
         stats["scanned"] += 1
         day = DailyCheck.objects.filter(
-            quarantine=case, check_date=today,
+            quarantine=case,
+            check_date=today,
         ).first()
         if day is None:
             continue
         if not day.notification_sent:
             continue
         if day.status not in (
-            DailyCheckStatus.PLANNED, DailyCheckStatus.PENDING,
+            DailyCheckStatus.PLANNED,
+            DailyCheckStatus.PENDING,
         ):
             continue
         responded = (
-            day.has_symptoms
-            or day.temperature_celsius is not None
-            or bool(day.reported_by_user_id)
+            day.has_symptoms or day.temperature_celsius is not None or bool(day.reported_by_user_id)
         )
         if responded:
             continue
@@ -509,9 +514,7 @@ def mark_missed_checkins(self) -> dict:
         protocol = _get_protocol(case.disease)
         missed_threshold = 2
         if protocol and protocol.escalation_rules:
-            missed_threshold = int(
-                protocol.escalation_rules.get("missed_checkins", 2) or 2
-            )
+            missed_threshold = int(protocol.escalation_rules.get("missed_checkins", 2) or 2)
         recent_missed = list(
             DailyCheck.objects.filter(
                 quarantine=case,
@@ -524,12 +527,14 @@ def mark_missed_checkins(self) -> dict:
             if day_indexes[-1] - day_indexes[0] == missed_threshold - 1:
                 try:
                     escalate_critical_symptoms_for_case.delay(
-                        case.pk, reason="missed_checkins",
+                        case.pk,
+                        reason="missed_checkins",
                     )
                     stats["escalated_for_missed"] += 1
                 except Exception:  # pragma: no cover - dev sync fallback
                     escalate_critical_symptoms_for_case.run(
-                        case.pk, reason="missed_checkins",
+                        case.pk,
+                        reason="missed_checkins",
                     )
                     stats["escalated_for_missed"] += 1
 
@@ -561,8 +566,8 @@ def _notify_agent_and_district(case: QuarantineRecord, *, title: str, body: str)
     phone = getattr(agent, "phone_number", None) if agent else None
     if phone:
         try:
-            from apps.notifications.services.dispatcher import enqueue_notification
             from apps.notifications.models import MessageType
+            from apps.notifications.services.dispatcher import enqueue_notification
 
             enqueue_notification(
                 channel="sms",
@@ -586,8 +591,11 @@ def _notify_agent_and_district(case: QuarantineRecord, *, title: str, body: str)
     max_retries=3,
 )
 def escalate_critical_symptoms_for_case(
-    self, case_id: int, reason: str = "critical_symptom",
-    symptom_code: str = "", symptom_report_id: int | None = None,
+    self,
+    case_id: int,
+    reason: str = "critical_symptom",
+    symptom_code: str = "",
+    symptom_report_id: int | None = None,
 ) -> dict:
     """Escalade un cas suite à symptôme critique (ou missed_checkins).
 
@@ -614,8 +622,7 @@ def escalate_critical_symptoms_for_case(
     else:
         if reason == "critical_symptom" and not symptom_code:
             last_critical = (
-                MedicalSymptomReport.objects
-                .filter(followup_case=case, is_critical=True)
+                MedicalSymptomReport.objects.filter(followup_case=case, is_critical=True)
                 .order_by("-created_at")
                 .first()
             )
@@ -648,7 +655,8 @@ def escalate_critical_symptoms_for_case(
         action_type=FollowUpActionType.ESCALATED,
         title=(
             f"Cas escaladé : symptôme {symptom_code}"
-            if symptom_code else f"Cas escaladé : {reason}"
+            if symptom_code
+            else f"Cas escaladé : {reason}"
         ),
         description=f"Escalade automatique déclenchée — motif: {reason}.",
         metadata={
@@ -699,7 +707,8 @@ def escalate_critical_symptoms(self) -> dict:
     """Filet de sécurité — backup périodique du signal (60 dernières minutes)."""
     cutoff = timezone.now() - timedelta(hours=1)
     qs = MedicalSymptomReport.objects.filter(
-        is_critical=True, created_at__gte=cutoff,
+        is_critical=True,
+        created_at__gte=cutoff,
     ).select_related("followup_case", "followup_case__traveler", "followup_case__disease")
 
     stats = {"scanned": 0, "escalated": 0}
@@ -741,7 +750,9 @@ def escalate_critical_symptoms(self) -> dict:
 # ============================================================================
 
 
-def _can_close(case: QuarantineRecord, protocol: DiseaseFollowupProtocol | None) -> tuple[bool, str]:
+def _can_close(
+    case: QuarantineRecord, protocol: DiseaseFollowupProtocol | None
+) -> tuple[bool, str]:
     """Évalue les conditions de clôture selon protocol.closure_rules."""
     rules = (protocol.closure_rules if protocol else None) or {}
     duration = int((protocol.duration_days if protocol else 21) or 21)
@@ -754,21 +765,24 @@ def _can_close(case: QuarantineRecord, protocol: DiseaseFollowupProtocol | None)
 
     if rules.get("no_critical_symptom", True):
         critical_exists = MedicalSymptomReport.objects.filter(
-            followup_case=case, is_critical=True,
+            followup_case=case,
+            is_critical=True,
         ).exists()
         if critical_exists:
             return False, "critical_symptom_present"
 
     if rules.get("no_positive_lab", True):
         positive_exists = LabAnalysis.objects.filter(
-            sample__followup_case=case, result=LabAnalysisResult.POSITIVE,
+            sample__followup_case=case,
+            result=LabAnalysisResult.POSITIVE,
         ).exists()
         if positive_exists:
             return False, "positive_lab_result"
 
     max_missed = int(rules.get("max_missed_checkins", 9999))
     missed = DailyCheck.objects.filter(
-        quarantine=case, status=DailyCheckStatus.MISSED,
+        quarantine=case,
+        status=DailyCheckStatus.MISSED,
     ).count()
     if missed > max_missed:
         return False, f"too_many_missed_{missed}"
@@ -786,7 +800,10 @@ def _can_close(case: QuarantineRecord, protocol: DiseaseFollowupProtocol | None)
 def auto_close_completed_followups(self) -> dict:
     """Clôt automatiquement les suivis arrivés à terme sans incident."""
     stats = {
-        "scanned": 0, "closed": 0, "blocked": 0, "certificates_queued": 0,
+        "scanned": 0,
+        "closed": 0,
+        "blocked": 0,
+        "certificates_queued": 0,
     }
     today = _today()
 
@@ -828,9 +845,14 @@ def auto_close_completed_followups(self) -> dict:
             case.status = QuarantineStatus.COMPLETED
             case.actual_end_on = today
             case.closure_reason = "auto_completed_after_protocol_duration"
-            case.save(update_fields=[
-                "status", "actual_end_on", "closure_reason", "updated_at",
-            ])
+            case.save(
+                update_fields=[
+                    "status",
+                    "actual_end_on",
+                    "closure_reason",
+                    "updated_at",
+                ]
+            )
             _log_action(
                 case,
                 action_type=FollowUpActionType.FOLLOWUP_CLOSED,
@@ -928,7 +950,8 @@ def _render_completion_certificate_pdf(case: QuarantineRecord) -> bytes:
     c.drawCentredString(width / 2, height - 15 * mm, "Union - Discipline - Travail")
     c.setFont("Helvetica-Bold", 9)
     c.drawCentredString(
-        width / 2, height - 20 * mm,
+        width / 2,
+        height - 20 * mm,
         "Ministere de la Sante, de l'Hygiene Publique et de la CMU - INHP",
     )
 
@@ -945,42 +968,45 @@ def _render_completion_certificate_pdf(case: QuarantineRecord) -> bytes:
     # Titre
     c.setFillColorRGB(0.05, 0.20, 0.40)
     c.setFont("Helvetica-Bold", 20)
-    c.drawCentredString(width / 2, height - 50 * mm,
-                        "ATTESTATION DE FIN DE SUIVI SANITAIRE")
+    c.drawCentredString(width / 2, height - 50 * mm, "ATTESTATION DE FIN DE SUIVI SANITAIRE")
     c.setFont("Helvetica", 10)
     c.setFillColorRGB(0.4, 0.4, 0.4)
-    c.drawCentredString(width / 2, height - 56 * mm,
-                        "Programme national de surveillance epidemiologique des voyageurs")
+    c.drawCentredString(
+        width / 2,
+        height - 56 * mm,
+        "Programme national de surveillance epidemiologique des voyageurs",
+    )
 
     # Texte
     traveler = case.traveler
     full_name = f"{(traveler.last_name or '').upper()} {traveler.first_name or ''}".strip() or "-"
     started = case.started_on.strftime("%d/%m/%Y") if case.started_on else "-"
-    ended_dt = (case.actual_end_on or case.expected_end_on)
+    ended_dt = case.actual_end_on or case.expected_end_on
     ended = ended_dt.strftime("%d/%m/%Y") if ended_dt else "-"
     duration = (
         ((case.actual_end_on or case.expected_end_on) - case.started_on).days + 1
-        if case.started_on else 21
+        if case.started_on
+        else 21
     )
     disease_name = case.disease.name if case.disease_id else "-"
 
     c.setFillColorRGB(0.1, 0.1, 0.1)
     c.setFont("Helvetica", 11)
-    c.drawString(25 * mm, height - 80 * mm,
-                 "L'Institut National d'Hygiene Publique (INHP) atteste que :")
+    c.drawString(
+        25 * mm, height - 80 * mm, "L'Institut National d'Hygiene Publique (INHP) atteste que :"
+    )
     c.setFont("Helvetica-Bold", 14)
     c.drawString(25 * mm, height - 100 * mm, full_name)
     c.setFont("Helvetica", 10)
     c.setFillColorRGB(0.3, 0.3, 0.3)
-    c.drawString(25 * mm, height - 106 * mm,
-                 f"Identifiant voyageur : {_public_id(traveler)}")
+    c.drawString(25 * mm, height - 106 * mm, f"Identifiant voyageur : {_public_id(traveler)}")
 
     c.setFillColorRGB(0.1, 0.1, 0.1)
     c.setFont("Helvetica", 11)
     txt = c.beginText(25 * mm, height - 120 * mm)
     txt.setLeading(16)
     for line in [
-        f"a ete place sous surveillance sanitaire pour la maladie suivante :",
+        "a ete place sous surveillance sanitaire pour la maladie suivante :",
         f"  - {disease_name}",
         "",
         f"du {started} au {ended}, soit {duration} jours.",
@@ -998,27 +1024,24 @@ def _render_completion_certificate_pdf(case: QuarantineRecord) -> bytes:
     c.roundRect(25 * mm, 80 * mm, 160 * mm, 14 * mm, 4, fill=1, stroke=0)
     c.setFillColorRGB(1, 1, 1)
     c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(width / 2, 88 * mm,
-                        "SUIVI CLOTURE - AUCUN INCIDENT CONSTATE")
+    c.drawCentredString(width / 2, 88 * mm, "SUIVI CLOTURE - AUCUN INCIDENT CONSTATE")
 
     # Signature
     c.setFillColorRGB(0.3, 0.3, 0.3)
     c.setFont("Helvetica-Oblique", 9)
     issued_at = timezone.now()
-    c.drawString(25 * mm, 60 * mm,
-                 f"Delivre le : {issued_at.strftime('%d/%m/%Y a %H:%M')}")
-    c.drawString(25 * mm, 55 * mm,
-                 f"Reference : {case.uuid} . Signature electronique INHP")
-    c.drawString(25 * mm, 50 * mm,
-                 "Document genere automatiquement.")
+    c.drawString(25 * mm, 60 * mm, f"Delivre le : {issued_at.strftime('%d/%m/%Y a %H:%M')}")
+    c.drawString(25 * mm, 55 * mm, f"Reference : {case.uuid} . Signature electronique INHP")
+    c.drawString(25 * mm, 50 * mm, "Document genere automatiquement.")
 
     # Footer
     c.setFillColorRGB(0.05, 0.20, 0.40)
     c.rect(0, 0, width, 12 * mm, fill=1, stroke=0)
     c.setFillColorRGB(1, 1, 1)
     c.setFont("Helvetica", 8)
-    c.drawCentredString(width / 2, 5 * mm,
-                        "INHP - Plateforme EpiTrace - Surveillance epidemiologique nationale")
+    c.drawCentredString(
+        width / 2, 5 * mm, "INHP - Plateforme EpiTrace - Surveillance epidemiologique nationale"
+    )
 
     c.showPage()
     c.save()
@@ -1039,13 +1062,14 @@ def generate_followup_completion_certificate(self, case_id: int) -> dict:
     régénérer. Pour forcer la régénération, supprimer le fichier au
     préalable.
     """
-    from django.core.files.storage import default_storage
     from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
 
     stats = {"case_id": case_id, "generated": False}
     try:
         case = QuarantineRecord.objects.select_related(
-            "traveler", "disease",
+            "traveler",
+            "disease",
         ).get(pk=case_id)
     except QuarantineRecord.DoesNotExist:
         return {**stats, "error": "case_not_found"}
@@ -1082,8 +1106,7 @@ def generate_followup_completion_certificate(self, case_id: int) -> dict:
             },
         )
 
-    logger.info("generate_followup_completion_certificate: case=%s path=%s",
-                case.pk, saved_path)
+    logger.info("generate_followup_completion_certificate: case=%s path=%s", case.pk, saved_path)
     return stats
 
 
@@ -1121,15 +1144,16 @@ def generate_followup_individual_sheet(self, case_id: int) -> dict:
     évolué — c'est un dossier vivant). Pour économiser le stockage,
     une nouvelle exécution écrase le précédent fichier.
     """
-    from django.core.files.storage import default_storage
     from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
 
     from .services_pdf import render_followup_individual_sheet
 
     stats = {"case_id": case_id, "generated": False}
     try:
         case = QuarantineRecord.objects.select_related(
-            "traveler", "disease",
+            "traveler",
+            "disease",
         ).get(pk=case_id)
     except QuarantineRecord.DoesNotExist:
         return {**stats, "error": "case_not_found"}
@@ -1153,8 +1177,7 @@ def generate_followup_individual_sheet(self, case_id: int) -> dict:
         action_type=FollowUpActionType.MEDICAL_ORIENTATION,
         title="Fiche de suivi individuelle générée",
         description=(
-            f"PDF de la fiche complète régénéré pour le voyageur "
-            f"{_public_id(case.traveler)}."
+            f"PDF de la fiche complète régénéré pour le voyageur " f"{_public_id(case.traveler)}."
         ),
         metadata={
             "kind": "document_generated",
@@ -1165,7 +1188,8 @@ def generate_followup_individual_sheet(self, case_id: int) -> dict:
 
     logger.info(
         "generate_followup_individual_sheet: case=%s path=%s",
-        case.pk, saved_path,
+        case.pk,
+        saved_path,
     )
     return stats
 
@@ -1179,20 +1203,17 @@ def generate_followup_individual_sheet(self, case_id: int) -> dict:
 )
 def generate_sample_collection_report_task(self, sample_id: int) -> dict:
     """Génère le rapport de prélèvement PDF + stocke /media/medical/samples/."""
-    from django.core.files.storage import default_storage
     from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
 
     from .models import MedicalSample
     from .services_pdf import render_sample_collection_report
 
     stats = {"sample_id": sample_id, "generated": False}
     try:
-        sample = (
-            MedicalSample.objects
-            .select_related("followup_case", "followup_case__traveler",
-                            "followup_case__disease", "collected_by")
-            .get(pk=sample_id)
-        )
+        sample = MedicalSample.objects.select_related(
+            "followup_case", "followup_case__traveler", "followup_case__disease", "collected_by"
+        ).get(pk=sample_id)
     except MedicalSample.DoesNotExist:
         return {**stats, "error": "sample_not_found"}
 
@@ -1230,7 +1251,8 @@ def generate_sample_collection_report_task(self, sample_id: int) -> dict:
 
     logger.info(
         "generate_sample_collection_report: sample=%s path=%s",
-        sample.pk, saved_path,
+        sample.pk,
+        saved_path,
     )
     return stats
 
@@ -1243,19 +1265,22 @@ def generate_sample_collection_report_task(self, sample_id: int) -> dict:
     max_retries=3,
 )
 def generate_medical_orientation_form_task(
-    self, case_id: int, agent_id: int | None = None,
+    self,
+    case_id: int,
+    agent_id: int | None = None,
 ) -> dict:
     """Génère la fiche d'orientation PDF + stocke /media/medical/orientations/."""
     from django.contrib.auth import get_user_model
-    from django.core.files.storage import default_storage
     from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
 
     from .services_pdf import render_medical_orientation_form
 
     stats = {"case_id": case_id, "agent_id": agent_id, "generated": False}
     try:
         case = QuarantineRecord.objects.select_related(
-            "traveler", "disease",
+            "traveler",
+            "disease",
         ).get(pk=case_id)
     except QuarantineRecord.DoesNotExist:
         return {**stats, "error": "case_not_found"}
@@ -1277,8 +1302,7 @@ def generate_medical_orientation_form_task(
         action_type=FollowUpActionType.MEDICAL_ORIENTATION,
         title="Fiche d'orientation médicale générée",
         description=(
-            f"PDF d'orientation médicale généré pour le voyageur "
-            f"{_public_id(case.traveler)}."
+            f"PDF d'orientation médicale généré pour le voyageur " f"{_public_id(case.traveler)}."
         ),
         user=agent,
         metadata={
@@ -1291,6 +1315,8 @@ def generate_medical_orientation_form_task(
 
     logger.info(
         "generate_medical_orientation_form: case=%s agent=%s path=%s",
-        case.pk, agent_id, saved_path,
+        case.pk,
+        agent_id,
+        saved_path,
     )
     return stats

@@ -17,11 +17,11 @@ Usage :
     python manage.py normalize_alert_case
     python manage.py normalize_alert_case --dry-run
 """
+
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
-
 
 STATUS_MAP = {
     "OPEN": "open",
@@ -73,8 +73,10 @@ class Command(BaseCommand):
                     n_severity += count
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS(
-            f"Normalisation terminée : {n_status} status corrigés, {n_severity} severity corrigés."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Normalisation terminée : {n_status} status corrigés, {n_severity} severity corrigés."
+            )
+        )
         if dry:
             self.stdout.write(self.style.WARNING("Mode --dry-run : aucune écriture en base."))

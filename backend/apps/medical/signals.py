@@ -11,6 +11,7 @@ Phase 9D : on étend pour déclencher en plus des tâches Celery :
 Aucun PII n'est mis en clair dans le champ description / metadata (pas de
 téléphone, pas de passeport — uniquement public_id du voyageur).
 """
+
 from __future__ import annotations
 
 import logging
@@ -250,9 +251,16 @@ def _log_lab_lifecycle(sender, instance: LabAnalysis, created, **kwargs):
         return
 
     previous_status = getattr(instance, "_previous_status", None)
-    if instance.status != previous_status and instance.status in (
-        LabAnalysisStatus.VALIDATED, LabAnalysisStatus.COMMUNICATED,
-    ) and instance.result and instance.result != LabAnalysisResult.EMPTY:
+    if (
+        instance.status != previous_status
+        and instance.status
+        in (
+            LabAnalysisStatus.VALIDATED,
+            LabAnalysisStatus.COMMUNICATED,
+        )
+        and instance.result
+        and instance.result != LabAnalysisResult.EMPTY
+    ):
         FollowUpAction.objects.create(
             followup_case=case,
             action_type=FollowUpActionType.LAB_RESULT_ADDED,
@@ -288,7 +296,8 @@ def _trigger_classification_on_positive_lab(sender, instance: LabAnalysis, creat
         return
     # On ne déclenche qu'à la validation/communication officielle
     if instance.status not in (
-        LabAnalysisStatus.VALIDATED, LabAnalysisStatus.COMMUNICATED,
+        LabAnalysisStatus.VALIDATED,
+        LabAnalysisStatus.COMMUNICATED,
     ):
         return
 

@@ -1,4 +1,5 @@
 """Signaux d'audit liés à l'authentification."""
+
 from __future__ import annotations
 
 from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
@@ -10,7 +11,9 @@ from .models import LoginEvent
 def _client_meta(request):
     if request is None:
         return None, ""
-    ip = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip() or request.META.get("REMOTE_ADDR")
+    ip = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip() or request.META.get(
+        "REMOTE_ADDR"
+    )
     ua = request.META.get("HTTP_USER_AGENT", "")[:400]
     return ip, ua
 

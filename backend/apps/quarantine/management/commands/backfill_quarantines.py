@@ -12,6 +12,7 @@ Usage :
     python manage.py backfill_quarantines
     python manage.py backfill_quarantines --dry-run
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -34,7 +35,9 @@ class Command(BaseCommand):
         dry = opts["dry_run"]
         ebola = Disease.objects.filter(code__iexact="EBOLA").first()
         if not ebola:
-            self.stdout.write(self.style.ERROR("Maladie EBOLA introuvable. Lancez seed_reference_data d'abord."))
+            self.stdout.write(
+                self.style.ERROR("Maladie EBOLA introuvable. Lancez seed_reference_data d'abord.")
+            )
             return
 
         days = ebola.quarantine_days or 21
@@ -62,9 +65,7 @@ class Command(BaseCommand):
                 or inv.created_at.date()
             )
             ended = started + timedelta(days=days)
-            status = (
-                QuarantineStatus.ACTIVE if ended >= today else QuarantineStatus.COMPLETED
-            )
+            status = QuarantineStatus.ACTIVE if ended >= today else QuarantineStatus.COMPLETED
 
             if dry:
                 self.stdout.write(

@@ -6,12 +6,32 @@ from .models import LoginEvent, Organization, Role, RoleAssignment, TrustedDevic
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    list_display = ("email", "first_name", "last_name", "is_active", "is_locked", "mfa_enabled", "last_login")
+    list_display = (
+        "email",
+        "first_name",
+        "last_name",
+        "is_active",
+        "is_locked",
+        "mfa_enabled",
+        "last_login",
+    )
     list_filter = ("is_active", "is_locked", "mfa_enabled", "is_staff", "is_superuser")
     search_fields = ("email", "first_name", "last_name", "phone")
     ordering = ("-date_joined",)
     fieldsets = DjangoUserAdmin.fieldsets + (
-        ("EpidemiTracker", {"fields": ("phone", "job_title", "avatar", "mfa_enabled", "mfa_enforced", "is_locked")}),
+        (
+            "EpidemiTracker",
+            {
+                "fields": (
+                    "phone",
+                    "job_title",
+                    "avatar",
+                    "mfa_enabled",
+                    "mfa_enforced",
+                    "is_locked",
+                )
+            },
+        ),
     )
 
 

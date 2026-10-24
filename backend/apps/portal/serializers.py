@@ -179,8 +179,15 @@ class ScreeningDiseaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Disease
         fields = [
-            "code", "name", "slug", "contact_exposures", "specific_exposures",
-            "ask_specific_exposures", "risk_countries", "followup_days", "daily_checkin",
+            "code",
+            "name",
+            "slug",
+            "contact_exposures",
+            "specific_exposures",
+            "ask_specific_exposures",
+            "risk_countries",
+            "followup_days",
+            "daily_checkin",
         ]
 
     def _exposures(self, obj, contact: bool):

@@ -22,8 +22,17 @@ class CountrySerializer(serializers.ModelSerializer):
     class Meta:
         model = Country
         fields = [
-            "id", "uuid", "code", "code3", "name", "name_local", "region",
-            "is_monitored", "risk_level", "risk_for_diseases", "current_risks",
+            "id",
+            "uuid",
+            "code",
+            "code3",
+            "name",
+            "name_local",
+            "region",
+            "is_monitored",
+            "risk_level",
+            "risk_for_diseases",
+            "current_risks",
         ]
         read_only_fields = ["risk_level", "risk_for_diseases"]
 
@@ -57,15 +66,23 @@ class CountryRiskAssessmentSerializer(serializers.ModelSerializer):
     country = serializers.SlugRelatedField(slug_field="code", queryset=Country.objects.all())
     country_name = serializers.CharField(source="country.name", read_only=True)
     disease = serializers.SlugRelatedField(
-        slug_field="code", queryset=Disease.objects.all(), required=False, allow_null=True,
+        slug_field="code",
+        queryset=Disease.objects.all(),
+        required=False,
+        allow_null=True,
     )
     disease_name = serializers.CharField(source="disease.name", read_only=True, default=None)
     risk_level = serializers.ChoiceField(choices=CountryRiskLevel.choices)
     source_alert = serializers.SlugRelatedField(
-        slug_field="uuid", queryset=HealthAlert.objects.all(), required=False, allow_null=True,
+        slug_field="uuid",
+        queryset=HealthAlert.objects.all(),
+        required=False,
+        allow_null=True,
     )
     decided_by_email = serializers.EmailField(
-        source="decided_by.email", read_only=True, default=None,
+        source="decided_by.email",
+        read_only=True,
+        default=None,
     )
     superseded_by = serializers.UUIDField(source="superseded_by.uuid", read_only=True, default=None)
     is_current = serializers.SerializerMethodField()
@@ -73,10 +90,22 @@ class CountryRiskAssessmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = CountryRiskAssessment
         fields = [
-            "id", "uuid", "country", "country_name", "disease", "disease_name",
-            "risk_level", "valid_from", "valid_until", "justification",
-            "source_alert", "source_reference", "decided_by_email",
-            "superseded_by", "is_current", "created_at",
+            "id",
+            "uuid",
+            "country",
+            "country_name",
+            "disease",
+            "disease_name",
+            "risk_level",
+            "valid_from",
+            "valid_until",
+            "justification",
+            "source_alert",
+            "source_reference",
+            "decided_by_email",
+            "superseded_by",
+            "is_current",
+            "created_at",
         ]
         read_only_fields = ["id", "uuid", "created_at"]
         extra_kwargs = {"valid_from": {"required": False}}
@@ -106,9 +135,23 @@ class EntryPointSerializer(serializers.ModelSerializer):
     class Meta:
         model = EntryPoint
         fields = [
-            "id", "uuid", "code", "name", "type", "iata_code", "icao_code",
-            "country", "country_code", "country_name", "region", "city", "address",
-            "latitude", "longitude", "is_active", "notes",
+            "id",
+            "uuid",
+            "code",
+            "name",
+            "type",
+            "iata_code",
+            "icao_code",
+            "country",
+            "country_code",
+            "country_name",
+            "region",
+            "city",
+            "address",
+            "latitude",
+            "longitude",
+            "is_active",
+            "notes",
         ]
 
     def get_latitude(self, obj):

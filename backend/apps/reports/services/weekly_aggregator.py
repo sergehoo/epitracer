@@ -22,15 +22,15 @@ Utilisation :
     agg = aggregate_weekly(start, end)
     # agg["travelers"]["registered"] == 1245 par exemple
 """
+
 from __future__ import annotations
 
 import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional
 
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.utils import timezone as django_tz
 
 logger = logging.getLogger("epidemitracker.reports.aggregator")
@@ -64,6 +64,7 @@ CLASSIFICATION_BUCKETS = {
 @dataclass
 class WeekPeriod:
     """Descripteur d'une semaine ISO 8601."""
+
     start: datetime
     end: datetime
 
@@ -122,18 +123,23 @@ def _delta_pct(current: int, previous: int) -> float:
 # Sections d'agrégation — 1 fonction par domaine
 # ---------------------------------------------------------------------------
 
+
 def _count_travelers(period: WeekPeriod) -> dict:
     """Voyageurs enregistrés + en suivi actif."""
     from apps.travelers.models import Traveler
 
-    registered = _safe_count(lambda: Traveler.objects.filter(
-        created_at__gte=period.start, created_at__lte=period.end,
-    ).count())
+    registered = _safe_count(
+        lambda: Traveler.objects.filter(
+            created_at__gte=period.start,
+            created_at__lte=period.end,
+        ).count()
+    )
 
     # En suivi actif = quarantine en cours à la fin de la période
     active_followup = 0
     try:
         from apps.quarantine.models import QuarantineRecord, QuarantineStatus
+
         active_followup = QuarantineRecord.objects.filter(
             status=QuarantineStatus.ONGOING,
             created_at__lte=period.end,
@@ -149,12 +155,15 @@ def _count_followups(period: WeekPeriod) -> dict:
     result = {"new": 0, "completed": 0}
     try:
         from apps.quarantine.models import QuarantineRecord, QuarantineStatus
+
         result["new"] = QuarantineRecord.objects.filter(
-            created_at__gte=period.start, created_at__lte=period.end,
+            created_at__gte=period.start,
+            created_at__lte=period.end,
         ).count()
         result["completed"] = QuarantineRecord.objects.filter(
             status=QuarantineStatus.COMPLETED,
-            updated_at__gte=period.start, updated_at__lte=period.end,
+            updated_at__gte=period.start,
+            updated_at__lte=period.end,
         ).count()
     except Exception as exc:  # noqa: BLE001
         logger.debug("QuarantineRecord agg failed: %s", exc)
@@ -166,6 +175,7 @@ def _count_checkins(period: WeekPeriod) -> dict:
     result = {"received": 0, "missed": 0}
     try:
         from apps.quarantine.models import DailyCheck, DailyCheckStatus
+
         base = DailyCheck.objects.filter(
             check_date__gte=period.start.date(),
             check_date__lte=period.end.date(),
@@ -182,8 +192,10 @@ def _count_assistance(period: WeekPeriod) -> dict:
     result = {"requests": 0}
     try:
         from apps.medical.models import MedicalSymptomReport
+
         result["requests"] = MedicalSymptomReport.objects.filter(
-            created_at__gte=period.start, created_at__lte=period.end,
+            created_at__gte=period.start,
+            created_at__lte=period.end,
         ).count()
     except Exception:  # noqa: BLE001
         pass
@@ -194,9 +206,11 @@ def _count_alerts(period: WeekPeriod) -> dict:
     """Alertes sanitaires — créées, ouvertes, résolues."""
     result = {"created": 0, "open": 0, "resolved": 0}
     try:
-        from apps.surveillance.models import HealthAlert, AlertStatus
+        from apps.surveillance.models import AlertStatus, HealthAlert
+
         base = HealthAlert.objects.filter(
-            created_at__gte=period.start, created_at__lte=period.end,
+            created_at__gte=period.start,
+            created_at__lte=period.end,
         )
         result["created"] = base.count()
         # Ouvertes/résolues sur la période même (pas seulement créées la semaine)
@@ -220,7 +234,8 @@ def _count_risk_levels(period: WeekPeriod) -> dict:
     try:
         rows = (
             Traveler.objects.filter(
-                created_at__gte=period.start, created_at__lte=period.end,
+                created_at__gte=period.start,
+                created_at__lte=period.end,
             )
             .values("current_health_status")
             .annotate(c=Count("id"))
@@ -257,9 +272,11 @@ def _count_case_classifications(period: WeekPeriod) -> dict:
     buckets = {name: 0 for name in CLASSIFICATION_BUCKETS}
     try:
         from apps.medical.models import CaseClassification
+
         rows = (
             CaseClassification.objects.filter(
-                classified_at__gte=period.start, classified_at__lte=period.end,
+                classified_at__gte=period.start,
+                classified_at__lte=period.end,
             )
             .values("classification")
             .annotate(c=Count("id"))
@@ -282,19 +299,24 @@ def _count_samples_and_analyses(period: WeekPeriod) -> dict:
 
     try:
         from apps.medical.models import MedicalSample
+
         samples["requested"] = MedicalSample.objects.filter(
-            created_at__gte=period.start, created_at__lte=period.end,
+            created_at__gte=period.start,
+            created_at__lte=period.end,
         ).count()
         samples["collected"] = MedicalSample.objects.filter(
-            collected_at__gte=period.start, collected_at__lte=period.end,
+            collected_at__gte=period.start,
+            collected_at__lte=period.end,
         ).count()
     except Exception:  # noqa: BLE001
         pass
 
     try:
-        from apps.medical.models import LabAnalysis, LabAnalysisStatus, LabAnalysisResult
+        from apps.medical.models import LabAnalysis, LabAnalysisResult, LabAnalysisStatus
+
         base = LabAnalysis.objects.filter(
-            created_at__gte=period.start, created_at__lte=period.end,
+            created_at__gte=period.start,
+            created_at__lte=period.end,
         )
         analyses["pending"] = base.filter(status=LabAnalysisStatus.PENDING).count()
         analyses["in_progress"] = base.filter(status=LabAnalysisStatus.IN_PROGRESS).count()
@@ -309,20 +331,19 @@ def _count_samples_and_analyses(period: WeekPeriod) -> dict:
 def _breakdown_entry_point(period: WeekPeriod, limit: int = 15) -> list:
     """Top N points d'entrée par nombre de voyageurs enregistrés."""
     from apps.travelers.models import Traveler
+
     try:
         rows = (
             Traveler.objects.filter(
-                created_at__gte=period.start, created_at__lte=period.end,
+                created_at__gte=period.start,
+                created_at__lte=period.end,
                 entry_point__isnull=False,
             )
             .values("entry_point__name")
             .annotate(count=Count("id"))
             .order_by("-count")[:limit]
         )
-        return [
-            {"name": r["entry_point__name"] or "—", "count": r["count"]}
-            for r in rows
-        ]
+        return [{"name": r["entry_point__name"] or "—", "count": r["count"]} for r in rows]
     except Exception:  # noqa: BLE001
         return []
 
@@ -330,12 +351,14 @@ def _breakdown_entry_point(period: WeekPeriod, limit: int = 15) -> list:
 def _breakdown_district(period: WeekPeriod, limit: int = 15) -> list:
     """Top N districts par nombre de voyageurs (via entry_point→zone)."""
     from apps.travelers.models import Traveler
+
     # Le district n'est pas forcément direct sur Traveler ; on tente 2 stratégies :
     for path in ("entry_point__zone__name", "confinement_district__name"):
         try:
             rows = (
                 Traveler.objects.filter(
-                    created_at__gte=period.start, created_at__lte=period.end,
+                    created_at__gte=period.start,
+                    created_at__lte=period.end,
                 )
                 .exclude(**{path: ""})
                 .values(path)
@@ -354,9 +377,11 @@ def _breakdown_disease(period: WeekPeriod, limit: int = 10) -> list:
     """Top maladies surveillées via QuarantineRecord.disease."""
     try:
         from apps.quarantine.models import QuarantineRecord
+
         rows = (
             QuarantineRecord.objects.filter(
-                created_at__gte=period.start, created_at__lte=period.end,
+                created_at__gte=period.start,
+                created_at__lte=period.end,
                 disease__isnull=False,
             )
             .values("disease__name")
@@ -449,36 +474,40 @@ def _top_events(period: WeekPeriod, limit: int = 10) -> list:
     events = []
     try:
         from apps.surveillance.models import HealthAlert
-        alerts = (
-            HealthAlert.objects
-            .filter(created_at__gte=period.start, created_at__lte=period.end,
-                    severity__in=["critical", "high"])
-            .order_by("-created_at")[:limit]
-        )
+
+        alerts = HealthAlert.objects.filter(
+            created_at__gte=period.start,
+            created_at__lte=period.end,
+            severity__in=["critical", "high"],
+        ).order_by("-created_at")[:limit]
         for a in alerts:
-            events.append({
-                "type": "alert",
-                "severity": a.severity,
-                "title": (a.title if hasattr(a, "title") else str(a))[:120],
-                "at": a.created_at.isoformat() if a.created_at else "",
-            })
+            events.append(
+                {
+                    "type": "alert",
+                    "severity": a.severity,
+                    "title": (a.title if hasattr(a, "title") else str(a))[:120],
+                    "at": a.created_at.isoformat() if a.created_at else "",
+                }
+            )
     except Exception:  # noqa: BLE001
         pass
 
     try:
         from apps.medical.models import CaseClassification
-        confirmed = (
-            CaseClassification.objects
-            .filter(classified_at__gte=period.start, classified_at__lte=period.end,
-                    classification="confirmed")
-            .order_by("-classified_at")[:limit]
-        )
+
+        confirmed = CaseClassification.objects.filter(
+            classified_at__gte=period.start,
+            classified_at__lte=period.end,
+            classification="confirmed",
+        ).order_by("-classified_at")[:limit]
         for c in confirmed:
-            events.append({
-                "type": "case_confirmed",
-                "title": f"Cas confirmé #{c.followup_case_id}",
-                "at": c.classified_at.isoformat() if c.classified_at else "",
-            })
+            events.append(
+                {
+                    "type": "case_confirmed",
+                    "title": f"Cas confirmé #{c.followup_case_id}",
+                    "at": c.classified_at.isoformat() if c.classified_at else "",
+                }
+            )
     except Exception:  # noqa: BLE001
         pass
 
@@ -540,7 +569,6 @@ def aggregate_weekly(period_start: datetime, period_end: datetime) -> dict:
     return {
         "period": period.to_dict(),
         "previous_period": prev_period.to_dict(),
-
         "travelers": travelers,
         "followups": followups,
         "checkins": checkins,
@@ -550,13 +578,11 @@ def aggregate_weekly(period_start: datetime, period_end: datetime) -> dict:
         "cases": cases,
         "samples": lab["samples"],
         "analyses": lab["analyses"],
-
         "by_entry_point": _breakdown_entry_point(period),
         "by_district": _breakdown_district(period),
         "by_disease": _breakdown_disease(period),
         **_breakdown_itinerary(period),
         "top_events": _top_events(period),
-
         "comparison": {
             "travelers": {
                 "current": travelers["registered"],
@@ -579,7 +605,6 @@ def aggregate_weekly(period_start: datetime, period_end: datetime) -> dict:
                 "delta_pct": _delta_pct(alerts["created"], prev_alerts["created"]),
             },
         },
-
         "meta": {
             "generated_at": django_tz.now().isoformat(),
             "generation_ms": duration_ms,
@@ -592,7 +617,7 @@ def aggregate_weekly(period_start: datetime, period_end: datetime) -> dict:
 # ---------------------------------------------------------------------------
 # Helper : calculer la période "semaine précédente" (lun→dim en Africa/Abidjan)
 # ---------------------------------------------------------------------------
-def previous_week_period(now: Optional[datetime] = None) -> tuple[datetime, datetime]:
+def previous_week_period(now: datetime | None = None) -> tuple[datetime, datetime]:
     """Retourne (start, end) de la semaine ISO précédente en Africa/Abidjan.
 
     Ex. si now = mercredi 24 juin 2026 08:00 Abidjan :
@@ -601,6 +626,7 @@ def previous_week_period(now: Optional[datetime] = None) -> tuple[datetime, date
     """
     try:
         from zoneinfo import ZoneInfo
+
         tz = ZoneInfo("Africa/Abidjan")
     except Exception:
         tz = django_tz.get_current_timezone()
@@ -616,8 +642,17 @@ def previous_week_period(now: Optional[datetime] = None) -> tuple[datetime, date
     monday_prev_week = monday_this_week - timedelta(days=7)
     sunday_prev_week = monday_prev_week + timedelta(days=6)
 
-    start = datetime(monday_prev_week.year, monday_prev_week.month,
-                     monday_prev_week.day, 0, 0, 0, tzinfo=tz)
-    end = datetime(sunday_prev_week.year, sunday_prev_week.month,
-                   sunday_prev_week.day, 23, 59, 59, 999999, tzinfo=tz)
+    start = datetime(
+        monday_prev_week.year, monday_prev_week.month, monday_prev_week.day, 0, 0, 0, tzinfo=tz
+    )
+    end = datetime(
+        sunday_prev_week.year,
+        sunday_prev_week.month,
+        sunday_prev_week.day,
+        23,
+        59,
+        59,
+        999999,
+        tzinfo=tz,
+    )
     return start, end

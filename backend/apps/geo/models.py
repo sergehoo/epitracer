@@ -1,4 +1,5 @@
 """Modèles géographiques (Country, EntryPoint, HealthZone) avec PostGIS."""
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -57,11 +58,14 @@ class Country(BaseModel):
     # Niveau global courant = le plus élevé des CountryRiskAssessment en vigueur.
     # Dénormalisé pour les filtres ; recalculé par apps.geo.services.refresh_country_risk.
     risk_level = models.CharField(
-        max_length=20, choices=CountryRiskLevel.choices, default=CountryRiskLevel.NORMAL,
+        max_length=20,
+        choices=CountryRiskLevel.choices,
+        default=CountryRiskLevel.NORMAL,
         db_index=True,
     )
     risk_for_diseases = models.JSONField(
-        default=list, blank=True,
+        default=list,
+        blank=True,
         help_text=_("Codes maladie en vigueur au niveau modéré ou plus (recalculé)."),
     )
 
@@ -71,7 +75,9 @@ class Country(BaseModel):
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
-                fields=["code3"], condition=~Q(code3=""), name="uniq_country_code3_when_set",
+                fields=["code3"],
+                condition=~Q(code3=""),
+                name="uniq_country_code3_when_set",
             ),
         ]
 
@@ -94,30 +100,47 @@ class CountryRiskAssessment(BaseModel):
 
     country = models.ForeignKey(Country, on_delete=models.PROTECT, related_name="risk_assessments")
     disease = models.ForeignKey(
-        "diseases.Disease", null=True, blank=True, on_delete=models.PROTECT,
+        "diseases.Disease",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
         related_name="country_risk_assessments",
         help_text=_("Vide = toutes maladies confondues."),
     )
     risk_level = models.CharField(
-        _("niveau de risque"), max_length=20, choices=CountryRiskLevel.choices,
+        _("niveau de risque"),
+        max_length=20,
+        choices=CountryRiskLevel.choices,
     )
     valid_from = models.DateField(_("en vigueur du"), default=timezone.localdate, db_index=True)
     valid_until = models.DateField(_("en vigueur jusqu'au"), null=True, blank=True)
     justification = models.TextField(_("justification"))
     source_alert = models.ForeignKey(
-        "surveillance.HealthAlert", null=True, blank=True, on_delete=models.SET_NULL,
+        "surveillance.HealthAlert",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="country_risk_assessments",
     )
     source_reference = models.CharField(
-        _("référence de l'alerte validée"), max_length=255, blank=True,
+        _("référence de l'alerte validée"),
+        max_length=255,
+        blank=True,
         help_text=_("Ex : bulletin OMS, communiqué MSHPCMU, alerte INHP."),
     )
     decided_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="+",
     )
     superseded_by = models.ForeignKey(
-        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="supersedes",
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="supersedes",
         help_text=_("Évaluation qui a remplacé celle-ci avant sa date d'effet."),
     )
 
@@ -201,8 +224,12 @@ class HealthZone(BaseModel):
     def __str__(self) -> str:
         # Préfixe par niveau pour les listes admin (PRES / RÉG / DIST / etc.)
         level_short = {
-            "country": "🇨🇮", "pres": "PRES", "region": "Région",
-            "district": "District", "commune": "Commune", "quartier": "Quartier",
+            "country": "🇨🇮",
+            "pres": "PRES",
+            "region": "Région",
+            "district": "District",
+            "commune": "Commune",
+            "quartier": "Quartier",
             "custom": "Zone",
         }.get(self.level, self.level)
         return f"{level_short} · {self.name}"

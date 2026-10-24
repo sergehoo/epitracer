@@ -1,9 +1,13 @@
 """Tests d'envoi email avec mock SMTP — vérifie status, retry, log update."""
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from apps.notifications.email_models import (
-    EmailLog, EmailStatus, EmailType,
+    EmailLog,
+    EmailStatus,
+    EmailType,
 )
 
 
@@ -22,6 +26,7 @@ class TestExecuteEmailSend:
     def _create_queued_log(self, email_type=EmailType.HEALTH_NOTIFICATION):
         """Helper : crée un EmailLog en attente sans déclencher Celery."""
         from apps.notifications.email_models import SenderProfile
+
         # Le sender_address est récupéré du profil PUBLIC (seedé par migration)
         sender_addr = SenderProfile.objects.get(code="public").from_address
         return EmailLog.objects.create(
@@ -40,9 +45,7 @@ class TestExecuteEmailSend:
 
         # Mock : EmailMultiAlternatives.send() renvoie 1 (succès)
         mock_msg_send = MagicMock(return_value=1)
-        with patch(
-            "apps.notifications.services.email_router.EmailMultiAlternatives"
-        ) as MockEmail:
+        with patch("apps.notifications.services.email_router.EmailMultiAlternatives") as MockEmail:
             instance = MockEmail.return_value
             instance.send = mock_msg_send
 
@@ -60,9 +63,7 @@ class TestExecuteEmailSend:
     def test_smtp_error_sets_status_failed(self, mock_connection):
         from apps.notifications.services.email_router import _execute_email_send
 
-        with patch(
-            "apps.notifications.services.email_router.EmailMultiAlternatives"
-        ) as MockEmail:
+        with patch("apps.notifications.services.email_router.EmailMultiAlternatives") as MockEmail:
             instance = MockEmail.return_value
             instance.send.side_effect = Exception("SMTP timeout")
 
@@ -81,9 +82,7 @@ class TestExecuteEmailSend:
         """send() renvoie 0 → considéré comme échec."""
         from apps.notifications.services.email_router import _execute_email_send
 
-        with patch(
-            "apps.notifications.services.email_router.EmailMultiAlternatives"
-        ) as MockEmail:
+        with patch("apps.notifications.services.email_router.EmailMultiAlternatives") as MockEmail:
             instance = MockEmail.return_value
             instance.send.return_value = 0
 
@@ -97,8 +96,8 @@ class TestExecuteEmailSend:
     @patch("apps.notifications.services.email_router._build_connection")
     def test_internal_email_uses_internal_profile(self, mock_connection):
         """Vérifie qu'un email INTERNAL provoque un build_connection('internal')."""
-        from apps.notifications.services.email_router import _execute_email_send
         from apps.notifications.email_models import SenderProfile
+        from apps.notifications.services.email_router import _execute_email_send
 
         sender_addr = SenderProfile.objects.get(code="internal").from_address
         log = EmailLog.objects.create(
@@ -111,9 +110,7 @@ class TestExecuteEmailSend:
             status=EmailStatus.QUEUED,
         )
 
-        with patch(
-            "apps.notifications.services.email_router.EmailMultiAlternatives"
-        ) as MockEmail:
+        with patch("apps.notifications.services.email_router.EmailMultiAlternatives") as MockEmail:
             MockEmail.return_value.send = MagicMock(return_value=1)
             _execute_email_send(log)
 
@@ -125,24 +122,37 @@ class TestExecuteEmailSend:
 class TestBulkRetry:
     @patch("apps.notifications.tasks_email.send_email_task.delay")
     def test_retry_failed_emails_requeues_eligible(self, mock_delay):
-        from apps.notifications.tasks_email import retry_failed_emails
-        from apps.notifications.email_models import SenderProfile
         from django.utils import timezone
+
+        from apps.notifications.email_models import SenderProfile
+        from apps.notifications.tasks_email import retry_failed_emails
 
         sender_addr = SenderProfile.objects.get(code="public").from_address
         # 2 FAILED retry-able, 1 FAILED épuisé (retry_count = max_retries)
         for _ in range(2):
             EmailLog.objects.create(
-                recipient="u@ex.com", email_type="health_notification",
-                sender_address=sender_addr, subject="s", body_html="<p>x</p>",
-                body_text="x", status=EmailStatus.FAILED,
-                failed_at=timezone.now(), retry_count=0, max_retries=3,
+                recipient="u@ex.com",
+                email_type="health_notification",
+                sender_address=sender_addr,
+                subject="s",
+                body_html="<p>x</p>",
+                body_text="x",
+                status=EmailStatus.FAILED,
+                failed_at=timezone.now(),
+                retry_count=0,
+                max_retries=3,
             )
         EmailLog.objects.create(
-            recipient="u@ex.com", email_type="health_notification",
-            sender_address=sender_addr, subject="s", body_html="<p>x</p>",
-            body_text="x", status=EmailStatus.FAILED,
-            failed_at=timezone.now(), retry_count=3, max_retries=3,
+            recipient="u@ex.com",
+            email_type="health_notification",
+            sender_address=sender_addr,
+            subject="s",
+            body_html="<p>x</p>",
+            body_text="x",
+            status=EmailStatus.FAILED,
+            failed_at=timezone.now(),
+            retry_count=3,
+            max_retries=3,
         )
 
         result = retry_failed_emails()

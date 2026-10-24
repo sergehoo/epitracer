@@ -13,30 +13,32 @@ Cette abstraction expose 4 méthodes :
     validate_webhook(request) -> bool
     parse_status_webhook(payload) -> WhatsAppStatusEvent
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
 class WhatsAppSendResult:
     """Retour standardisé des méthodes d'envoi WhatsApp."""
+
     ok: bool
     provider_message_id: str = ""
     error: str = ""
-    raw_response: Optional[dict] = None
+    raw_response: dict | None = None
 
 
 @dataclass
 class WhatsAppStatusEvent:
     """Événement de statut parsé depuis un webhook provider."""
+
     provider_message_id: str
-    status: str          # canonical: sent / delivered / failed / read
-    timestamp: Optional[str] = None
+    status: str  # canonical: sent / delivered / failed / read
+    timestamp: str | None = None
     error: str = ""
-    raw_payload: Optional[dict] = field(default=None, repr=False)
+    raw_payload: dict | None = field(default=None, repr=False)
 
 
 class WhatsAppProviderBase(ABC):
@@ -62,8 +64,10 @@ class WhatsAppProviderBase(ABC):
 
     @abstractmethod
     def send_template(
-        self, to: str, template_code: str,
-        variables: Optional[list] = None,
+        self,
+        to: str,
+        template_code: str,
+        variables: list | None = None,
         language: str = "fr",
     ) -> WhatsAppSendResult:
         """Envoi d'un template pré-approuvé.
@@ -81,7 +85,7 @@ class WhatsAppProviderBase(ABC):
         """Vérifie l'authenticité d'un webhook entrant (signature/token)."""
 
     @abstractmethod
-    def parse_status_webhook(self, payload) -> Optional[WhatsAppStatusEvent]:
+    def parse_status_webhook(self, payload) -> WhatsAppStatusEvent | None:
         """Convertit un payload webhook en WhatsAppStatusEvent normalisé.
 
         Retourne None si le payload ne contient pas de delivery report
@@ -98,12 +102,15 @@ def get_active_provider() -> WhatsAppProviderBase:
         autre    → fallback Twilio
     """
     from django.conf import settings
+
     cfg = getattr(settings, "NOTIFICATIONS", {})
     name = (cfg.get("WHATSAPP_PROVIDER") or "twilio").lower()
 
     if name == "meta":
         from .whatsapp_meta import MetaWhatsAppProvider
+
         return MetaWhatsAppProvider()
     # Défaut + alias "twilio_whatsapp"
     from .whatsapp_twilio import TwilioWhatsAppProvider
+
     return TwilioWhatsAppProvider()

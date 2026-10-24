@@ -1,4 +1,5 @@
 """WSGI - utilisé par Gunicorn pour les requêtes HTTP synchrones."""
+
 import os
 
 from django.core.wsgi import get_wsgi_application

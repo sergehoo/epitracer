@@ -6,11 +6,11 @@ Routes exposées :
   - POST /api/v1/telegram/unlink/      (voyageur ou admin)
   - GET  /api/v1/telegram/config/      (admin — deep link + statut bot)
 """
+
 from __future__ import annotations
 
 import logging
 
-from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
@@ -44,6 +44,7 @@ class TelegramWebhookView(APIView):
       2. Payload borné aux commandes whitelistées (start/stop/help/link)
       3. Throttle 120/min pour absorber un pic sans risque
     """
+
     permission_classes = [AllowAny]
     throttle_classes = [TelegramWebhookThrottle]
 
@@ -51,8 +52,10 @@ class TelegramWebhookView(APIView):
         # 1. Validation signature
         provided_secret = request.META.get("HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN", "")
         if not verify_webhook_secret(provided_secret):
-            logger.warning("Telegram webhook rejected — invalid secret from %s",
-                           request.META.get("REMOTE_ADDR", "?"))
+            logger.warning(
+                "Telegram webhook rejected — invalid secret from %s",
+                request.META.get("REMOTE_ADDR", "?"),
+            )
             return Response({"detail": "Unauthorized"}, status=401)
 
         # 2. Handling
@@ -79,6 +82,7 @@ class MyTelegramStatusView(APIView):
 
     ⚠️ Aucune PII n'est renvoyée : uniquement { linked, deep_link, bot_username }.
     """
+
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -93,15 +97,18 @@ class MyTelegramStatusView(APIView):
             return Response({"detail": "Voyageur introuvable."}, status=404)
 
         subs = TelegramSubscription.objects.filter(
-            traveler=traveler, is_active=True,
+            traveler=traveler,
+            is_active=True,
         )
-        return Response({
-            "linked": subs.exists(),
-            "chats_count": subs.count(),
-            "bot_username": get_bot_username(),
-            "deep_link": build_deep_link(traveler.public_id),
-            "configured": is_configured(),
-        })
+        return Response(
+            {
+                "linked": subs.exists(),
+                "chats_count": subs.count(),
+                "bot_username": get_bot_username(),
+                "deep_link": build_deep_link(traveler.public_id),
+                "configured": is_configured(),
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -131,20 +138,24 @@ class TelegramUnlinkView(APIView):
 # ---------------------------------------------------------------------------
 class TelegramConfigView(APIView):
     """GET admin — vérifie que le bot est bien configuré + retourne son @."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from django.conf import settings as _s
 
-        return Response({
-            "configured": is_configured(),
-            "bot_username": get_bot_username(),
-            "webhook_secret_set": bool(getattr(_s, "TELEGRAM_WEBHOOK_SECRET", "")),
-            "webhook_url_expected": (
-                f"{_s.SITE_URL_API}/api/v1/telegram/webhook/"
-                if getattr(_s, "SITE_URL_API", None) else ""
-            ),
-        })
+        return Response(
+            {
+                "configured": is_configured(),
+                "bot_username": get_bot_username(),
+                "webhook_secret_set": bool(getattr(_s, "TELEGRAM_WEBHOOK_SECRET", "")),
+                "webhook_url_expected": (
+                    f"{_s.SITE_URL_API}/api/v1/telegram/webhook/"
+                    if getattr(_s, "SITE_URL_API", None)
+                    else ""
+                ),
+            }
+        )
 
 
 class TelegramLinkStatusView(APIView):
@@ -163,6 +174,7 @@ class TelegramLinkStatusView(APIView):
         "bot_configured": true,
     }
     """
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -178,27 +190,32 @@ class TelegramLinkStatusView(APIView):
                 continue
 
         if not ids:
-            return Response({
-                "total": 0, "linked": 0, "unlinked": 0,
-                "linked_ids": [],
-                "bot_configured": is_configured(),
-            })
+            return Response(
+                {
+                    "total": 0,
+                    "linked": 0,
+                    "unlinked": 0,
+                    "linked_ids": [],
+                    "bot_configured": is_configured(),
+                }
+            )
 
         # Borne défensive : max 5000 ids par requête (~500 KB, très large)
         ids = ids[:5000]
 
         linked_ids = list(
-            TelegramSubscription.objects
-            .filter(traveler_id__in=ids, is_active=True)
+            TelegramSubscription.objects.filter(traveler_id__in=ids, is_active=True)
             .values_list("traveler_id", flat=True)
             .distinct()
         )
         linked_set = set(linked_ids)
 
-        return Response({
-            "total": len(ids),
-            "linked": len(linked_set),
-            "unlinked": len(ids) - len(linked_set),
-            "linked_ids": sorted(linked_set),
-            "bot_configured": is_configured(),
-        })
+        return Response(
+            {
+                "total": len(ids),
+                "linked": len(linked_set),
+                "unlinked": len(ids) - len(linked_set),
+                "linked_ids": sorted(linked_set),
+                "bot_configured": is_configured(),
+            }
+        )

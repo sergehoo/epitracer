@@ -7,6 +7,7 @@ Schedulées par `django-celery-beat` (database scheduler) — voir
 Toutes les tâches loguent un résumé en fin d'exécution et sont
 idempotentes (on peut les relancer sans dommage).
 """
+
 from __future__ import annotations
 
 import logging
@@ -45,6 +46,7 @@ try:  # pragma: no cover — import guard
         ["reason"],  # values: no_consent | closed | day_overflow | no_quarantine
     )
 except Exception:  # pragma: no cover — pas de prometheus_client → no-op
+
     class _NoopMetric:
         def labels(self, *_, **__):
             return self
@@ -118,6 +120,7 @@ def _send_fcm_to_traveler(traveler, *, title: str, body: str, data: dict) -> int
     email = (traveler.email or "").strip().lower()
     if email:
         from django.contrib.auth import get_user_model
+
         User = get_user_model()
         user = User.objects.filter(email__iexact=email).first()
     if user is None:
@@ -131,7 +134,7 @@ def _send_fcm_to_traveler(traveler, *, title: str, body: str, data: dict) -> int
     # Conversion des valeurs `data` en strings — exigence FCM.
     data_str = {str(k): str(v) for k, v in (data or {}).items()}
     try:
-        from apps.notifications.providers import send_push  # noqa: WPS433
+        pass  # noqa: WPS433
     except Exception:
         return 0
 
@@ -151,7 +154,8 @@ def _send_fcm_to_traveler(traveler, *, title: str, body: str, data: dict) -> int
         except Exception:  # noqa: BLE001 — best-effort par appareil
             logger.exception(
                 "FCM send failed for device device_id=%s (%s)",
-                device.id, _traveler_tag(traveler),
+                device.id,
+                _traveler_tag(traveler),
             )
             # Politique douce : on ne désactive le device qu'après 5 échecs
             # — pas implémenté ici, géré côté cleanup task.
@@ -172,7 +176,9 @@ def _send_fcm_with_data(token: str, title: str, body: str, data: dict) -> bool:
     if not key:
         logger.info(
             "[FCM:stub] token=%s title=%r data_type=%s",
-            (token or "")[:12], title, data.get("type"),
+            (token or "")[:12],
+            title,
+            data.get("type"),
         )
         return True
 
@@ -208,8 +214,11 @@ SURVEILLANCE_DAYS = 21  # période standard EpiTrace (Ebola = 21j)
 
 
 @shared_task(
-    bind=True, name="companion.send_daily_checkin_reminders",
-    autoretry_for=(Exception,), retry_backoff=True, max_retries=3,
+    bind=True,
+    name="companion.send_daily_checkin_reminders",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=3,
 )
 def send_daily_checkin_reminders(self) -> dict[str, int]:
     """Envoie un rappel quotidien "comment vous sentez-vous aujourd'hui ?"
@@ -248,9 +257,13 @@ def send_daily_checkin_reminders(self) -> dict[str, int]:
     # jour, basé sur le suivi qui se termine le plus tard. L'unicité est
     # garantie en base (ReminderDispatch) : un second déclenchement le même
     # jour (Beat en double, retry de la tâche, alias historique) n'envoie rien.
-    active_qs = QuarantineRecord.objects.filter(
-        status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
-    ).select_related("traveler").order_by("traveler_id", "-expected_end_on")
+    active_qs = (
+        QuarantineRecord.objects.filter(
+            status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
+        )
+        .select_related("traveler")
+        .order_by("traveler_id", "-expected_end_on")
+    )
 
     today = date.today()
     seen: set[int] = set()
@@ -302,7 +315,10 @@ def send_daily_checkin_reminders(self) -> dict[str, int]:
 
         # ---- 1. FCM mobile -------------------------------------------------
         fcm_sent = _send_fcm_to_traveler(
-            traveler, title=title, body=body, data=data_payload,
+            traveler,
+            title=title,
+            body=body,
+            data=data_payload,
         )
         if fcm_sent > 0:
             stats["fcm_sent"] += fcm_sent
@@ -338,18 +354,17 @@ def send_daily_checkin_reminders(self) -> dict[str, int]:
             DAILY_REMINDER_SENT.labels(channel="whatsapp").inc(vapid_result["whatsapp_sent"])
 
         # ---- Log structuré, sans PII ---------------------------------------
-        any_sent = (
-            fcm_sent
-            + vapid_result.get("sent", 0)
-            + vapid_result.get("sms_sent", 0)
-        )
+        any_sent = fcm_sent + vapid_result.get("sent", 0) + vapid_result.get("sms_sent", 0)
         if any_sent == 0:
             DAILY_REMINDER_SENT.labels(channel="none").inc()
         logger.info(
             "daily_reminder %s day=%s/%s fcm=%s vapid=%s sms=%s phone_masked=%s",
             _traveler_tag(traveler),
-            day_index, total,
-            fcm_sent, vapid_result.get("sent", 0), vapid_result.get("sms_sent", 0),
+            day_index,
+            total,
+            fcm_sent,
+            vapid_result.get("sent", 0),
+            vapid_result.get("sms_sent", 0),
             _mask_phone(traveler.phone_mobile),
         )
 
@@ -365,8 +380,11 @@ def send_daily_checkin_reminders(self) -> dict[str, int]:
 
 
 @shared_task(
-    bind=True, name="companion.send_daily_followup_reminders",
-    autoretry_for=(Exception,), retry_backoff=True, max_retries=3,
+    bind=True,
+    name="companion.send_daily_followup_reminders",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=3,
 )
 def send_daily_followup_reminders(self) -> dict[str, int]:
     """Alias historique → délègue à `send_daily_checkin_reminders`.
@@ -384,8 +402,11 @@ def send_daily_followup_reminders(self) -> dict[str, int]:
 
 
 @shared_task(
-    bind=True, name="companion.detect_missed_checkins",
-    autoretry_for=(Exception,), retry_backoff=True, max_retries=3,
+    bind=True,
+    name="companion.detect_missed_checkins",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=3,
 )
 def detect_missed_checkins(self, threshold_hours: int = 48) -> dict[str, int]:
     """Crée une HealthAlert pour chaque voyageur en suivi actif qui n'a
@@ -394,11 +415,15 @@ def detect_missed_checkins(self, threshold_hours: int = 48) -> dict[str, int]:
     Envoie aussi un push de rappel doux (un seul, idempotent par jour).
     """
     from django.contrib.contenttypes.models import ContentType
+
     from apps.quarantine.models import QuarantineRecord, QuarantineStatus
     from apps.surveillance.models import HealthAlert
 
     stats = {
-        "checked": 0, "missed": 0, "alerts_created": 0, "push_sent": 0,
+        "checked": 0,
+        "missed": 0,
+        "alerts_created": 0,
+        "push_sent": 0,
         "duplicates_avoided": 0,
     }
     cutoff = timezone.now() - timedelta(hours=threshold_hours)
@@ -406,9 +431,13 @@ def detect_missed_checkins(self, threshold_hours: int = 48) -> dict[str, int]:
 
     # Job toutes les 6 h + suivis multimaladies : la relance « Donnez-nous de
     # vos nouvelles » part au plus une fois par voyageur et par jour.
-    active_qs = QuarantineRecord.objects.filter(
-        status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
-    ).select_related("traveler").order_by("traveler_id", "-expected_end_on")
+    active_qs = (
+        QuarantineRecord.objects.filter(
+            status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
+        )
+        .select_related("traveler")
+        .order_by("traveler_id", "-expected_end_on")
+    )
     handled: set[int] = set()
 
     for q in active_qs:
@@ -417,9 +446,11 @@ def detect_missed_checkins(self, threshold_hours: int = 48) -> dict[str, int]:
         stats["checked"] += 1
         last_check = q.daily_checks.order_by("-check_date").first()
         last_date = last_check.check_date if last_check else q.started_on
-        last_dt = timezone.make_aware(
-            timezone.datetime.combine(last_date, timezone.datetime.min.time())
-        ) if hasattr(timezone, "datetime") else None
+        last_dt = (
+            timezone.make_aware(timezone.datetime.combine(last_date, timezone.datetime.min.time()))
+            if hasattr(timezone, "datetime")
+            else None
+        )
 
         # Fallback simple par comparaison de date
         if last_check and (date.today() - last_check.check_date).days < threshold_hours / 24:
@@ -482,16 +513,22 @@ def has_other_active_followups(traveler, *, end_on) -> bool:
 
     from apps.quarantine.models import QuarantineRecord, QuarantineStatus
 
-    return QuarantineRecord.objects.filter(
-        traveler=traveler,
-        status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
-    ).filter(Q(expected_end_on__gt=end_on) | Q(expected_end_on__isnull=True)).exists()
-
+    return (
+        QuarantineRecord.objects.filter(
+            traveler=traveler,
+            status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
+        )
+        .filter(Q(expected_end_on__gt=end_on) | Q(expected_end_on__isnull=True))
+        .exists()
+    )
 
 
 @shared_task(
-    bind=True, name="companion.send_completion_messages",
-    autoretry_for=(Exception,), retry_backoff=True, max_retries=3,
+    bind=True,
+    name="companion.send_completion_messages",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=3,
 )
 def send_completion_messages(self) -> dict[str, int]:
     """Envoie un message de fin (et désactive les abonnements push) pour
@@ -563,8 +600,10 @@ def purge_closed_followups(retention_days: int = 30, dry_run: bool = False) -> d
     Pour un test, passer `dry_run=True` — aucune écriture en DB.
     """
     from datetime import timedelta
+
     from apps.quarantine.models import QuarantineRecord, QuarantineStatus
     from apps.travelers.models import Traveler
+
     from .models import DataPurgeLog
 
     cutoff = timezone.now() - timedelta(days=retention_days)
@@ -633,6 +672,8 @@ def cleanup_stale_push_subscriptions(days: int = 90) -> dict[str, int]:
     succès depuis `days` jours et dont le compteur d'échec est non nul."""
     cutoff = timezone.now() - timedelta(days=days)
     n = PushSubscription.objects.filter(
-        is_active=True, failure_count__gte=3, last_used_at__lt=cutoff,
+        is_active=True,
+        failure_count__gte=3,
+        last_used_at__lt=cutoff,
     ).update(is_active=False, updated_at=timezone.now())
     return {"deactivated": n}

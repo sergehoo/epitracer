@@ -7,6 +7,7 @@ qui pilote :
   - la suspension du fournisseur (crédit Orange CI épuisé) ;
   - le message affiché aux agents, sans réponse brute du fournisseur.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,25 +41,27 @@ class ErrorCode:
 
 # Erreurs définitives : retenter ne changera rien (et consomme du crédit ou
 # spamme le destinataire). Elles ne sont relancées que manuellement.
-NON_RETRYABLE = frozenset({
-    ErrorCode.QUOTA_EXHAUSTED,
-    ErrorCode.PROVIDER_POLICY,
-    ErrorCode.PROVIDER_AUTH,
-    ErrorCode.PROVIDER_CONFIG,
-    ErrorCode.PROVIDER_SUSPENDED,
-    ErrorCode.INVALID_NUMBER,
-    ErrorCode.NATIONAL_POLICY,
-    ErrorCode.NO_DEVICE,
-    ErrorCode.TEMPLATE_VARIABLES,
-    ErrorCode.EXPIRED_ON_HOLD,
-    ErrorCode.SMS_QUOTA_EXCEEDED,
-    ErrorCode.BUDGET_EXCEEDED,
-    ErrorCode.URGENT_CAP,
-    ErrorCode.COUNTRY_BLOCKED,
-    ErrorCode.RECIPIENT_NOT_ALLOWED,
-    ErrorCode.EMAIL_UNVERIFIED,
-    ErrorCode.EMAIL_REJECTED,
-})
+NON_RETRYABLE = frozenset(
+    {
+        ErrorCode.QUOTA_EXHAUSTED,
+        ErrorCode.PROVIDER_POLICY,
+        ErrorCode.PROVIDER_AUTH,
+        ErrorCode.PROVIDER_CONFIG,
+        ErrorCode.PROVIDER_SUSPENDED,
+        ErrorCode.INVALID_NUMBER,
+        ErrorCode.NATIONAL_POLICY,
+        ErrorCode.NO_DEVICE,
+        ErrorCode.TEMPLATE_VARIABLES,
+        ErrorCode.EXPIRED_ON_HOLD,
+        ErrorCode.SMS_QUOTA_EXCEEDED,
+        ErrorCode.BUDGET_EXCEEDED,
+        ErrorCode.URGENT_CAP,
+        ErrorCode.COUNTRY_BLOCKED,
+        ErrorCode.RECIPIENT_NOT_ALLOWED,
+        ErrorCode.EMAIL_UNVERIFIED,
+        ErrorCode.EMAIL_REJECTED,
+    }
+)
 
 ERROR_LABELS: dict[str, str] = {
     ErrorCode.QUOTA_EXHAUSTED: (
@@ -126,39 +129,63 @@ def _has(low: str, *needles: str) -> bool:
 # Règles évaluées dans l'ordre : (code, prédicat(texte minuscule, statut HTTP,
 # identifiant de politique Orange)). La première qui correspond l'emporte.
 _RULES = (
-    (ErrorCode.QUOTA_EXHAUSTED, lambda low, status, pol: (
-        pol == "POL0001"
-        or _has(low, "consumed all available units", "buy a new bundle")
-        # Twilio : solde du compte insuffisant.
-        or _has(low, "insufficient funds", "balance is too low", "insufficient balance")
-    )),
+    (
+        ErrorCode.QUOTA_EXHAUSTED,
+        lambda low, status, pol: (
+            pol == "POL0001"
+            or _has(low, "consumed all available units", "buy a new bundle")
+            # Twilio : solde du compte insuffisant.
+            or _has(low, "insufficient funds", "balance is too low", "insufficient balance")
+        ),
+    ),
     (ErrorCode.NATIONAL_POLICY, lambda low, status, pol: "politique nationale" in low),
-    (ErrorCode.EMAIL_UNVERIFIED, lambda low, status, pol: (
-        _has(low, "not verified", "identities failed the check")
-    )),
-    (ErrorCode.EMAIL_REJECTED, lambda low, status, pol: (
-        _has(low, "recipient address rejected", "mailbox unavailable", "user unknown",
-             "recipients refused", "no such user")
-    )),
-    (ErrorCode.TEMPLATE_VARIABLES, lambda low, status, pol: (
-        "variable" in low and _has(low, "non renseign", "manquant")
-    )),
+    (
+        ErrorCode.EMAIL_UNVERIFIED,
+        lambda low, status, pol: (_has(low, "not verified", "identities failed the check")),
+    ),
+    (
+        ErrorCode.EMAIL_REJECTED,
+        lambda low, status, pol: (
+            _has(
+                low,
+                "recipient address rejected",
+                "mailbox unavailable",
+                "user unknown",
+                "recipients refused",
+                "no such user",
+            )
+        ),
+    ),
+    (
+        ErrorCode.TEMPLATE_VARIABLES,
+        lambda low, status, pol: ("variable" in low and _has(low, "non renseign", "manquant")),
+    ),
     (ErrorCode.PROVIDER_POLICY, lambda low, status, pol: pol.startswith("POL") or status == 403),
-    (ErrorCode.PROVIDER_AUTH, lambda low, status, pol: (
-        status == 401 or _has(low, "oauth", "re-auth", "authenticate", "authentication", "(535")
-    )),
-    (ErrorCode.PROVIDER_CONFIG, lambda low, status, pol: (
-        _has(low, "non configur", "manquant", "not configured", "senderprofile")
-    )),
-    (ErrorCode.INVALID_NUMBER, lambda low, status, pol: (
-        _has(low, "numéro", "numero", "invalid", "21211", "21614")
-        or (status == 400 and "address" in low)
-    )),
+    (
+        ErrorCode.PROVIDER_AUTH,
+        lambda low, status, pol: (
+            status == 401 or _has(low, "oauth", "re-auth", "authenticate", "authentication", "(535")
+        ),
+    ),
+    (
+        ErrorCode.PROVIDER_CONFIG,
+        lambda low, status, pol: (
+            _has(low, "non configur", "manquant", "not configured", "senderprofile")
+        ),
+    ),
+    (
+        ErrorCode.INVALID_NUMBER,
+        lambda low, status, pol: (
+            _has(low, "numéro", "numero", "invalid", "21211", "21614")
+            or (status == 400 and "address" in low)
+        ),
+    ),
     (ErrorCode.NO_DEVICE, lambda low, status, pol: _has(low, "aucun appareil", "aucun abonnement")),
     (ErrorCode.PROVIDER_UNAVAILABLE, lambda low, status, pol: status is not None and status >= 500),
-    (ErrorCode.NETWORK, lambda low, status, pol: (
-        _has(low, "réseau", "timeout", "timed out", "connect")
-    )),
+    (
+        ErrorCode.NETWORK,
+        lambda low, status, pol: (_has(low, "réseau", "timeout", "timed out", "connect")),
+    ),
 )
 
 

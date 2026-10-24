@@ -9,6 +9,7 @@ La règle est appliquée côté backend et ne peut pas être contournée par
 l'agent depuis le frontend (toute tentative de forcer un provider pour
 un numéro CI est rejetée par le dispatcher).
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,9 +26,10 @@ class PhoneValidationError(Exception):
 @dataclass
 class RoutingDecision:
     """Résultat du routage."""
-    normalized: str          # numéro E.164 (+225XXXXXXXXXX)
-    country_code: str        # "CI" pour CI, "INTL" sinon
-    provider: str            # "orange_ci" | "twilio"
+
+    normalized: str  # numéro E.164 (+225XXXXXXXXXX)
+    country_code: str  # "CI" pour CI, "INTL" sinon
+    provider: str  # "orange_ci" | "twilio"
     is_ivoirian: bool
 
 
@@ -83,9 +85,7 @@ def normalize_phone_number(phone: str) -> str:
 
     # Validation finale
     if not 9 <= len(out) <= 16:
-        raise PhoneValidationError(
-            f"Longueur de numéro invalide ({len(out)}) : {out!r}"
-        )
+        raise PhoneValidationError(f"Longueur de numéro invalide ({len(out)}) : {out!r}")
 
     return out
 
@@ -125,9 +125,7 @@ def validate_phone_number(phone: str) -> str:
         # International : longueur minimale 8 chiffres après +
         intl_suffix = normalized[1:]
         if len(intl_suffix) < 8:
-            raise PhoneValidationError(
-                f"Numéro international trop court : {normalized!r}"
-            )
+            raise PhoneValidationError(f"Numéro international trop court : {normalized!r}")
 
     return normalized
 
@@ -160,6 +158,7 @@ def detect_provider(phone: str, channel: str = "sms") -> RoutingDecision:
         # WhatsApp : Twilio par défaut (ou Meta selon settings, géré ailleurs)
         # Le routage géographique n'est pas pertinent pour WhatsApp.
         from django.conf import settings
+
         provider = getattr(settings, "NOTIFICATIONS", {}).get("WHATSAPP_PROVIDER", "twilio")
         provider = "meta_whatsapp" if provider == "meta" else "twilio"
         decision = RoutingDecision(
@@ -184,7 +183,10 @@ def detect_provider(phone: str, channel: str = "sms") -> RoutingDecision:
     masked = _mask(normalized)
     logger.info(
         "Routing decision: %s [%s/%s] → provider=%s",
-        masked, channel, decision.country_code, decision.provider,
+        masked,
+        channel,
+        decision.country_code,
+        decision.provider,
     )
     return decision
 

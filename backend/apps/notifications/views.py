@@ -1,17 +1,18 @@
 """Vues admin du module notifications + webhooks fournisseurs."""
+
 from __future__ import annotations
 
 import hmac
 import logging
-from hashlib import sha1
 from base64 import b64encode
+from hashlib import sha1
 
 from django.conf import settings
 from django.db.models import Case, Count, F, IntegerField, Q, Sum, Value, When
 from django.db.models.functions import Length
 from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, throttle_classes
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
@@ -21,27 +22,42 @@ from apps.travelers.models import Traveler
 
 from .filters import SENT_STATUSES, WAITING_STATUSES, NotificationFilter
 from .models import (
-    Channel, Notification, NotificationAuditAction, NotificationAuditLog,
-    NotificationStatus, NotificationTemplate, Provider, ReminderDispatch, SmsSecurityEvent,
+    Channel,
+    Notification,
+    NotificationAuditAction,
+    NotificationAuditLog,
+    NotificationStatus,
+    NotificationTemplate,
+    Provider,
+    ReminderDispatch,
+    SmsSecurityEvent,
 )
 from .permissions import (
-    CanRetryNotification, CanSendNotification, CanViewNotifications, recipient_allowed,
+    CanRetryNotification,
+    CanSendNotification,
+    CanViewNotifications,
+    recipient_allowed,
 )
 from .serializers import (
-    NotificationSerializer, NotificationTemplateSerializer,
-    ProviderAvailabilitySerializer, SendNotificationSerializer, SmsSecurityEventSerializer,
+    NotificationSerializer,
+    NotificationTemplateSerializer,
+    ProviderAvailabilitySerializer,
+    SendNotificationSerializer,
+    SmsSecurityEventSerializer,
     provider_state_rows,
 )
 from .services import availability
 from .services.audit import Actions, log_action
 from .services.dispatcher import (
-    send_manual_message, send_template_message,
+    send_manual_message,
+    send_template_message,
 )
 from .services.errors import ErrorCode, friendly_error
-from .services.security import SecurityEventKind, log_security_event
 from .services.router import (
-    NotificationProviderRouter, PhoneValidationError,
+    NotificationProviderRouter,
+    PhoneValidationError,
 )
+from .services.security import SecurityEventKind, log_security_event
 
 logger = logging.getLogger("epidemitracker.notifications.views")
 
@@ -60,16 +76,22 @@ def _recipient_refusal(request, recipient: str, traveler) -> Response:
     from apps.core.ratelimit import client_ip
 
     log_security_event(
-        SecurityEventKind.RECIPIENT_REJECTED, source="notifications.send",
-        ip=client_ip(request), phone=recipient, traveler=traveler, user=request.user,
+        SecurityEventKind.RECIPIENT_REJECTED,
+        source="notifications.send",
+        ip=client_ip(request),
+        phone=recipient,
+        traveler=traveler,
+        user=request.user,
         details={"has_traveler": traveler is not None},
         dedupe=f"recipient:{request.user.pk}:{recipient}",
     )
     return Response(
-        {"detail": (
-            "Destinataire non autorisé : sélectionnez un voyageur et l'une de ses "
-            "coordonnées enregistrées (envoi libre réservé aux administrateurs)."
-        )},
+        {
+            "detail": (
+                "Destinataire non autorisé : sélectionnez un voyageur et l'une de ses "
+                "coordonnées enregistrées (envoi libre réservé aux administrateurs)."
+            )
+        },
         status=status.HTTP_403_FORBIDDEN,
     )
 
@@ -85,10 +107,12 @@ def _suspended_refusal(notif: Notification):
             Provider(notif.provider).label if notif.provider in Provider.values else notif.provider
         )
         return Response(
-            {"detail": (
-                f"{label} est suspendu (crédit épuisé ou indisponible). La relance "
-                "sera possible après la reprise des envois par un administrateur."
-            )},
+            {
+                "detail": (
+                    f"{label} est suspendu (crédit épuisé ou indisponible). La relance "
+                    "sera possible après la reprise des envois par un administrateur."
+                )
+            },
             status=status.HTTP_409_CONFLICT,
         )
     return None
@@ -112,17 +136,20 @@ class NotificationTemplateViewSet(viewsets.ModelViewSet):
 # Notification (historique) — lecture + actions (retry / cancel)
 # ---------------------------------------------------------------------------
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        Notification.objects
-        .select_related("template", "traveler", "sent_by")
-        .order_by("-created_at")
+    queryset = Notification.objects.select_related("template", "traveler", "sent_by").order_by(
+        "-created_at"
     )
     serializer_class = NotificationSerializer
     permission_classes = [CanViewNotifications]
     filterset_class = NotificationFilter
     search_fields = [
-        "recipient", "normalized_phone", "body", "subject",
-        "traveler__public_id", "traveler__first_name", "traveler__last_name",
+        "recipient",
+        "normalized_phone",
+        "body",
+        "subject",
+        "traveler__public_id",
+        "traveler__first_name",
+        "traveler__last_name",
     ]
     ordering_fields = ["created_at", "sent_at", "failed_at", "status", "channel", "provider"]
 
@@ -151,11 +178,13 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         sms = (
             base.filter(channel=Channel.SMS, status__in=SENT_STATUSES)
             .annotate(blen=Length("body"))
-            .annotate(segments=Case(
-                When(blen__lte=160, then=Value(1)),
-                default=(F("blen") + 152) / 153,
-                output_field=IntegerField(),
-            ))
+            .annotate(
+                segments=Case(
+                    When(blen__lte=160, then=Value(1)),
+                    default=(F("blen") + 152) / 153,
+                    output_field=IntegerField(),
+                )
+            )
         )
         by_provider = [
             {
@@ -163,9 +192,12 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 "messages": row["messages"],
                 "segments": row["segments"] or 0,
             }
-            for row in sms.values("provider").annotate(
-                messages=Count("id"), segments=Sum("segments"),
-            ).order_by("provider")
+            for row in sms.values("provider")
+            .annotate(
+                messages=Count("id"),
+                segments=Sum("segments"),
+            )
+            .order_by("provider")
         ]
 
         date_from = request.query_params.get("date_from") or None
@@ -180,19 +212,23 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             dup_logs = dup_logs.filter(created_at__date__lte=date_to)
         duplicates = (dispatch.aggregate(n=Sum("duplicates_avoided"))["n"] or 0) + dup_logs.count()
 
-        return Response({
-            **counts,
-            "pending": counts["waiting"],
-            "duplicates_avoided": duplicates,
-            "sms": {
-                "messages": sum(r["messages"] for r in by_provider),
-                "segments": sum(r["segments"] for r in by_provider),
-                "by_provider": by_provider,
-            },
-        })
+        return Response(
+            {
+                **counts,
+                "pending": counts["waiting"],
+                "duplicates_avoided": duplicates,
+                "sms": {
+                    "messages": sum(r["messages"] for r in by_provider),
+                    "segments": sum(r["segments"] for r in by_provider),
+                    "by_provider": by_provider,
+                },
+            }
+        )
 
     @action(
-        detail=False, methods=["get"], url_path="security-events",
+        detail=False,
+        methods=["get"],
+        url_path="security-events",
         permission_classes=[CanRetryNotification],
     )
     def security_events(self, request):
@@ -217,16 +253,22 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         """GET /api/v1/notifications/providers/ — disponibilité des fournisseurs SMS."""
         rows = provider_state_rows(SMS_PROVIDERS)
         held = dict(
-            Notification.objects.filter(status=NotificationStatus.ON_HOLD).order_by()
-            .values("provider").annotate(n=Count("id")).values_list("provider", "n")
+            Notification.objects.filter(status=NotificationStatus.ON_HOLD)
+            .order_by()
+            .values("provider")
+            .annotate(n=Count("id"))
+            .values_list("provider", "n")
         )
         data = ProviderAvailabilitySerializer(
-            rows, many=True, context={"request": request, "held_counts": held},
+            rows,
+            many=True,
+            context={"request": request, "held_counts": held},
         ).data
         return Response({"results": data})
 
     @action(
-        detail=False, methods=["post"],
+        detail=False,
+        methods=["post"],
         url_path=r"providers/(?P<provider>[a-z_]+)/resume",
         permission_classes=[CanRetryNotification],
     )
@@ -243,17 +285,24 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         raw = request.data.get("requeue", True)
         requeue = raw if isinstance(raw, bool) else str(raw).lower() not in ("0", "false", "no")
         result = availability.resume_provider(
-            provider, user=request.user, request=request, requeue=requeue,
+            provider,
+            user=request.user,
+            request=request,
+            requeue=requeue,
         )
-        return Response({
-            "provider": provider,
-            "was_suspended": result.was_suspended,
-            "requeued": result.requeued,
-            "expired": result.expired,
-        })
+        return Response(
+            {
+                "provider": provider,
+                "was_suspended": result.was_suspended,
+                "requeued": result.requeued,
+                "expired": result.expired,
+            }
+        )
 
     @action(
-        detail=False, methods=["post"], url_path="send",
+        detail=False,
+        methods=["post"],
+        url_path="send",
         permission_classes=[CanSendNotification],
         throttle_classes=[SendNotificationThrottle],
     )
@@ -285,9 +334,10 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
                     recipient = getattr(traveler, "public_id", "") or f"traveler:{traveler.pk}"
                 else:
                     recipient = (
-                        getattr(traveler, "whatsapp_phone", "") or
-                        traveler.phone_mobile or
-                        getattr(traveler, "emergency_phone_ci", "") or ""
+                        getattr(traveler, "whatsapp_phone", "")
+                        or traveler.phone_mobile
+                        or getattr(traveler, "emergency_phone_ci", "")
+                        or ""
                     ).strip()
 
         if not recipient:
@@ -317,9 +367,12 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             limited = ratelimit.hit("agent_send_recipient", identity)
             if not limited.allowed:
                 log_security_event(
-                    SecurityEventKind.RATE_LIMITED, source="notifications.send",
-                    ip=ratelimit.client_ip(request), phone=routing.normalized,
-                    traveler=traveler, user=request.user,
+                    SecurityEventKind.RATE_LIMITED,
+                    source="notifications.send",
+                    ip=ratelimit.client_ip(request),
+                    phone=routing.normalized,
+                    traveler=traveler,
+                    user=request.user,
                     details={"rule": "agent_send_recipient", "limit": limited.limit},
                     dedupe=f"agent_send:{request.user.pk}:{routing.normalized}",
                 )
@@ -330,25 +383,30 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 
         if data.get("template_code"):
             result = send_template_message(
-                traveler=traveler, recipient=recipient,
+                traveler=traveler,
+                recipient=recipient,
                 template_code=data["template_code"],
                 context=data.get("context") or {},
                 channel=channel,
-                sent_by=request.user, request=request,
+                sent_by=request.user,
+                request=request,
                 subject=data.get("subject", "") or "",
             )
         else:
             result = send_manual_message(
-                traveler=traveler, recipient=recipient,
+                traveler=traveler,
+                recipient=recipient,
                 body=data["body"],
                 channel=channel,
-                sent_by=request.user, request=request,
+                sent_by=request.user,
+                request=request,
                 subject=data.get("subject", "") or "",
             )
 
         notif = (
             Notification.objects.filter(pk=result.notification_id).first()
-            if result.notification_id else None
+            if result.notification_id
+            else None
         )
         if notif is not None and notif.status == NotificationStatus.ON_HOLD:
             # Crédit fournisseur épuisé : message conservé, envoi différé.
@@ -365,11 +423,16 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": detail}, status=429 if quota else 400)
 
         return Response(
-            NotificationSerializer(notif, context={"request": request}).data, status=201,
+            NotificationSerializer(notif, context={"request": request}).data,
+            status=201,
         )
 
-    @action(detail=False, methods=["post"], url_path="preview-routing",
-            permission_classes=[CanSendNotification])
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="preview-routing",
+        permission_classes=[CanSendNotification],
+    )
     def preview_routing(self, request):
         """POST /api/v1/notifications/preview-routing/ — pré-affichage du provider."""
         phone = (request.data.get("phone") or "").strip()
@@ -378,12 +441,14 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             decision = NotificationProviderRouter.detect(phone, channel=channel)
         except PhoneValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
-        return Response({
-            "normalized": decision.normalized,
-            "country_code": decision.country_code,
-            "provider": decision.provider,
-            "is_ivoirian": decision.is_ivoirian,
-        })
+        return Response(
+            {
+                "normalized": decision.normalized,
+                "country_code": decision.country_code,
+                "provider": decision.provider,
+                "is_ivoirian": decision.is_ivoirian,
+            }
+        )
 
     @action(detail=True, methods=["post"], permission_classes=[CanRetryNotification])
     def retry(self, request, pk=None):
@@ -401,22 +466,33 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         notif.error_message = ""
         notif.error_code = ""
         notif.queued_at = timezone.now()
-        notif.save(update_fields=[
-            "status", "error_message", "error_code", "queued_at", "updated_at",
-        ])
+        notif.save(
+            update_fields=[
+                "status",
+                "error_message",
+                "error_code",
+                "queued_at",
+                "updated_at",
+            ]
+        )
 
         log_action(
-            notification=notif, action=Actions.RETRY,
-            actor=request.user, request=request,
+            notification=notif,
+            action=Actions.RETRY,
+            actor=request.user,
+            request=request,
             metadata={"manual_retry": True},
         )
 
         from .tasks import send_notification_task
+
         send_notification_task.delay(notif.id)
         return Response(NotificationSerializer(notif).data)
 
     @action(
-        detail=False, methods=["post"], url_path="bulk-retry",
+        detail=False,
+        methods=["post"],
+        url_path="bulk-retry",
         permission_classes=[CanRetryNotification],
     )
     def bulk_retry(self, request):
@@ -448,6 +524,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(pk__in=ids_int)
         elif all_failed:
             from datetime import timedelta
+
             cutoff = timezone.now() - timedelta(hours=max_age_hours)
             qs = qs.filter(failed_at__gte=cutoff)[:500]
 
@@ -455,6 +532,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         skipped_suspended = 0
         results = []
         from .tasks import send_notification_task
+
         for notif in qs:
             if availability.is_suspended(notif.provider) and not availability.is_urgent(notif):
                 skipped_suspended += 1
@@ -463,24 +541,34 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             notif.error_message = ""
             notif.error_code = ""
             notif.queued_at = timezone.now()
-            notif.save(update_fields=[
-                "status", "error_message", "error_code", "queued_at", "updated_at",
-            ])
+            notif.save(
+                update_fields=[
+                    "status",
+                    "error_message",
+                    "error_code",
+                    "queued_at",
+                    "updated_at",
+                ]
+            )
             log_action(
-                notification=notif, action=Actions.RETRY,
-                actor=request.user, request=request,
+                notification=notif,
+                action=Actions.RETRY,
+                actor=request.user,
+                request=request,
                 metadata={"manual_retry": True, "bulk": True},
             )
             send_notification_task.delay(notif.id)
             requeued += 1
             results.append({"id": notif.id, "recipient": notif.masked_recipient})
 
-        return Response({
-            "ok": True,
-            "requeued": requeued,
-            "skipped_suspended": skipped_suspended,
-            "results": results,
-        })
+        return Response(
+            {
+                "ok": True,
+                "requeued": requeued,
+                "skipped_suspended": skipped_suspended,
+                "results": results,
+            }
+        )
 
     @action(detail=True, methods=["post"], permission_classes=[CanRetryNotification])
     def cancel(self, request, pk=None):
@@ -494,8 +582,10 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         notif.status = NotificationStatus.CANCELLED
         notif.save(update_fields=["status", "updated_at"])
         log_action(
-            notification=notif, action=Actions.CANCEL,
-            actor=request.user, request=request,
+            notification=notif,
+            action=Actions.CANCEL,
+            actor=request.user,
+            request=request,
         )
         return Response(NotificationSerializer(notif).data)
 
@@ -503,6 +593,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 # ===========================================================================
 # WEBHOOKS — delivery reports providers
 # ===========================================================================
+
 
 def _update_notification_status(provider_message_id: str, new_status: str, error: str = "") -> bool:
     """Met à jour le statut d'une notification depuis un webhook fournisseur."""
@@ -532,6 +623,7 @@ def _update_notification_status(provider_message_id: str, new_status: str, error
 
 class TwilioSmsStatusWebhookView(APIView):
     """POST /api/v1/notifications/webhooks/twilio/sms/status/ — delivery report Twilio."""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -557,7 +649,9 @@ class TwilioSmsStatusWebhookView(APIView):
             return Response({"detail": "ignored"}, status=200)
 
         _update_notification_status(
-            sid, mapped, error=f"Twilio code={error_code}" if error_code else "",
+            sid,
+            mapped,
+            error=f"Twilio code={error_code}" if error_code else "",
         )
         return Response({"ok": True})
 
@@ -576,6 +670,7 @@ class TwilioSmsStatusWebhookView(APIView):
 
 class OrangeCiSmsStatusWebhookView(APIView):
     """POST /api/v1/notifications/webhooks/orange-ci/sms/status/ — delivery report Orange CI."""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -602,7 +697,8 @@ class OrangeCiSmsStatusWebhookView(APIView):
         if not mapped:
             logger.info(
                 "Orange CI webhook : status %r non mappé, callback=%s",
-                delivery_status, callback_data,
+                delivery_status,
+                callback_data,
             )
             return Response({"ok": True, "ignored": True})
 
@@ -612,15 +708,12 @@ class OrangeCiSmsStatusWebhookView(APIView):
         if callback_data and str(callback_data).isdigit():
             notif = Notification.objects.filter(pk=int(callback_data)).first()
         if notif is None and callback_data:
-            notif = Notification.objects.filter(
-                provider_message_id=callback_data
-            ).first()
+            notif = Notification.objects.filter(provider_message_id=callback_data).first()
         if notif is None:
             addr = (delivery_info.get("address") or "").lstrip("tel:").strip()
             if addr:
                 notif = (
-                    Notification.objects
-                    .filter(normalized_phone=addr, provider=Provider.ORANGE_CI)
+                    Notification.objects.filter(normalized_phone=addr, provider=Provider.ORANGE_CI)
                     .order_by("-created_at")
                     .first()
                 )
@@ -628,7 +721,8 @@ class OrangeCiSmsStatusWebhookView(APIView):
         if notif is None:
             logger.warning(
                 "Orange CI webhook : notif introuvable (callback=%s status=%s)",
-                callback_data, delivery_status,
+                callback_data,
+                delivery_status,
             )
             return Response({"ok": True, "not_found": True})
 
@@ -651,6 +745,7 @@ class OrangeCiSmsStatusWebhookView(APIView):
 # WEBHOOKS WHATSAPP (Phase C)
 # ===========================================================================
 
+
 def _whatsapp_status_to_notif_status(wa_status: str) -> str:
     """Mapping canonical WhatsApp → NotificationStatus."""
     return {
@@ -664,10 +759,12 @@ def _whatsapp_status_to_notif_status(wa_status: str) -> str:
 
 class TwilioWhatsAppStatusWebhookView(APIView):
     """POST /api/v1/notifications/webhooks/twilio/whatsapp/status/."""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
         from .services.whatsapp_twilio import TwilioWhatsAppProvider
+
         provider = TwilioWhatsAppProvider()
         if not provider.validate_webhook(request):
             return Response({"detail": "Invalid signature"}, status=403)
@@ -691,6 +788,7 @@ class MetaWhatsAppWebhookView(APIView):
     pour valider la subscription. On doit retourner le challenge en plain text
     si le verify_token correspond.
     """
+
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -703,11 +801,13 @@ class MetaWhatsAppWebhookView(APIView):
         if mode == "subscribe" and expected and token == expected:
             # Meta exige une réponse en texte brut (pas JSON)
             from django.http import HttpResponse
+
             return HttpResponse(challenge, content_type="text/plain")
         return Response({"detail": "Invalid token"}, status=403)
 
     def post(self, request):
         from .services.whatsapp_meta import MetaWhatsAppProvider
+
         provider = MetaWhatsAppProvider()
         if not provider.validate_webhook(request):
             return Response({"detail": "Invalid signature"}, status=403)
@@ -728,19 +828,22 @@ class MetaWhatsAppWebhookView(APIView):
 # ---------------------------------------------------------------------------
 class TravelerNotificationsView(APIView):
     """GET /api/v1/notifications/traveler/<public_id>/ — historique."""
+
     permission_classes = [CanViewNotifications]
 
     def get(self, request, public_id):
         traveler = Traveler.objects.filter(public_id=public_id).first()
         if not traveler:
             return Response({"detail": "Voyageur introuvable."}, status=404)
-        qs = traveler.notifications.select_related(
-            "template", "sent_by"
-        ).order_by("-created_at")[:200]
-        return Response({
-            "count": qs.count(),
-            "results": NotificationSerializer(qs, many=True, context={"request": request}).data,
-        })
+        qs = traveler.notifications.select_related("template", "sent_by").order_by("-created_at")[
+            :200
+        ]
+        return Response(
+            {
+                "count": qs.count(),
+                "results": NotificationSerializer(qs, many=True, context={"request": request}).data,
+            }
+        )
 
 
 # ===========================================================================
@@ -749,23 +852,33 @@ class TravelerNotificationsView(APIView):
 import json  # noqa: E402
 
 from .email_models import (  # noqa: E402
-    EmailLog, EmailStatus, EmailTemplate, SenderProfile,
+    EmailLog,
+    EmailStatus,
+    EmailTemplate,
+    SenderProfile,
 )
 from .serializers import (  # noqa: E402
-    EmailLogSerializer, EmailTemplateSerializer, SenderProfileSerializer,
+    EmailLogSerializer,
+    EmailTemplateSerializer,
+    SenderProfileSerializer,
 )
 
 
 class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
     """GET /api/v1/notifications/emails/ — historique des emails envoyés."""
-    queryset = (
-        EmailLog.objects
-        .select_related("template", "related_user", "related_traveler", "sent_by")
-        .order_by("-created_at")
-    )
+
+    queryset = EmailLog.objects.select_related(
+        "template", "related_user", "related_traveler", "sent_by"
+    ).order_by("-created_at")
     serializer_class = EmailLogSerializer
     permission_classes = [CanViewNotifications]
-    filterset_fields = ["status", "email_type", "sender_address", "related_user", "related_traveler"]
+    filterset_fields = [
+        "status",
+        "email_type",
+        "sender_address",
+        "related_user",
+        "related_traveler",
+    ]
     search_fields = ["recipient", "subject", "error_message"]
 
     @action(detail=True, methods=["post"], permission_classes=[CanRetryNotification])
@@ -782,11 +895,14 @@ class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
         log.save(update_fields=["status", "error_message", "updated_at"])
 
         from .tasks_email import send_email_task
+
         send_email_task.delay(log.id)
         return Response(EmailLogSerializer(log).data)
 
     @action(
-        detail=False, methods=["post"], url_path="bulk-retry",
+        detail=False,
+        methods=["post"],
+        url_path="bulk-retry",
         permission_classes=[CanRetryNotification],
     )
     def bulk_retry(self, request):
@@ -801,9 +917,13 @@ class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        qs = EmailLog.objects.filter(status__in=(
-            EmailStatus.FAILED, EmailStatus.CANCELLED, EmailStatus.BOUNCED,
-        ))
+        qs = EmailLog.objects.filter(
+            status__in=(
+                EmailStatus.FAILED,
+                EmailStatus.CANCELLED,
+                EmailStatus.BOUNCED,
+            )
+        )
         if ids:
             try:
                 ids_int = [int(i) for i in ids][:500]
@@ -812,10 +932,12 @@ class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(pk__in=ids_int)
         elif all_failed:
             from datetime import timedelta
+
             cutoff = timezone.now() - timedelta(hours=max_age_hours)
             qs = qs.filter(failed_at__gte=cutoff)[:500]
 
         from .tasks_email import send_email_task
+
         requeued = 0
         results = []
         for log in qs:
@@ -830,6 +952,7 @@ class EmailLogViewSet(viewsets.ReadOnlyModelViewSet):
 
 class EmailTemplateViewSet(viewsets.ModelViewSet):
     """CRUD des templates email — réservé aux admins (HasRole côté router)."""
+
     queryset = EmailTemplate.objects.all().order_by("email_type", "code")
     serializer_class = EmailTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -839,6 +962,7 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
 
 class SenderProfileViewSet(viewsets.ReadOnlyModelViewSet):
     """Lecture seule des profils — l'édition se fait via Django admin uniquement."""
+
     queryset = SenderProfile.objects.all().order_by("code")
     serializer_class = SenderProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -858,6 +982,7 @@ class AwsSesEventWebhookView(APIView):
     Le `Message` contient `eventType` (Delivery / Bounce / Complaint / Open)
     et `mail.messageId` qu'on retrouve dans `EmailLog.provider_message_id`.
     """
+
     permission_classes = [AllowAny]
     authentication_classes = []
 
@@ -875,8 +1000,10 @@ class AwsSesEventWebhookView(APIView):
 
         # SNS subscription confirmation : on log + accepte
         if msg_type == "SubscriptionConfirmation":
-            logger.info("SES SNS SubscriptionConfirmation reçue — URL: %s",
-                        payload.get("SubscribeURL", "")[:200])
+            logger.info(
+                "SES SNS SubscriptionConfirmation reçue — URL: %s",
+                payload.get("SubscribeURL", "")[:200],
+            )
             return Response({"ok": True, "subscription": "pending"})
 
         if msg_type != "Notification":
@@ -932,11 +1059,13 @@ class EmailSmtpTestView(APIView):
     valider la config sans passer par les templates.
     Réservé authenticated (front filtre côté nav pour Super Admin).
     """
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        from .services.email_router import _build_connection
         from django.core.mail import EmailMultiAlternatives
+
+        from .services.email_router import _build_connection
 
         profile_code = (request.data.get("profile") or "").lower()
         recipient = (request.data.get("recipient") or "").strip()
@@ -971,19 +1100,24 @@ class EmailSmtpTestView(APIView):
                 connection=connection,
             )
             sent = msg.send(fail_silently=False)
-            return Response({
-                "ok": True,
-                "sent": sent,
-                "profile": profile_code,
-                "host": cfg.get("host"),
-                "port": cfg.get("port"),
-                "from": from_header,
-            })
+            return Response(
+                {
+                    "ok": True,
+                    "sent": sent,
+                    "profile": profile_code,
+                    "host": cfg.get("host"),
+                    "port": cfg.get("port"),
+                    "from": from_header,
+                }
+            )
         except Exception as exc:  # noqa: BLE001
-            return Response({
-                "ok": False,
-                "error": str(exc),
-                "profile": profile_code,
-                "host": cfg.get("host"),
-                "port": cfg.get("port"),
-            }, status=200)  # 200 pour pouvoir lire l'erreur côté front
+            return Response(
+                {
+                    "ok": False,
+                    "error": str(exc),
+                    "profile": profile_code,
+                    "host": cfg.get("host"),
+                    "port": cfg.get("port"),
+                },
+                status=200,
+            )  # 200 pour pouvoir lire l'erreur côté front

@@ -13,6 +13,7 @@ Sections du formulaire officiel :
 Le module conserve la notion d'enquête (`EbolaInvestigation`) qui orchestre
 ces sections + score + workflow (statut, surveillance, quarantaine).
 """
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -53,16 +54,25 @@ class EbolaInvestigation(BaseModel):
         "travelers.Traveler", on_delete=models.CASCADE, related_name="ebola_investigations"
     )
     submission = models.OneToOneField(
-        "forms.FormSubmission", null=True, blank=True, on_delete=models.SET_NULL,
+        "forms.FormSubmission",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="ebola_investigation",
     )
 
     investigator = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="ebola_investigations",
     )
     entry_point = models.ForeignKey(
-        "geo.EntryPoint", null=True, blank=True, on_delete=models.SET_NULL,
+        "geo.EntryPoint",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="ebola_investigations",
     )
     status = models.CharField(
@@ -118,7 +128,8 @@ class EbolaExposureAssessment(BaseModel):
     )
     visited_ebola_zone_details = models.CharField(
         _("Si oui, précisez la ville/région et le pays"),
-        max_length=300, blank=True,
+        max_length=300,
+        blank=True,
     )
 
     # Q2
@@ -147,12 +158,14 @@ class EbolaExposureAssessment(BaseModel):
 
     @property
     def positive_answers_count(self) -> int:
-        return sum([
-            self.visited_ebola_zone,
-            self.contact_with_case,
-            self.attended_funeral_or_touched_corpse,
-            self.visited_ebola_healthcare_facility,
-        ])
+        return sum(
+            [
+                self.visited_ebola_zone,
+                self.contact_with_case,
+                self.attended_funeral_or_touched_corpse,
+                self.visited_ebola_healthcare_facility,
+            ]
+        )
 
 
 class EbolaSymptomReport(BaseModel):
@@ -175,8 +188,12 @@ class EbolaSymptomReport(BaseModel):
     temperature_celsius = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
 
     fever = models.BooleanField(_("S1. Fièvre (≥38°C) / sensation de forte chaleur"), default=False)
-    intense_fatigue = models.BooleanField(_("S2. Fatigue intense / faiblesse généralisée"), default=False)
-    muscle_joint_pain = models.BooleanField(_("S3. Douleurs musculaires, articulaires, courbatures"), default=False)
+    intense_fatigue = models.BooleanField(
+        _("S2. Fatigue intense / faiblesse généralisée"), default=False
+    )
+    muscle_joint_pain = models.BooleanField(
+        _("S3. Douleurs musculaires, articulaires, courbatures"), default=False
+    )
     severe_headache = models.BooleanField(_("S4. Maux de tête intenses (Céphalées)"), default=False)
     sore_throat_or_abdominal = models.BooleanField(
         _("S5. Maux de gorge ou douleurs abdominales (estomac)"), default=False
@@ -192,7 +209,10 @@ class EbolaSymptomReport(BaseModel):
     notes = models.TextField(blank=True)
 
     reported_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="ebola_symptom_reports",
     )
 
@@ -211,10 +231,17 @@ class EbolaSymptomReport(BaseModel):
 
     @property
     def positive_symptoms_count(self) -> int:
-        return sum([
-            self.fever, self.intense_fatigue, self.muscle_joint_pain, self.severe_headache,
-            self.sore_throat_or_abdominal, self.diarrhea_nausea_vomiting, self.unexplained_bleeding,
-        ])
+        return sum(
+            [
+                self.fever,
+                self.intense_fatigue,
+                self.muscle_joint_pain,
+                self.severe_headache,
+                self.sore_throat_or_abdominal,
+                self.diarrhea_nausea_vomiting,
+                self.unexplained_bleeding,
+            ]
+        )
 
 
 class EbolaDeclaration(BaseModel):
@@ -227,7 +254,8 @@ class EbolaDeclaration(BaseModel):
     declarant_full_name = models.CharField(max_length=240)
     signed_place = models.CharField(_("Fait à"), max_length=120, blank=True)
     truthful_declaration = models.BooleanField(
-        _("Certification sur l'honneur de l'exactitude des renseignements"), default=False,
+        _("Certification sur l'honneur de l'exactitude des renseignements"),
+        default=False,
     )
     consent_data_processing = models.BooleanField(default=False)
     consent_health_followup = models.BooleanField(default=False)
@@ -251,7 +279,9 @@ class PublicRegistrationKey(models.Model):
 
     digest = models.CharField(max_length=64, unique=True)
     traveler = models.ForeignKey(
-        "travelers.Traveler", null=True, on_delete=models.CASCADE,
+        "travelers.Traveler",
+        null=True,
+        on_delete=models.CASCADE,
         related_name="registration_keys",
     )
     created_at = models.DateTimeField(auto_now_add=True)
