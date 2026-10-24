@@ -9,10 +9,14 @@ import { FieldGroup, FieldRow } from '@/components/form/Field';
 
 export function Step1Voyage({ onNext }: { onNext: () => void }) {
   const { voyage, set, goTo } = useRegistrationStore();
-  const { register, handleSubmit, formState: { errors } } = useForm<VoyageInput>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<VoyageInput>({
     resolver: zodResolver(voyageSchema),
     defaultValues: voyage,
   });
+  const [arrival, departure] = watch(['arrival_date', 'planned_departure_date']);
+  const stayDays = arrival && departure && departure >= arrival
+    ? Math.round((Date.parse(departure) - Date.parse(arrival)) / 86_400_000)
+    : null;
 
   const submit = (data: VoyageInput) => {
     set({ voyage: data });
@@ -35,6 +39,25 @@ export function Step1Voyage({ onNext }: { onNext: () => void }) {
         </FieldGroup>
         <FieldGroup label="Heure d'arrivée">
           <input type="time" className="input" {...register('arrival_time')} />
+        </FieldGroup>
+      </FieldRow>
+
+      <FieldRow>
+        <FieldGroup
+          label="Date de départ prévue de Côte d'Ivoire (optionnel)"
+          error={errors.planned_departure_date?.message}
+          help={
+            stayDays !== null
+              ? `Durée de séjour prévue : ${stayDays} jour${stayDays > 1 ? 's' : ''}.`
+              : 'Si vous la connaissez — elle permet d\'adapter votre accompagnement.'
+          }
+        >
+          <input
+            type="date"
+            className="input"
+            min={arrival || undefined}
+            {...register('planned_departure_date')}
+          />
         </FieldGroup>
       </FieldRow>
 

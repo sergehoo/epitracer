@@ -19,7 +19,12 @@ export const voyageSchema = z.object({
   // / voiture privée). On ne bloque pas l'enregistrement pour cela.
   seat_number: z.string().optional().default(''),
   entry_point_code: z.string().min(1, 'Point d\'entrée obligatoire.'),
-});
+  // Date de départ prévue de Côte d'Ivoire — OPTIONNELLE (durée de séjour).
+  planned_departure_date: z.string().optional().default(''),
+}).refine(
+  (v) => !v.planned_departure_date || !v.arrival_date || v.planned_departure_date >= v.arrival_date,
+  { path: ['planned_departure_date'], message: 'Le départ prévu ne peut pas précéder l\'arrivée.' },
+);
 
 export const identiteSchema = z.object({
   last_name: z.string().min(2, 'Nom obligatoire.'),

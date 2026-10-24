@@ -20,6 +20,8 @@ export interface SectionVoyage {
   // Optionnel — utile pour le contact-tracing mais pas bloquant.
   seat_number?: string;
   entry_point_code: string;       // ex: ABJ-AIRPORT
+  /** Date de départ prévue de Côte d'Ivoire (YYYY-MM-DD) — optionnelle. */
+  planned_departure_date?: string;
 }
 
 /** Document de voyage (upload local côté front avant envoi) */

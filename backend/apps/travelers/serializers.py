@@ -35,7 +35,7 @@ class TravelerSerializer(serializers.ModelSerializer):
         fields = [
             "id", "uuid", "public_id",
             # Section 1 — voyage
-            "arrival_date", "arrival_time", "transport_mode",
+            "arrival_date", "arrival_time", "planned_departure_date", "transport_mode",
             "flight_or_voyage_number", "seat_number",
             "entry_point", "entry_point_name",
             # Section 2 — identité
@@ -60,6 +60,17 @@ class TravelerSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "uuid", "public_id", "confinement_address", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        arrival = attrs.get("arrival_date", getattr(self.instance, "arrival_date", None))
+        departure = attrs.get(
+            "planned_departure_date", getattr(self.instance, "planned_departure_date", None),
+        )
+        if arrival and departure and departure < arrival:
+            raise serializers.ValidationError(
+                {"planned_departure_date": "Le départ prévu précède la date d'arrivée."}
+            )
+        return attrs
 
 
 class TravelerLiteSerializer(serializers.ModelSerializer):

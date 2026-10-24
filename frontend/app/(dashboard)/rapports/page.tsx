@@ -24,7 +24,7 @@ import { api, extractApiError, API_URL } from '@/lib/api';
 // =========================================================================
 
 type Tone = 'orange' | 'emerald' | 'rose' | 'amber' | 'slate' | 'sky' | 'dark';
-type Fmt = 'pdf' | 'csv';
+type Fmt = 'pdf' | 'csv' | 'xlsx';
 
 interface ReportDef {
   key: string;
@@ -38,12 +38,18 @@ interface ReportDef {
   endpoint?: string;
 }
 
+const BLOB_TYPES: Record<Fmt, string> = {
+  pdf: 'application/pdf',
+  csv: 'text/csv;charset=utf-8',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
 const REPORTS: ReportDef[] = [
   {
     key: 'travelers',
     title: 'Voyageurs enregistrés',
-    desc: 'Liste détaillée des voyageurs avec point d\'entrée, transport et statut.',
-    icon: <Users />, tone: 'emerald', formats: ['csv', 'pdf'],
+    desc: 'Liste détaillée des voyageurs : point d\'entrée, transport, provenance, destination et durée de séjour.',
+    icon: <Users />, tone: 'emerald', formats: ['csv', 'xlsx', 'pdf'],
     filters: ['entry_point', 'transport_mode'],
     endpoint: '/reports/travelers/',
   },
@@ -58,8 +64,8 @@ const REPORTS: ReportDef[] = [
   {
     key: 'followups',
     title: 'Suivi 21 jours',
-    desc: 'Quarantaines avec taux de check-ins et alertes déclenchées.',
-    icon: <HeartPulse />, tone: 'amber', formats: ['csv', 'pdf'],
+    desc: 'Quarantaines avec taux de check-ins, alertes déclenchées, provenance et séjour.',
+    icon: <HeartPulse />, tone: 'amber', formats: ['csv', 'xlsx', 'pdf'],
     filters: ['qstatus', 'disease'],
     endpoint: '/reports/followups/',
   },
@@ -629,7 +635,7 @@ function ReportParamsModal({ report, onClose }: { report: ReportDef; onClose: ()
       const filename = match?.[1] || `epitrace_${report.key}_${dateFrom}_${dateTo}.${fmt}`;
 
       const blob = new Blob([res.data], {
-        type: fmt === 'pdf' ? 'application/pdf' : 'text/csv;charset=utf-8',
+        type: BLOB_TYPES[fmt],
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -640,7 +646,7 @@ function ReportParamsModal({ report, onClose }: { report: ReportDef; onClose: ()
       a.remove();
       URL.revokeObjectURL(url);
 
-      toast.success(`Rapport ${fmt.toUpperCase()} téléchargé`);
+      toast.success(`Rapport ${fmt === 'xlsx' ? 'Excel' : fmt.toUpperCase()} téléchargé`);
       onClose();
     } catch (e: any) {
       // Si la réponse d'erreur est en blob, on tente d'extraire le message
@@ -787,6 +793,15 @@ function ReportParamsModal({ report, onClose }: { report: ReportDef; onClose: ()
                 className="inline-flex items-center gap-2 rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
               >
                 <FileSpreadsheet className="h-4 w-4" /> {busy === 'csv' ? 'Génération...' : 'Télécharger CSV'}
+              </button>
+            )}
+            {report.formats.includes('xlsx') && (
+              <button
+                onClick={() => download('xlsx')}
+                disabled={busy !== null}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-800 disabled:opacity-50"
+              >
+                <FileSpreadsheet className="h-4 w-4" /> {busy === 'xlsx' ? 'Génération...' : 'Télécharger Excel'}
               </button>
             )}
             {report.formats.includes('pdf') && (

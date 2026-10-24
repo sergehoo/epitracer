@@ -1,3 +1,5 @@
+from datetime import date
+
 from rest_framework import serializers
 
 from apps.travelers.serializers import TravelerSerializer
@@ -172,3 +174,24 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
     screenings = serializers.ListField(
         child=ScreeningAnswerSerializer(), required=False, default=list, max_length=30,
     )
+
+    def validate_voyage(self, voyage: dict) -> dict:
+        """Date de départ prévue (optionnelle) : format ISO et jamais avant l'arrivée."""
+        raw = voyage.get("planned_departure_date")
+        if not raw:
+            return voyage
+        try:
+            departure = date.fromisoformat(str(raw))
+        except ValueError as exc:
+            raise serializers.ValidationError(
+                {"planned_departure_date": "Date de départ prévue invalide (AAAA-MM-JJ)."}
+            ) from exc
+        try:
+            arrival = date.fromisoformat(str(voyage.get("arrival_date") or ""))
+        except ValueError:
+            arrival = None
+        if arrival and departure < arrival:
+            raise serializers.ValidationError(
+                {"planned_departure_date": "Le départ prévu précède la date d'arrivée."}
+            )
+        return voyage

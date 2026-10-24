@@ -3,9 +3,9 @@
 Endpoints (tous protégés NATIONAL_ADMIN / MINISTRY / INHP) :
 
     GET /api/v1/reports/types/                       → métadonnées des rapports
-    GET /api/v1/reports/travelers/?format=csv|pdf    → liste voyageurs
+    GET /api/v1/reports/travelers/?output=csv|xlsx|pdf → liste voyageurs
     GET /api/v1/reports/alerts/?format=csv|pdf       → liste alertes santé
-    GET /api/v1/reports/followups/?format=csv|pdf    → quarantaines + check-ins
+    GET /api/v1/reports/followups/?output=csv|xlsx|pdf → quarantaines + check-ins
     GET /api/v1/reports/checkins/?format=csv|pdf     → check-ins quotidiens
     GET /api/v1/reports/overview/?format=pdf         → synthèse globale (KPIs)
 
@@ -28,12 +28,14 @@ from rest_framework.views import APIView
 from apps.accounts.models import RoleCode
 from apps.core.permissions import HasRole, IsAuthenticatedAndActive
 
+from .traveler_fields import ITINERARY_HEADERS, itinerary_row, with_itinerary
 from .utils import (
     csv_response,
     default_period,
     parse_date,
     pdf_response,
     safe_getattr,
+    xlsx_response,
 )
 
 
@@ -44,10 +46,12 @@ REPORT_CATALOG = [
     {
         "key": "travelers",
         "title": "Voyageurs enregistrés",
-        "description": "Liste des voyageurs avec point d'entrée, transport, statut.",
+        "description": (
+            "Liste des voyageurs avec point d'entrée, transport, provenance et séjour."
+        ),
         "icon": "users",
         "tone": "green",
-        "formats": ["csv", "pdf"],
+        "formats": ["csv", "xlsx", "pdf"],
         "filters": ["date_from", "date_to", "entry_point", "transport_mode"],
     },
     {
@@ -65,7 +69,7 @@ REPORT_CATALOG = [
         "description": "Quarantaines actives ou clôturées avec taux de complétion check-ins.",
         "icon": "clock",
         "tone": "orange",
-        "formats": ["csv", "pdf"],
+        "formats": ["csv", "xlsx", "pdf"],
         "filters": ["date_from", "date_to", "status", "disease"],
     },
     {
@@ -135,8 +139,21 @@ class _BaseReportView(APIView):
         return v.lower()
 
     def _filename(self, key: str, fmt: str, d_from, d_to) -> str:
-        ext = "pdf" if fmt == "pdf" else "csv"
+        ext = fmt if fmt in {"pdf", "xlsx"} else "csv"
         return f"epitrace_{key}_{d_from.isoformat()}_{d_to.isoformat()}.{ext}"
+
+    def _render(self, request, key, d_from, d_to, *, title, subtitle, headers, rows, summary):
+        """Même jeu de lignes pour CSV, Excel et PDF : valeurs identiques entre formats."""
+        fmt = self._fmt(request)
+        filename = self._filename(key, fmt, d_from, d_to)
+        if fmt == "pdf":
+            return pdf_response(
+                filename, title=title, subtitle=subtitle, headers=headers, rows=rows,
+                summary=summary,
+            )
+        if fmt == "xlsx":
+            return xlsx_response(filename, title, headers, rows, summary=summary)
+        return csv_response(filename, headers, rows)
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +164,7 @@ class TravelersReportView(_BaseReportView):
         from apps.travelers.models import Traveler
 
         d_from, d_to = self._period(request)
-        qs = (
+        qs = with_itinerary(
             Traveler.objects.select_related("entry_point")
             .filter(arrival_date__gte=d_from, arrival_date__lte=d_to)
         )
@@ -174,6 +191,7 @@ class TravelersReportView(_BaseReportView):
             "Nationalité",
             "Téléphone",
             "Email",
+            *ITINERARY_HEADERS,
         ]
         rows = []
         for t in qs:
@@ -182,7 +200,7 @@ class TravelersReportView(_BaseReportView):
                 t.last_name,
                 t.first_name,
                 t.get_gender_display() if t.gender else "",
-                f"{t.age} {t.age_unit}" if t.age else "",
+                f"{t.age} {t.get_age_unit_display().lower()}" if t.age else "",
                 t.arrival_date,
                 t.get_transport_mode_display() if t.transport_mode else "",
                 t.flight_or_voyage_number,
@@ -190,20 +208,17 @@ class TravelersReportView(_BaseReportView):
                 safe_getattr(t, "nationality", "nationality_code", "country_of_origin"),
                 safe_getattr(t, "whatsapp_number", "phone", "phone_number"),
                 safe_getattr(t, "email"),
+                *itinerary_row(t),
             ])
 
-        fmt = self._fmt(request)
-        filename = self._filename("voyageurs", fmt, d_from, d_to)
-        if fmt == "pdf":
-            return pdf_response(
-                filename,
-                title="Rapport — Voyageurs enregistrés",
-                subtitle=f"Période du {d_from.strftime('%d/%m/%Y')} au {d_to.strftime('%d/%m/%Y')}",
-                headers=headers,
-                rows=rows,
-                summary=[("Total voyageurs", str(len(rows)))],
-            )
-        return csv_response(filename, headers, rows)
+        return self._render(
+            request, "voyageurs", d_from, d_to,
+            title="Rapport — Voyageurs enregistrés",
+            subtitle=f"Période du {d_from.strftime('%d/%m/%Y')} au {d_to.strftime('%d/%m/%Y')}",
+            headers=headers,
+            rows=rows,
+            summary=[("Total voyageurs", str(len(rows)))],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -283,9 +298,10 @@ class FollowupsReportView(_BaseReportView):
         from apps.quarantine.models import QuarantineRecord
 
         d_from, d_to = self._period(request)
-        qs = (
+        qs = with_itinerary(
             QuarantineRecord.objects.select_related("traveler", "disease")
-            .filter(started_on__gte=d_from, started_on__lte=d_to)
+            .filter(started_on__gte=d_from, started_on__lte=d_to),
+            prefix="traveler__",
         )
 
         status_p = request.query_params.get("status")
@@ -313,6 +329,7 @@ class FollowupsReportView(_BaseReportView):
             "Avec symptômes",
             "Alertes",
             "Adresse",
+            *ITINERARY_HEADERS,
         ]
         rows = []
         for q in qs:
@@ -329,6 +346,7 @@ class FollowupsReportView(_BaseReportView):
                 q.checks_with_symptoms,
                 q.alerts_raised,
                 q.address,
+                *itinerary_row(t),
             ])
 
         summary = [
@@ -337,18 +355,17 @@ class FollowupsReportView(_BaseReportView):
             ("Avec alerte", str(sum(1 for r in rows if r[9] and int(r[9]) > 0))),
         ]
 
-        fmt = self._fmt(request)
-        filename = self._filename("suivi-21j", fmt, d_from, d_to)
-        if fmt == "pdf":
-            return pdf_response(
-                filename,
-                title="Rapport — Suivi 21 jours (quarantaines)",
-                subtitle=f"Quarantaines débutées entre le {d_from.strftime('%d/%m/%Y')} et le {d_to.strftime('%d/%m/%Y')}",
-                headers=headers,
-                rows=rows,
-                summary=summary,
-            )
-        return csv_response(filename, headers, rows)
+        return self._render(
+            request, "suivi-21j", d_from, d_to,
+            title="Rapport — Suivi 21 jours (quarantaines)",
+            subtitle=(
+                f"Quarantaines débutées entre le {d_from.strftime('%d/%m/%Y')} "
+                f"et le {d_to.strftime('%d/%m/%Y')}"
+            ),
+            headers=headers,
+            rows=rows,
+            summary=summary,
+        )
 
 
 # ---------------------------------------------------------------------------

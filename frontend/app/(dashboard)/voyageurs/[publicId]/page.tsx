@@ -38,6 +38,7 @@ interface TravelerDetail {
   emergency_phone_ci: string;
   // Voyage
   arrival_date: string | null;
+  planned_departure_date?: string | null;
   flight_number: string;
   seat_number: string;
   transport_mode: string;
@@ -237,6 +238,10 @@ export default function TravelerDetailPage() {
             {/* Voyage */}
             <Card title="Voyage" icon={<Plane className="h-4 w-4" />}>
               <Row label="Arrivée" value={fmtDate(data.arrival_date)} />
+              <Row
+                label="Départ prévu"
+                value={data.planned_departure_date ? fmtDate(data.planned_departure_date) : 'Non renseigné'}
+              />
               <Row label="Vol / Transport" value={data.flight_number || '—'} />
               <Row label="Siège" value={data.seat_number || '—'} />
               <Row label="Mode" value={data.transport_mode || '—'} />

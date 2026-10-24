@@ -230,6 +230,7 @@ class PublicTravelerRegisterView(APIView):
                 # Section 1
                 arrival_date=_parse_date(voyage.get("arrival_date")),
                 arrival_time=voyage.get("arrival_time") or None,
+                planned_departure_date=_parse_date(voyage.get("planned_departure_date")),
                 transport_mode=_trim(voyage.get("transport_mode"), 20),
                 flight_or_voyage_number=_trim(voyage.get("flight_or_voyage_number"), 60),
                 seat_number=_trim(voyage.get("seat_number"), 20),

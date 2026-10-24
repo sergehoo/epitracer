@@ -80,3 +80,28 @@ def superadmin(db, django_user_model, roles):
     role = Role.objects.get(code=RoleCode.NATIONAL_ADMIN)
     RoleAssignment.objects.create(user=user, role=role, is_active=True)
     return user
+
+
+@pytest.fixture
+def pass_keys(tmp_path, monkeypatch, settings):
+    """Clés Ed25519 éphémères pour émettre et vérifier des pass dans les tests."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from apps.health_pass import crypto
+
+    priv = Ed25519PrivateKey.generate()
+    (tmp_path / "priv.pem").write_bytes(priv.private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ))
+    (tmp_path / "pub.pem").write_bytes(priv.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo,
+    ))
+    monkeypatch.setitem(settings.HEALTHPASS, "PRIVATE_KEY_PATH", str(tmp_path / "priv.pem"))
+    monkeypatch.setitem(settings.HEALTHPASS, "PUBLIC_KEY_PATH", str(tmp_path / "pub.pem"))
+    crypto._load_private_key.cache_clear()
+    crypto._load_public_key.cache_clear()
+    yield
+    crypto._load_private_key.cache_clear()
+    crypto._load_public_key.cache_clear()

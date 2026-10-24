@@ -14,6 +14,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
+from .weekly_aggregator import ITINERARY_BREAKDOWNS, stay_duration_rows
+
 # Réutilise les helpers logos officiels de apps.health_pass.branding
 # (mêmes fichiers static/branding/{mshpcmu,inhp,armoirie}.png)
 try:
@@ -214,6 +216,16 @@ def render_weekly_pdf(agg: dict) -> bytes:
     y -= 4 * mm
     y = _draw_breakdown_list(c, "Maladies surveillées", agg.get("by_disease", [])[:8], y, W)
 
+    # ─── Page : provenance & séjour (agrégés, sans donnée nominative) ──
+    _draw_footer(c, W, meta, agg)
+    c.showPage()
+    y = H - 15 * mm
+    y = _section_title(c, "Provenance et séjour des voyageurs", y, W)
+    for key, title in ITINERARY_BREAKDOWNS:
+        y = _draw_breakdown_list(c, title, agg.get(key, [])[:8], y, W)
+        y -= 4 * mm
+    y = _draw_label_values(c, "Séjour en Côte d'Ivoire", stay_duration_rows(agg), y, W)
+
     # ─── Footer ────────────────────────────────────────────────────
     _draw_footer(c, W, meta, agg)
     c.showPage()
@@ -346,6 +358,25 @@ def _draw_breakdown_list(c, title: str, items: list, y: float, W: float) -> floa
         bar_w = (W - 2 * margin - 6 * mm) * (cnt / max_count)
         c.setFillColor(SLATE_100); c.rect(margin + 2, y - 2, W - 2 * margin - 4 * mm, 1, stroke=0, fill=1)
         c.setFillColor(CI_ORANGE); c.rect(margin + 2, y - 2, bar_w, 1, stroke=0, fill=1)
+        y -= 4.5 * mm
+    return y
+
+
+def _draw_label_values(c, title: str, rows: list, y: float, page_w: float) -> float:
+    """Liste « libellé : valeur » (mêmes valeurs que les feuilles Excel / CSV)."""
+    margin = 10 * mm
+    c.setFillColor(CI_DARK)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(margin, y, title)
+    y -= 5 * mm
+    for label, value in rows:
+        c.setFillColor(SLATE_900)
+        c.setFont("Helvetica", 8)
+        c.drawString(margin + 2, y, str(label))
+        c.setFillColor(CI_ORANGE)
+        c.setFont("Helvetica-Bold", 8)
+        shown = _fmt_int(value) if isinstance(value, int) else str(value)
+        c.drawRightString(page_w - margin - 2, y, shown)
         y -= 4.5 * mm
     return y
 

@@ -52,6 +52,10 @@ class Traveler(BaseModel):
     # -------------------------------------------------------------------
     arrival_date = models.DateField(_("Date d'arrivée"), null=True, blank=True, db_index=True)
     arrival_time = models.TimeField(_("Heure d'arrivée"), null=True, blank=True)
+    # Déclaratif, optionnel : sert au calcul de la durée de séjour (exports).
+    planned_departure_date = models.DateField(
+        _("Date de départ prévue de Côte d'Ivoire"), null=True, blank=True,
+    )
     transport_mode = models.CharField(
         _("Moyen de transport"), max_length=20, choices=TransportMode.choices, blank=True
     )

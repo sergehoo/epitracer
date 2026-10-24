@@ -368,6 +368,82 @@ def _breakdown_disease(period: WeekPeriod, limit: int = 10) -> list:
         return []
 
 
+def _breakdown_itinerary(period: WeekPeriod, limit: int = 15) -> dict:
+    """Provenance, séjour récent, destination et durée de séjour — agrégés, sans donnée nominative.
+
+    Mêmes règles que les colonnes des exports voyageurs (reports.traveler_fields),
+    y compris le libellé « Non renseigné » pour les informations absentes.
+    """
+    from collections import Counter
+
+    from apps.reports.traveler_fields import NOT_PROVIDED, itinerary_info, with_itinerary
+    from apps.travelers.models import Traveler
+
+    origins: Counter = Counter()
+    recent: Counter = Counter()
+    cities: Counter = Counter()
+    durations: list[int] = []
+    unknown_duration = 0
+    try:
+        travelers = with_itinerary(
+            Traveler.objects.filter(created_at__gte=period.start, created_at__lte=period.end)
+        )
+        for t in travelers.iterator(chunk_size=500):
+            info = itinerary_info(t)
+            origins[info.origin_country or NOT_PROVIDED] += 1
+            for country in info.recent_stay_countries or [NOT_PROVIDED]:
+                recent[country] += 1
+            cities[info.destination_city or NOT_PROVIDED] += 1
+            if info.stay_days is None:
+                unknown_duration += 1
+            else:
+                durations.append(info.stay_days)
+    except Exception:  # noqa: BLE001 — un breakdown ne doit pas bloquer le rapport
+        logger.exception("Breakdown itinéraire indisponible")
+
+    def top(counter: Counter) -> list:
+        return [{"name": name, "count": n} for name, n in counter.most_common(limit)]
+
+    return {
+        "by_origin_country": top(origins),
+        "by_recent_stay_country": top(recent),
+        "by_destination_city": top(cities),
+        "stay_duration": {
+            "known": len(durations),
+            "unknown": unknown_duration,
+            "avg_days": round(sum(durations) / len(durations), 1) if durations else None,
+            "min_days": min(durations) if durations else None,
+            "max_days": max(durations) if durations else None,
+        },
+    }
+
+
+# Libellés partagés par les rendus Excel, CSV et PDF (valeurs identiques).
+ITINERARY_BREAKDOWNS = [
+    ("by_origin_country", "Pays de provenance"),
+    ("by_recent_stay_country", "Pays de séjour récent"),
+    ("by_destination_city", "Villes de destination"),
+]
+
+
+def stay_duration_rows(agg: dict) -> list[tuple[str, object]]:
+    """Synthèse « durée du séjour en Côte d'Ivoire » prête à afficher."""
+    from apps.reports.traveler_fields import NOT_PROVIDED
+
+    d = agg.get("stay_duration") or {}
+
+    def val(v):
+        return NOT_PROVIDED if v is None else v
+
+    return [
+        ("Durée de séjour renseignée (voyageurs)", d.get("known", 0)),
+        ("Durée de séjour non renseignée (voyageurs)", d.get("unknown", 0)),
+        ("Durée moyenne (jours)", val(d.get("avg_days"))),
+        ("Durée minimale (jours)", val(d.get("min_days"))),
+        ("Durée maximale (jours)", val(d.get("max_days"))),
+    ]
+
+
 def _top_events(period: WeekPeriod, limit: int = 10) -> list:
     """Événements marquants — alertes CRITIQUES/ÉLEVÉES + cas confirmés."""
     events = []
@@ -478,6 +554,7 @@ def aggregate_weekly(period_start: datetime, period_end: datetime) -> dict:
         "by_entry_point": _breakdown_entry_point(period),
         "by_district": _breakdown_district(period),
         "by_disease": _breakdown_disease(period),
+        **_breakdown_itinerary(period),
         "top_events": _top_events(period),
 
         "comparison": {

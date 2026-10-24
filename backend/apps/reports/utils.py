@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Iterable, Optional, Sequence
 
 from django.http import HttpResponse
@@ -70,8 +71,80 @@ def _csv_cell(value) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Excel (XLSX)
+# ---------------------------------------------------------------------------
+XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def xlsx_response(
+    filename: str,
+    title: str,
+    headers: Sequence[str],
+    rows: Iterable[Sequence],
+    *,
+    summary: Sequence[tuple[str, str]] | None = None,
+) -> HttpResponse:
+    """Classeur Excel : une feuille de données (mêmes valeurs que le CSV) + synthèse."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Données"
+    ws.append(list(headers))
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="009E60")
+    for row in rows:
+        ws.append([_xlsx_cell(c) for c in row])
+        for cell in ws[ws.max_row]:
+            # Une chaîne commençant par « = » serait interprétée comme formule.
+            if isinstance(cell.value, str) and cell.value.startswith("="):
+                cell.data_type = "s"
+            elif isinstance(cell.value, datetime):
+                cell.number_format = "DD/MM/YYYY HH:MM"
+            elif isinstance(cell.value, date):
+                cell.number_format = "DD/MM/YYYY"
+    ws.freeze_panes = "A2"
+    for idx, header in enumerate(headers, start=1):
+        ws.column_dimensions[get_column_letter(idx)].width = min(max(len(str(header)) + 2, 12), 40)
+
+    meta = wb.create_sheet("Synthèse")
+    meta.append([title])
+    meta.append(["Généré le", timezone.localtime().strftime("%d/%m/%Y %H:%M")])
+    for label, value in summary or []:
+        meta.append([label, value])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    response = HttpResponse(buf.getvalue(), content_type=XLSX_CONTENT_TYPE)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _xlsx_cell(value):
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "Oui" if value else "Non"
+    if isinstance(value, datetime):
+        # Excel ne gère pas les fuseaux : heure locale, sans tzinfo.
+        return timezone.localtime(value).replace(tzinfo=None) if timezone.is_aware(value) else value
+    if isinstance(value, str | int | float | Decimal | date):
+        return value
+    # Objets métier (ex. pays de nationalité) : même texte que dans le CSV.
+    return str(value)
+
+
+# ---------------------------------------------------------------------------
 # PDF
 # ---------------------------------------------------------------------------
+# Au-delà de ce nombre de colonnes, les cellules passent à la ligne (police
+# réduite) pour tenir dans la largeur A4 paysage au lieu de déborder.
+PDF_WRAP_COLUMNS = 12
+
+
 def pdf_response(
     filename: str,
     title: str,
@@ -148,15 +221,27 @@ def pdf_response(
         elements.append(Spacer(1, 4 * mm))
 
     # Tableau principal
-    table_data = [[Paragraph(f"<b>{h}</b>", styles["Normal"]) for h in headers]]
-    for row in rows:
-        table_data.append([_pdf_cell(c) for c in row])
-
-    table = Table(table_data, repeatRows=1)
+    wide = len(headers) > PDF_WRAP_COLUMNS
+    font_size = 6 if wide else 8
+    cell_style = ParagraphStyle(
+        "cell", parent=styles["Normal"], fontSize=font_size, leading=font_size + 1.5,
+    )
+    head_style = ParagraphStyle("head", parent=cell_style, textColor=colors.white)
+    if wide:
+        table_data = [[Paragraph(f"<b>{_escape(h)}</b>", head_style) for h in headers]]
+        for row in rows:
+            table_data.append([Paragraph(_escape(_pdf_cell(c)), cell_style) for c in row])
+        col_w = (doc.width / len(headers)) if headers else None
+        table = Table(table_data, repeatRows=1, colWidths=[col_w] * len(headers))
+    else:
+        table_data = [[Paragraph(f"<b>{h}</b>", styles["Normal"]) for h in headers]]
+        for row in rows:
+            table_data.append([_pdf_cell(c) for c in row])
+        table = Table(table_data, repeatRows=1)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), CI_GREEN),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("FONTSIZE", (0, 0), (-1, -1), font_size),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
         ("LINEBELOW", (0, 0), (-1, 0), 1, CI_DARK),
@@ -194,6 +279,11 @@ def pdf_response(
     response = HttpResponse(pdf, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
+
+
+def _escape(text: str) -> str:
+    """Échappe le texte pour un Paragraph reportlab (mini-HTML)."""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _pdf_cell(value) -> str:

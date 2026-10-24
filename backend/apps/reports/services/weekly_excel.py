@@ -12,6 +12,8 @@ Feuilles du XLSX :
   6. Districts       — top N
   7. Maladies        — top N
   8. Comparaison     — vs semaine précédente
+  9-11. Provenance, séjour récent, villes de destination (agrégés)
+  12. Séjour en CI   — durée du séjour (renseignée / non renseignée)
 
 Sécurité — AC-06 : les valeurs commençant par =, +, -, @ sont préfixées
 d'une apostrophe pour neutraliser les formules injectées (CSV injection).
@@ -23,6 +25,8 @@ import io
 import logging
 from datetime import datetime
 from typing import Any
+
+from .weekly_aggregator import ITINERARY_BREAKDOWNS, stay_duration_rows
 
 logger = logging.getLogger("epidemitracker.reports.excel")
 
@@ -77,9 +81,13 @@ def _render_xlsx_openpyxl(agg: dict) -> bytes:
             cell.alignment = Alignment(horizontal="left", vertical="center")
 
     def _autosize(ws, max_width: int = 40):
+        from openpyxl.utils import get_column_letter
+
         for col in ws.columns:
             length = max((len(str(c.value)) for c in col if c.value is not None), default=10)
-            ws.column_dimensions[col[0].column_letter].width = min(length + 2, max_width)
+            # col[0] peut être une MergedCell (titre fusionné) : sans `column_letter`.
+            letter = get_column_letter(col[0].column)
+            ws.column_dimensions[letter].width = min(length + 2, max_width)
 
     wb = Workbook()
 
@@ -195,6 +203,21 @@ def _render_xlsx_openpyxl(agg: dict) -> bytes:
         ])
     _autosize(ws8)
 
+    # ─── Feuilles 9-12 : provenance & séjour (agrégés, sans donnée nominative) ──
+    for key, title in ITINERARY_BREAKDOWNS:
+        ws = wb.create_sheet(title[:31])
+        ws.append(["Nom", "Nombre"])
+        _style_header(ws, 1, 2)
+        for row in agg.get(key, [])[:50]:
+            ws.append([_neutralize(row.get("name", "—")), row.get("count", 0)])
+        _autosize(ws)
+    ws_stay = wb.create_sheet("Séjour en CI")
+    ws_stay.append(["Indicateur", "Valeur"])
+    _style_header(ws_stay, 1, 2)
+    for label, value in stay_duration_rows(agg):
+        ws_stay.append([_neutralize(label), value])
+    _autosize(ws_stay)
+
     # Serialize
     buf = io.BytesIO()
     wb.save(buf)
@@ -248,6 +271,18 @@ def _render_csv_fallback(agg: dict) -> bytes:
         for row in agg.get(key, [])[:50]:
             writer.writerow([_neutralize(row.get("name", "—")), row.get("count", 0)])
         writer.writerow([])
+
+    for key, title in ITINERARY_BREAKDOWNS:
+        writer.writerow([f"=== {title} ==="])
+        writer.writerow(["Nom", "Nombre"])
+        for row in agg.get(key, [])[:50]:
+            writer.writerow([_neutralize(row.get("name", "—")), row.get("count", 0)])
+        writer.writerow([])
+    writer.writerow(["=== Séjour en Côte d'Ivoire ==="])
+    writer.writerow(["Indicateur", "Valeur"])
+    for label, value in stay_duration_rows(agg):
+        writer.writerow([_neutralize(label), value])
+    writer.writerow([])
 
     # BOM UTF-8 pour Excel FR
     return ("﻿" + buf.getvalue()).encode("utf-8")
