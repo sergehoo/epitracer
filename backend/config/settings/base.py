@@ -436,6 +436,9 @@ CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_RESULT_EXTENDED = True
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# File par défaut consommée par le worker (et non « celery ») : une tâche sans
+# route explicite ne reste jamais en attente indéfiniment dans Redis.
+CELERY_TASK_DEFAULT_QUEUE = "default"
 CELERY_TASK_ROUTES = {
     # IMPORTANT : nos tâches ont des noms CUSTOM via @shared_task(name="...")
     # — par ex. "notifications.send_notification_task" et NON

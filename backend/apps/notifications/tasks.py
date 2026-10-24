@@ -163,9 +163,21 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
             err = res.error if res else "WhatsApp : provider inactif"
 
         elif notif.channel == Channel.EMAIL:
+            # Envoi SMTP réel ICI (on est déjà dans le worker) : auparavant le
+            # routeur ne faisait que mettre l'email en file et la notification
+            # passait « Envoyée » même si le serveur d'envoi le refusait.
             from .providers import send_email as send_em
-            res = send_em(notif.recipient, notif.subject, notif.body)
+            meta = notif.metadata or {}
+            res = send_em(
+                notif.recipient, notif.subject, notif.body,
+                email_type=_email_type_for(notif), deliver_now=True,
+                email_log_id=meta.get("email_log_id"),
+            )
             ok, msg_id, err = res.ok, res.provider_id, res.error
+            if msg_id.startswith("emaillog:") and not meta.get("email_log_id"):
+                # Les nouveaux essais réutilisent le même journal d'email.
+                notif.metadata = {**meta, "email_log_id": int(msg_id.split(":", 1)[1])}
+                notif.save(update_fields=["metadata", "updated_at"])
 
         elif notif.channel == Channel.PUSH:
             # Push in-app CUMULATIF : on cible les 2 canaux "in-app" pour
@@ -308,6 +320,8 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
         "provider_message_id", "retry_count", "updated_at",
     ])
 
+    _sync_report_delivery(notif)
+
     if ok:
         action = Actions.SEND
     elif notif.status == NotificationStatus.ON_HOLD:
@@ -323,6 +337,59 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
         },
     )
     return ok, msg_id, err
+
+
+# Alertes de sécurité envoyées aux administrateurs (services.security / availability).
+_SECURITY_ALERT_KINDS = frozenset({"provider_suspended", "budget_alert", "sms_spike", "urgent_cap"})
+
+
+def _email_type_for(notif: Notification) -> str:
+    """Type d'email → expéditeur : interne (INHP) pour le personnel, public sinon.
+
+    Les rapports et alertes destinés aux agents partaient par le profil
+    PUBLIC (Amazon SES, destinationci.com) ; ils passent désormais par le
+    profil INTERNAL prévu pour l'administration (veillesanitaire.com).
+    """
+    from .email_models import EmailType
+
+    if notif.message_type != MessageType.ADMIN_NOTICE:
+        return EmailType.HEALTH_NOTIFICATION
+    kind = (notif.metadata or {}).get("kind", "")
+    if kind == "weekly_report":
+        return EmailType.INTERNAL_REPORT
+    if kind in _SECURITY_ALERT_KINDS:
+        return EmailType.ADMIN_SECURITY_ALERT
+    return EmailType.STAFF_NOTIFICATION
+
+
+def _sync_report_delivery(notif: Notification) -> None:
+    """Reporte le résultat réel d'envoi sur le journal du rapport hebdomadaire."""
+    if notif.message_type != MessageType.ADMIN_NOTICE:
+        return
+    try:
+        from apps.reports.models import DeliveryStatus, ReportDeliveryLog
+    except ImportError:  # pragma: no cover — app rapports absente
+        return
+    logs = ReportDeliveryLog.objects.filter(notification_id=notif.id)
+    if notif.status == NotificationStatus.SENT:
+        logs.update(status=DeliveryStatus.SENT, sent_at=notif.sent_at, error_message="")
+        return
+    if notif.status == NotificationStatus.ON_HOLD:
+        logs.update(status=DeliveryStatus.QUEUED, error_message=notif.error_message[:500])
+        return
+    if notif.status != NotificationStatus.FAILED:
+        return
+    now = timezone.now()
+    for log in logs:
+        log.error_message = (notif.error_message or "")[:500]
+        if not is_retryable(notif.error_code) or log.retry_count >= 3:
+            log.status = DeliveryStatus.PERMANENTLY_FAILED
+        else:
+            log.status = DeliveryStatus.FAILED
+            from datetime import timedelta
+
+            log.next_retry_at = now + timedelta(minutes=5 * (2 ** log.retry_count))
+        log.save(update_fields=["status", "error_message", "next_retry_at", "updated_at"])
 
 
 # ---------------------------------------------------------------------------

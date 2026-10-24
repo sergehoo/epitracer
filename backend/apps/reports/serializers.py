@@ -97,6 +97,8 @@ class GeneratedReportLightSerializer(serializers.ModelSerializer):
     has_pdf = serializers.SerializerMethodField()
     has_excel = serializers.SerializerMethodField()
     delivery_count = serializers.SerializerMethodField()
+    # Répartition réelle des envois (un envoi « en file » n'est pas un succès).
+    delivery_stats = serializers.SerializerMethodField()
 
     class Meta:
         model = GeneratedReport
@@ -107,7 +109,7 @@ class GeneratedReportLightSerializer(serializers.ModelSerializer):
             "status", "status_label",
             "generated_at", "duration_ms",
             "has_pdf", "has_excel",
-            "delivery_count",
+            "delivery_count", "delivery_stats",
         ]
 
     def get_has_pdf(self, obj) -> bool:
@@ -118,6 +120,23 @@ class GeneratedReportLightSerializer(serializers.ModelSerializer):
 
     def get_delivery_count(self, obj) -> int:
         return obj.deliveries.count()
+
+    def get_delivery_stats(self, obj) -> dict:
+        from django.db.models import Count, Q
+
+        from .models import DeliveryStatus
+
+        return obj.deliveries.aggregate(
+            sent=Count("id", filter=Q(
+                status__in=[DeliveryStatus.SENT, DeliveryStatus.DELIVERED],
+            )),
+            failed=Count("id", filter=Q(
+                status__in=[DeliveryStatus.FAILED, DeliveryStatus.PERMANENTLY_FAILED],
+            )),
+            pending=Count("id", filter=Q(
+                status__in=[DeliveryStatus.QUEUED, DeliveryStatus.RETRYING],
+            )),
+        )
 
 
 class GeneratedReportDetailSerializer(GeneratedReportLightSerializer):

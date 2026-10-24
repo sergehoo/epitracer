@@ -52,7 +52,9 @@ case "${1:-}" in
     ;;
   worker)
     echo ">>> Démarrage Celery worker"
-    exec celery -A config worker -l info -Q default,notifications,quarantine,passes,surveillance --concurrency="${CELERY_CONCURRENCY:-4}"
+    # « reports » : rapport hebdomadaire automatique (Beat, lundi 08:00) et
+    # purge des fichiers — sans cette file, le lundi ne partait jamais.
+    exec celery -A config worker -l info -Q default,notifications,quarantine,passes,surveillance,reports --concurrency="${CELERY_CONCURRENCY:-4}"
     ;;
   beat)
     echo ">>> Démarrage Celery beat"

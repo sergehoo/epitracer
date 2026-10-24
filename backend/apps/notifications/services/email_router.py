@@ -174,8 +174,13 @@ def send_email_by_type(
     related_traveler=None,
     sent_by=None,
     metadata: Optional[dict] = None,
+    deliver_now: bool = False,
 ) -> EmailResult:
     """Point d'entrée unique pour tout envoi email.
+
+    `deliver_now` : envoi SMTP immédiat dans l'appelant (déjà un worker
+    Celery, ex. une Notification email) — le résultat retourné est alors le
+    résultat réel du serveur d'envoi, pas une simple mise en file.
 
     Modes d'usage :
         (a) Avec template_code  → rendu auto depuis DB.
@@ -234,7 +239,12 @@ def send_email_by_type(
         sent_by=sent_by if sent_by and getattr(sent_by, "is_authenticated", False) else None,
     )
 
-    # 6) Enqueue Celery — fallback sync si Celery KO
+    # 6) Envoi immédiat demandé : résultat SMTP réel (pas de second saut Celery).
+    if deliver_now:
+        ok = _execute_email_send(log)
+        return EmailResult(ok=ok, log_id=log.id, error=log.error_message)
+
+    # 7) Enqueue Celery — fallback sync si Celery KO
     try:
         from ..tasks_email import send_email_task
         send_email_task.delay(log.id)
@@ -249,6 +259,17 @@ def send_email_by_type(
 # ===========================================================================
 # EXÉCUTION (appelée par Celery — séparé pour pouvoir être testée en sync)
 # ===========================================================================
+
+def resend_email_log(log_id: int) -> EmailResult:
+    """Nouvel essai SMTP sur un EmailLog existant (pas de doublon de journal)."""
+    log = EmailLog.objects.filter(pk=log_id).first()
+    if log is None:
+        return EmailResult(ok=False, error=f"EmailLog {log_id} introuvable.")
+    if log.status == EmailStatus.SENT:
+        return EmailResult(ok=True, log_id=log.id)
+    ok = _execute_email_send(log)
+    return EmailResult(ok=ok, log_id=log.id, error=log.error_message)
+
 
 def _execute_email_send(log: EmailLog) -> bool:
     """Construit le message + ouvre la connexion SMTP du bon profil + envoie.

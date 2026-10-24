@@ -548,9 +548,11 @@ def _notify_agent_and_district(case: QuarantineRecord, *, title: str, body: str)
     agent = case.assigned_agent
     if agent and getattr(agent, "email", None):
         try:
+            from apps.notifications.email_models import EmailType
             from apps.notifications.providers import send_email
 
-            res = send_email(agent.email, title, body)
+            # Agent INHP : expéditeur interne (pas le profil public voyageurs).
+            res = send_email(agent.email, title, body, email_type=EmailType.STAFF_NOTIFICATION)
             if getattr(res, "ok", False) or res:
                 sent["email"] += 1
         except Exception:  # pragma: no cover - best-effort

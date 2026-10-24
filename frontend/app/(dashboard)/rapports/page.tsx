@@ -148,6 +148,8 @@ interface WeeklyReport {
   has_pdf: boolean;
   has_excel: boolean;
   delivery_count: number;
+  /** Envois réellement aboutis / en échec / encore en cours. */
+  delivery_stats?: { sent: number; failed: number; pending: number };
   summary_data?: Record<string, unknown>;
 }
 
@@ -417,6 +419,17 @@ export default function RapportsPage() {
                       </td>
                       <td className="px-3 py-2.5 text-xs">
                         <span className="font-bold">{r.delivery_count}</span>
+                        {r.delivery_stats && (
+                          <span className="ml-1.5 whitespace-nowrap text-[11px]">
+                            <span className="text-emerald-700 dark:text-emerald-400">{r.delivery_stats.sent} envoyés</span>
+                            {r.delivery_stats.failed > 0 && (
+                              <span className="ml-1 font-semibold text-rose-700 dark:text-rose-400">· {r.delivery_stats.failed} échecs</span>
+                            )}
+                            {r.delivery_stats.pending > 0 && (
+                              <span className="ml-1 text-amber-700 dark:text-amber-400">· {r.delivery_stats.pending} en cours</span>
+                            )}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="inline-flex items-center gap-1">

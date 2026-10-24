@@ -51,7 +51,15 @@ def send_sms(recipient: str, message: str) -> SendResult:
 # ---------------------------------------------------------------------------
 # Email
 # ---------------------------------------------------------------------------
-def send_email(recipient: str, subject: str, body: str) -> SendResult:
+def send_email(
+    recipient: str,
+    subject: str,
+    body: str,
+    *,
+    email_type: str | None = None,
+    deliver_now: bool = False,
+    email_log_id: int | None = None,
+) -> SendResult:
     """Envoi email via le système multi-expéditeur (EmailRouter).
 
     Route automatiquement vers le bon SenderProfile :
@@ -64,11 +72,26 @@ def send_email(recipient: str, subject: str, body: str) -> SendResult:
 
     Le frontend ne choisit JAMAIS l'expéditeur — c'est imposé côté backend
     par la règle métier figée dans email_models.PUBLIC_EMAIL_TYPES.
+
+    `email_type` : imposé par l'appelant serveur (ex. rapport interne →
+    profil INTERNAL) ; HEALTH_NOTIFICATION (profil PUBLIC) par défaut.
+    `deliver_now` : envoi SMTP réel immédiat (résultat fiable) ;
+    `email_log_id` : nouvel essai sur le même journal d'email.
     """
+    if email_log_id:
+        from .services.email_router import resend_email_log
+
+        res = resend_email_log(email_log_id)
+        return SendResult(
+            ok=res.ok, provider="email", provider_id=f"emaillog:{res.log_id or email_log_id}",
+            error=res.error,
+        )
     try:
         # Import retardé pour éviter cycles d'imports avec le module email
         from .email_models import EmailType
         from .services.email_router import send_email_by_type
+
+        email_type = email_type or EmailType.HEALTH_NOTIFICATION
 
         # Détecte si le body est HTML (commence par <!DOCTYPE ou <html)
         # → on passe alors comme body_html pour que EmailMultiAlternatives
@@ -83,9 +106,10 @@ def send_email(recipient: str, subject: str, body: str) -> SendResult:
             m = re.search(r"<title[^>]*>([^<]+)</title>", body, re.IGNORECASE)
             plain_fallback = (m.group(1) if m else subject or "Rapport EpiTrace").strip()
             result = send_email_by_type(
-                email_type=EmailType.HEALTH_NOTIFICATION,
+                email_type=email_type,
                 recipient=recipient,
                 subject=subject or "Notification — EpiTrace / INHP",
+                deliver_now=deliver_now,
                 body_html=body,
                 body_text=(
                     f"{plain_fallback}\n\n"
@@ -95,18 +119,16 @@ def send_email(recipient: str, subject: str, body: str) -> SendResult:
             )
         else:
             result = send_email_by_type(
-                email_type=EmailType.HEALTH_NOTIFICATION,
+                email_type=email_type,
                 recipient=recipient,
                 subject=subject or "Notification — EpiTrace / INHP",
+                deliver_now=deliver_now,
                 body_text=body,
             )
+        provider_id = f"emaillog:{result.log_id}" if result.log_id else ""
         if result.ok:
-            return SendResult(
-                ok=True,
-                provider="email",
-                provider_id=str(result.log_id or ""),
-            )
-        return SendResult(ok=False, provider="email", error=result.error)
+            return SendResult(ok=True, provider="email", provider_id=provider_id)
+        return SendResult(ok=False, provider="email", provider_id=provider_id, error=result.error)
     except Exception as exc:  # noqa: BLE001
         logger.exception("send_email failed for %s", recipient[:40])
         return SendResult(ok=False, provider="email", error=str(exc))

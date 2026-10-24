@@ -211,7 +211,7 @@ def send_weekly_report_email(self, report_id: int) -> dict:
     )
     subject = f"[EpiTrace] Rapport hebdomadaire — {report.report_code}"
 
-    sent, failed = 0, 0
+    sent, failed, queued = 0, 0, 0
     for rec in recipients:
         # Log l'envoi AVANT le dispatch (traçabilité même si crash)
         log = ReportDeliveryLog.objects.create(
@@ -230,19 +230,17 @@ def send_weekly_report_email(self, report_id: int) -> dict:
                 subject=subject,
                 traveler=None,  # rapport global, pas lié à un voyageur
                 message_type="admin_notice",
+                metadata={"kind": "weekly_report", "report_id": report.pk},
             )
-            if result.ok:
-                log.status = DeliveryStatus.SENT
-                log.sent_at = timezone.now()
-                log.provider = result.provider
-                log.notification_id = result.notification_id
-                sent += 1
+            outcome = _apply_dispatch_result(log, result)
+            if outcome != "failed":
+                # « queued » : l'envoi réel mettra ce journal à jour (sent/failed).
+                sent += int(outcome == "sent")
+                queued += int(outcome == "queued")
                 REPORT_EMAIL_SENT_TOTAL.labels(
                     report_type=str(report.report_type),
                 ).inc()
             else:
-                log.status = DeliveryStatus.FAILED
-                log.error_message = result.error[:500]
                 failed += 1
                 REPORT_DELIVERY_FAILED_TOTAL.labels(
                     report_type=str(report.report_type),
@@ -262,7 +260,7 @@ def send_weekly_report_email(self, report_id: int) -> dict:
 
     logger.info("[reports] email %s : %s sent / %s failed",
                 report.report_code, sent, failed)
-    return {"ok": True, "sent": sent, "failed": failed,
+    return {"ok": True, "sent": sent, "failed": failed, "queued": queued,
             "report_code": report.report_code}
 
 
@@ -315,7 +313,7 @@ def send_weekly_report_sms(self, report_id: int) -> dict:
         if not r.allowed_report_types or report.report_type in r.allowed_report_types
     ]
 
-    sent, failed = 0, 0
+    sent, failed, queued = 0, 0, 0
     for rec in recipients:
         log = ReportDeliveryLog.objects.create(
             report=report,
@@ -331,20 +329,18 @@ def send_weekly_report_sms(self, report_id: int) -> dict:
                 body=sms_body,
                 traveler=None,
                 message_type="admin_notice",
+                metadata={"kind": "weekly_report", "report_id": report.pk},
             )
-            if result.ok:
-                log.status = DeliveryStatus.SENT
-                log.sent_at = timezone.now()
-                log.provider = result.provider  # orange_ci ou twilio
-                log.notification_id = result.notification_id
-                sent += 1
+            outcome = _apply_dispatch_result(log, result)
+            if outcome != "failed":
+                # « queued » : l'envoi réel mettra ce journal à jour (sent/failed).
+                sent += int(outcome == "sent")
+                queued += int(outcome == "queued")
                 REPORT_SMS_SENT_TOTAL.labels(
                     report_type=str(report.report_type),
                     provider=str(result.provider or "unknown"),
                 ).inc()
             else:
-                log.status = DeliveryStatus.FAILED
-                log.error_message = result.error[:500]
                 failed += 1
                 REPORT_DELIVERY_FAILED_TOTAL.labels(
                     report_type=str(report.report_type),
@@ -362,7 +358,7 @@ def send_weekly_report_sms(self, report_id: int) -> dict:
 
     logger.info("[reports] SMS %s : %s sent / %s failed",
                 report.report_code, sent, failed)
-    return {"ok": True, "sent": sent, "failed": failed,
+    return {"ok": True, "sent": sent, "failed": failed, "queued": queued,
             "report_code": report.report_code}
 
 
@@ -457,22 +453,25 @@ def retry_failed_weekly_reports() -> dict:
                     channel="email", recipient=rec.email,
                     body=body, subject=subject,
                     traveler=None, message_type="admin_notice",
+                    metadata={"kind": "weekly_report", "report_id": report.pk},
                 )
             elif log.channel == DeliveryChannel.SMS:
                 body = render_weekly_sms(report.summary_data)
                 result = enqueue_notification(
                     channel="sms", recipient=rec.phone_number,
                     body=body, traveler=None, message_type="admin_notice",
+                    metadata={"kind": "weekly_report", "report_id": report.pk},
                 )
             else:
                 continue
 
             log.retry_count += 1
             if result.ok:
-                log.status = DeliveryStatus.SENT
-                log.sent_at = timezone.now()
-                log.error_message = ""
-                retried += 1
+                # Statut final posé par la notification elle-même (envoi réel).
+                outcome = _apply_dispatch_result(log, result)
+                if outcome != "failed":
+                    log.error_message = ""
+                    retried += 1
             else:
                 log.error_message = result.error[:500]
                 if log.retry_count >= 3:
@@ -530,6 +529,43 @@ def cleanup_expired_report_files(days_to_keep: int = 90) -> dict:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def _apply_dispatch_result(log, result) -> str:
+    """Statut du journal = résultat réel de la notification, pas sa mise en file.
+
+    Avant : « Envoyé » dès que la notification était créée, même si l'email
+    échouait ensuite chez le fournisseur. La notification asynchrone met à
+    jour ce journal à la fin de son envoi (notifications.tasks).
+    Retourne « sent », « failed » ou « queued ».
+    """
+    from apps.notifications.models import Notification, NotificationStatus
+    from apps.reports.models import DeliveryStatus
+
+    if not result.ok:
+        log.status = DeliveryStatus.FAILED
+        log.error_message = (result.error or "")[:500]
+        return "failed"
+    log.provider = result.provider
+    log.notification_id = result.notification_id
+    notif = Notification.objects.filter(pk=result.notification_id).first()
+    if notif is not None and notif.status in (
+        NotificationStatus.SENT, NotificationStatus.DELIVERED, NotificationStatus.READ,
+    ):
+        log.status = DeliveryStatus.SENT
+        log.sent_at = notif.sent_at or timezone.now()
+        return "sent"
+    if notif is not None and notif.status == NotificationStatus.FAILED:
+        # Même règle que la mise à jour asynchrone (notifications.tasks) :
+        # une erreur définitive (adresse non vérifiée…) n'est pas relancée.
+        from apps.notifications.services.errors import is_retryable
+
+        retry = is_retryable(notif.error_code) and log.retry_count < 3
+        log.status = DeliveryStatus.FAILED if retry else DeliveryStatus.PERMANENTLY_FAILED
+        log.error_message = (notif.error_message or "")[:500]
+        return "failed"
+    log.status = DeliveryStatus.QUEUED
+    return "queued"
+
+
 def _mask_email(email: str) -> str:
     """joe@example.com → j***@example.com (pour destination_masked)."""
     if not email or "@" not in email:

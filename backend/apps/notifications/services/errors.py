@@ -32,6 +32,9 @@ class ErrorCode:
     URGENT_CAP = "urgent_cap_reached"
     COUNTRY_BLOCKED = "country_not_allowed"
     RECIPIENT_NOT_ALLOWED = "recipient_not_allowed"
+    # Email (SMTP / Amazon SES)
+    EMAIL_UNVERIFIED = "email_unverified"
+    EMAIL_REJECTED = "email_rejected"
     UNKNOWN = "unknown"
 
 
@@ -53,6 +56,8 @@ NON_RETRYABLE = frozenset({
     ErrorCode.URGENT_CAP,
     ErrorCode.COUNTRY_BLOCKED,
     ErrorCode.RECIPIENT_NOT_ALLOWED,
+    ErrorCode.EMAIL_UNVERIFIED,
+    ErrorCode.EMAIL_REJECTED,
 })
 
 ERROR_LABELS: dict[str, str] = {
@@ -70,6 +75,11 @@ ERROR_LABELS: dict[str, str] = {
     ErrorCode.URGENT_CAP: "Plafond journalier des SMS urgents atteint.",
     ErrorCode.COUNTRY_BLOCKED: "Envoi SMS non autorisé vers ce pays.",
     ErrorCode.RECIPIENT_NOT_ALLOWED: "Destinataire non autorisé pour ce compte.",
+    ErrorCode.EMAIL_UNVERIFIED: (
+        "Email refusé par le fournisseur d'envoi : adresse ou domaine non vérifié "
+        "(Amazon SES en mode « bac à sable » ou expéditeur non validé)."
+    ),
+    ErrorCode.EMAIL_REJECTED: "Adresse email refusée par le serveur destinataire.",
     ErrorCode.PROVIDER_POLICY: "Envoi refusé par le fournisseur (règle de son contrat).",
     ErrorCode.PROVIDER_AUTH: "Connexion au fournisseur refusée : identifiants à vérifier.",
     ErrorCode.PROVIDER_CONFIG: "Fournisseur mal configuré : contacter l'administrateur.",
@@ -123,15 +133,22 @@ _RULES = (
         or _has(low, "insufficient funds", "balance is too low", "insufficient balance")
     )),
     (ErrorCode.NATIONAL_POLICY, lambda low, status, pol: "politique nationale" in low),
+    (ErrorCode.EMAIL_UNVERIFIED, lambda low, status, pol: (
+        _has(low, "not verified", "identities failed the check")
+    )),
+    (ErrorCode.EMAIL_REJECTED, lambda low, status, pol: (
+        _has(low, "recipient address rejected", "mailbox unavailable", "user unknown",
+             "recipients refused", "no such user")
+    )),
     (ErrorCode.TEMPLATE_VARIABLES, lambda low, status, pol: (
         "variable" in low and _has(low, "non renseign", "manquant")
     )),
     (ErrorCode.PROVIDER_POLICY, lambda low, status, pol: pol.startswith("POL") or status == 403),
     (ErrorCode.PROVIDER_AUTH, lambda low, status, pol: (
-        status == 401 or _has(low, "oauth", "re-auth", "authenticate")
+        status == 401 or _has(low, "oauth", "re-auth", "authenticate", "authentication", "(535")
     )),
     (ErrorCode.PROVIDER_CONFIG, lambda low, status, pol: (
-        _has(low, "non configur", "manquant", "not configured")
+        _has(low, "non configur", "manquant", "not configured", "senderprofile")
     )),
     (ErrorCode.INVALID_NUMBER, lambda low, status, pol: (
         _has(low, "numéro", "numero", "invalid", "21211", "21614")
