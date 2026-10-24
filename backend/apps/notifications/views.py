@@ -7,6 +7,8 @@ from hashlib import sha1
 from base64 import b64encode
 
 from django.conf import settings
+from django.db.models import Case, Count, F, IntegerField, Q, Sum, Value, When
+from django.db.models.functions import Length
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, throttle_classes
@@ -14,6 +16,33 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
+
+from apps.travelers.models import Traveler
+
+from .filters import SENT_STATUSES, WAITING_STATUSES, NotificationFilter
+from .models import (
+    Channel, Notification, NotificationAuditAction, NotificationAuditLog,
+    NotificationStatus, NotificationTemplate, Provider, ReminderDispatch,
+)
+from .permissions import (
+    CanRetryNotification, CanSendNotification, CanViewNotifications,
+)
+from .serializers import (
+    NotificationSerializer, NotificationTemplateSerializer,
+    ProviderAvailabilitySerializer, SendNotificationSerializer,
+    provider_state_rows,
+)
+from .services import availability
+from .services.audit import Actions, log_action
+from .services.dispatcher import (
+    send_manual_message, send_template_message,
+)
+from .services.errors import friendly_error
+from .services.router import (
+    NotificationProviderRouter, PhoneValidationError,
+)
+
+logger = logging.getLogger("epidemitracker.notifications.views")
 
 
 # ---------------------------------------------------------------------------
@@ -24,27 +53,25 @@ class SendNotificationThrottle(UserRateThrottle):
     scope = "notifications_send"
     rate = "30/hour"
 
-from apps.travelers.models import Traveler
 
-from .models import (
-    Notification, NotificationStatus, NotificationTemplate, Provider,
-)
-from .permissions import (
-    CanRetryNotification, CanSendNotification, CanViewNotifications,
-)
-from .serializers import (
-    NotificationSerializer, NotificationTemplateSerializer,
-    SendNotificationSerializer,
-)
-from .services.audit import Actions, log_action
-from .services.dispatcher import (
-    send_manual_message, send_template_message,
-)
-from .services.router import (
-    NotificationProviderRouter, PhoneValidationError,
-)
+# Fournisseurs SMS suivis par le bandeau de disponibilité.
+SMS_PROVIDERS = [Provider.ORANGE_CI, Provider.TWILIO]
 
-logger = logging.getLogger("epidemitracker.notifications.views")
+
+def _suspended_refusal(notif: Notification):
+    """409 lisible si le fournisseur de la notification est suspendu."""
+    if availability.is_suspended(notif.provider) and not availability.is_urgent(notif):
+        label = (
+            Provider(notif.provider).label if notif.provider in Provider.values else notif.provider
+        )
+        return Response(
+            {"detail": (
+                f"{label} est suspendu (crédit épuisé ou indisponible). La relance "
+                "sera possible après la reprise des envois par un administrateur."
+            )},
+            status=status.HTTP_409_CONFLICT,
+        )
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -72,11 +99,117 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     )
     serializer_class = NotificationSerializer
     permission_classes = [CanViewNotifications]
-    filterset_fields = [
-        "channel", "status", "provider", "message_type", "direction",
-        "traveler", "template",
+    filterset_class = NotificationFilter
+    search_fields = [
+        "recipient", "normalized_phone", "body", "subject",
+        "traveler__public_id", "traveler__first_name", "traveler__last_name",
     ]
-    search_fields = ["recipient", "normalized_phone", "body", "subject"]
+    ordering_fields = ["created_at", "sent_at", "failed_at", "status", "channel", "provider"]
+
+    @action(detail=False, methods=["get"])
+    def stats(self, request):
+        """GET /api/v1/notifications/stats/ — indicateurs (mêmes filtres que la liste).
+
+        envoyées, échouées, en attente (dont attente fournisseur), annulées,
+        doublons évités sur la période, consommation SMS (messages et
+        segments facturables par fournisseur).
+        """
+        filtered = self.filter_queryset(self.get_queryset())
+        # Sous-requête sur les PK : neutralise les doublons de jointure
+        # (filtre maladie) avant agrégation.
+        base = Notification.objects.filter(pk__in=filtered.order_by().values("pk"))
+        counts = base.aggregate(
+            total=Count("id"),
+            sent=Count("id", filter=Q(status__in=SENT_STATUSES)),
+            delivered=Count("id", filter=Q(status=NotificationStatus.DELIVERED)),
+            failed=Count("id", filter=Q(status=NotificationStatus.FAILED)),
+            waiting=Count("id", filter=Q(status__in=WAITING_STATUSES)),
+            on_hold=Count("id", filter=Q(status=NotificationStatus.ON_HOLD)),
+            cancelled=Count("id", filter=Q(status=NotificationStatus.CANCELLED)),
+        )
+
+        sms = (
+            base.filter(channel=Channel.SMS, status__in=SENT_STATUSES)
+            .annotate(blen=Length("body"))
+            .annotate(segments=Case(
+                When(blen__lte=160, then=Value(1)),
+                default=(F("blen") + 152) / 153,
+                output_field=IntegerField(),
+            ))
+        )
+        by_provider = [
+            {
+                "provider": row["provider"],
+                "messages": row["messages"],
+                "segments": row["segments"] or 0,
+            }
+            for row in sms.values("provider").annotate(
+                messages=Count("id"), segments=Sum("segments"),
+            ).order_by("provider")
+        ]
+
+        date_from = request.query_params.get("date_from") or None
+        date_to = request.query_params.get("date_to") or None
+        dispatch = ReminderDispatch.objects.all()
+        dup_logs = NotificationAuditLog.objects.filter(action=NotificationAuditAction.DUPLICATE)
+        if date_from:
+            dispatch = dispatch.filter(reminder_date__gte=date_from)
+            dup_logs = dup_logs.filter(created_at__date__gte=date_from)
+        if date_to:
+            dispatch = dispatch.filter(reminder_date__lte=date_to)
+            dup_logs = dup_logs.filter(created_at__date__lte=date_to)
+        duplicates = (dispatch.aggregate(n=Sum("duplicates_avoided"))["n"] or 0) + dup_logs.count()
+
+        return Response({
+            **counts,
+            "pending": counts["waiting"],
+            "duplicates_avoided": duplicates,
+            "sms": {
+                "messages": sum(r["messages"] for r in by_provider),
+                "segments": sum(r["segments"] for r in by_provider),
+                "by_provider": by_provider,
+            },
+        })
+
+    @action(detail=False, methods=["get"], url_path="providers")
+    def providers(self, request):
+        """GET /api/v1/notifications/providers/ — disponibilité des fournisseurs SMS."""
+        rows = provider_state_rows(SMS_PROVIDERS)
+        held = dict(
+            Notification.objects.filter(status=NotificationStatus.ON_HOLD).order_by()
+            .values("provider").annotate(n=Count("id")).values_list("provider", "n")
+        )
+        data = ProviderAvailabilitySerializer(
+            rows, many=True, context={"request": request, "held_counts": held},
+        ).data
+        return Response({"results": data})
+
+    @action(
+        detail=False, methods=["post"],
+        url_path=r"providers/(?P<provider>[a-z_]+)/resume",
+        permission_classes=[CanRetryNotification],
+    )
+    def resume_provider(self, request, provider=None):
+        """POST /api/v1/notifications/providers/<provider>/resume/
+
+        Reprise contrôlée après réapprovisionnement. Body : {"requeue": true}
+        (défaut) renvoie les messages en attente encore pertinents ; les
+        rappels datés devenus obsolètes sont annulés (jamais « Jour 20 » le
+        jour 23). {"requeue": false} reprend sans rien renvoyer.
+        """
+        if provider not in Provider.values:
+            return Response({"detail": "Fournisseur inconnu."}, status=status.HTTP_404_NOT_FOUND)
+        raw = request.data.get("requeue", True)
+        requeue = raw if isinstance(raw, bool) else str(raw).lower() not in ("0", "false", "no")
+        result = availability.resume_provider(
+            provider, user=request.user, request=request, requeue=requeue,
+        )
+        return Response({
+            "provider": provider,
+            "was_suspended": result.was_suspended,
+            "requeued": result.requeued,
+            "expired": result.expired,
+        })
 
     @action(
         detail=False, methods=["post"], url_path="send",
@@ -152,11 +285,26 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 subject=data.get("subject", "") or "",
             )
 
+        notif = (
+            Notification.objects.filter(pk=result.notification_id).first()
+            if result.notification_id else None
+        )
+        if notif is not None and notif.status == NotificationStatus.ON_HOLD:
+            # Crédit fournisseur épuisé : message conservé, envoi différé.
+            return Response(
+                NotificationSerializer(notif, context={"request": request}).data,
+                status=202,
+            )
         if not result.ok:
-            return Response({"detail": result.error}, status=400)
+            if notif is not None:
+                detail = friendly_error(notif.error_code, notif.error_message)
+            else:
+                detail = result.error
+            return Response({"detail": detail}, status=400)
 
-        notif = Notification.objects.get(pk=result.notification_id)
-        return Response(NotificationSerializer(notif).data, status=201)
+        return Response(
+            NotificationSerializer(notif, context={"request": request}).data, status=201,
+        )
 
     @action(detail=False, methods=["post"], url_path="preview-routing",
             permission_classes=[CanSendNotification])
@@ -184,10 +332,16 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 {"detail": "Seules les notifications FAILED ou CANCELLED peuvent être relancées."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        refusal = _suspended_refusal(notif)
+        if refusal is not None:
+            return refusal
         notif.status = NotificationStatus.QUEUED
         notif.error_message = ""
+        notif.error_code = ""
         notif.queued_at = timezone.now()
-        notif.save(update_fields=["status", "error_message", "queued_at", "updated_at"])
+        notif.save(update_fields=[
+            "status", "error_message", "error_code", "queued_at", "updated_at",
+        ])
 
         log_action(
             notification=notif, action=Actions.RETRY,
@@ -236,13 +390,20 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(failed_at__gte=cutoff)[:500]
 
         requeued = 0
+        skipped_suspended = 0
         results = []
         from .tasks import send_notification_task
         for notif in qs:
+            if availability.is_suspended(notif.provider) and not availability.is_urgent(notif):
+                skipped_suspended += 1
+                continue
             notif.status = NotificationStatus.QUEUED
             notif.error_message = ""
+            notif.error_code = ""
             notif.queued_at = timezone.now()
-            notif.save(update_fields=["status", "error_message", "queued_at", "updated_at"])
+            notif.save(update_fields=[
+                "status", "error_message", "error_code", "queued_at", "updated_at",
+            ])
             log_action(
                 notification=notif, action=Actions.RETRY,
                 actor=request.user, request=request,
@@ -255,6 +416,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({
             "ok": True,
             "requeued": requeued,
+            "skipped_suspended": skipped_suspended,
             "results": results,
         })
 
@@ -515,7 +677,7 @@ class TravelerNotificationsView(APIView):
         ).order_by("-created_at")[:200]
         return Response({
             "count": qs.count(),
-            "results": NotificationSerializer(qs, many=True).data,
+            "results": NotificationSerializer(qs, many=True, context={"request": request}).data,
         })
 
 

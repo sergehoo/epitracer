@@ -24,6 +24,9 @@ class OrangeSendResult:
     provider_message_id: str = ""
     error: str = ""
     raw_response: Optional[dict] = None
+    # Catégorie normalisée (cf. services.errors.ErrorCode) — ex :
+    # "provider_quota_exhausted" pour HTTP 403 / POL0001 (crédit épuisé).
+    error_code: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -228,10 +231,17 @@ def send_sms(
             return OrangeSendResult(ok=False, error=f"Re-auth Orange CI échouée : {exc}")
 
     if not (200 <= r.status_code < 300):
+        from .errors import ErrorCode, classify_error
+
+        error = f"Orange CI HTTP {r.status_code} : {r.text[:400]}"
+        error_code = classify_error(error, http_status=r.status_code)
+        if error_code == ErrorCode.QUOTA_EXHAUSTED:
+            logger.error("Orange CI : crédit SMS épuisé (HTTP %s, POL0001).", r.status_code)
         return OrangeSendResult(
             ok=False,
-            error=f"Orange CI HTTP {r.status_code} : {r.text[:200]}",
+            error=error,
             raw_response={"status": r.status_code, "body": r.text[:500]},
+            error_code=error_code,
         )
 
     data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}

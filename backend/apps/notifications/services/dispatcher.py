@@ -9,10 +9,12 @@ Pipeline :
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.notifications.models import (
@@ -34,6 +36,12 @@ class SendResult:
     provider: str = ""
     provider_message_id: str = ""
     error: str = ""
+    # True si l'envoi a été ignoré car déjà enregistré (clé d'idempotence).
+    duplicate: bool = False
+
+
+# Variable de template restée non substituée (ex : « ID : {traveler_id}. »).
+_UNRESOLVED_RE = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +153,7 @@ def enqueue_notification(
     request=None,
     force_provider: Optional[str] = None,
     metadata: Optional[dict] = None,
+    dedup_key: str = "",
 ) -> SendResult:
     """Point d'entrée unique : valide, persiste, et enqueue l'envoi Celery.
 
@@ -160,6 +169,8 @@ def enqueue_notification(
         request : HttpRequest pour journaliser IP + UA (optionnel)
         force_provider : surcharge le routage (admin uniquement, refusé pour CI→Twilio)
         metadata : payload libre stocké sur Notification.metadata
+        dedup_key : clé d'idempotence (rappels automatiques uniquement). Si une
+            notification porte déjà cette clé, rien n'est créé ni envoyé.
 
     Returns:
         SendResult avec l'ID de notification créée et le statut initial.
@@ -227,6 +238,17 @@ def enqueue_notification(
 
     if not final_body or not final_body.strip():
         return SendResult(ok=False, error="Le corps du message est vide.")
+    # Un SMS « ID : {traveler_id}. » ne doit jamais partir : variable absente
+    # du contexte (voyageur non lié, modèle mal renseigné). L'email HTML est
+    # exclu (accolades CSS légitimes).
+    if channel != Channel.EMAIL:
+        missing = sorted(set(_UNRESOLVED_RE.findall(final_body)))
+        if missing:
+            names = ", ".join("{" + m + "}" for m in missing)
+            return SendResult(
+                ok=False,
+                error=f"Message incomplet : variable(s) {names} non renseignée(s).",
+            )
     # Limite 1530 chars = 10 segments SMS (GSM-7 : 153 chars/segment concat).
     # N'a de sens QUE pour SMS + WhatsApp — l'email HTML fait souvent
     # plusieurs dizaines de KB (logos base64, styles inline). Le canal push
@@ -247,8 +269,14 @@ def enqueue_notification(
             ),
         )
 
-    # 4) Création de l'objet Notification
-    notif = Notification.objects.create(
+    # 4) Idempotence : un rappel automatique déjà enregistré n'est pas recréé.
+    if dedup_key:
+        existing = Notification.all_objects.filter(dedup_key=dedup_key).first()
+        if existing is not None:
+            return _duplicate_result(existing, dedup_key)
+
+    # 5) Création de l'objet Notification
+    create_kwargs = dict(
         channel=channel,
         template=template,
         traveler=traveler,
@@ -270,11 +298,24 @@ def enqueue_notification(
                 "is_ivoirian": decision.is_ivoirian,
             },
         },
+        dedup_key=dedup_key,
     )
+    try:
+        # Savepoint : une collision concurrente sur dedup_key (contrainte
+        # unique) ne doit pas invalider la transaction de l'appelant.
+        with transaction.atomic():
+            notif = Notification.objects.create(**create_kwargs)
+    except IntegrityError:
+        existing = (
+            Notification.all_objects.filter(dedup_key=dedup_key).first() if dedup_key else None
+        )
+        if existing is None:
+            raise
+        return _duplicate_result(existing, dedup_key)
 
     log_action(notification=notif, action=Actions.CREATE, actor=sent_by, request=request)
 
-    # 5) Enqueue Celery (best-effort : si Celery KO, on essaye en sync)
+    # 6) Enqueue Celery (best-effort : si Celery KO, on essaye en sync)
     try:
         from apps.notifications.tasks import send_notification_task
         send_notification_task.delay(notif.id)
@@ -290,6 +331,21 @@ def enqueue_notification(
         provider=final_provider,
         provider_message_id="",
         error="",
+    )
+
+
+def _duplicate_result(existing: Notification, dedup_key: str) -> SendResult:
+    log_action(
+        notification=existing, action=Actions.DUPLICATE,
+        metadata={"dedup_key": dedup_key},
+    )
+    logger.info("Doublon évité (%s) → notification #%s", dedup_key, existing.id)
+    return SendResult(
+        ok=True,
+        notification_id=existing.id,
+        provider=existing.provider,
+        provider_message_id=existing.provider_message_id,
+        duplicate=True,
     )
 
 

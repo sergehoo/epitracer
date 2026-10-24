@@ -48,3 +48,5 @@ class Actions:
     DELIVERED = NotificationAuditAction.DELIVERED
     FAILED = NotificationAuditAction.FAILED
     VIEW = NotificationAuditAction.VIEW
+    HOLD = NotificationAuditAction.HOLD
+    DUPLICATE = NotificationAuditAction.DUPLICATE

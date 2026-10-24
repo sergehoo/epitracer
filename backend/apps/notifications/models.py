@@ -4,6 +4,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from simple_history.models import HistoricalRecords
 
 from apps.core.models import BaseModel
 
@@ -40,6 +41,9 @@ class NotificationStatus(models.TextChoices):
     FAILED = "failed", _("Échec")
     CANCELLED = "cancelled", _("Annulée")
     READ = "read", _("Lue")
+    # Fournisseur suspendu (ex : crédit SMS Orange CI épuisé) : le message est
+    # conservé sans nouvelle tentative jusqu'à la reprise contrôlée.
+    ON_HOLD = "on_hold", _("En attente fournisseur")
 
 
 class Direction(models.TextChoices):
@@ -149,8 +153,18 @@ class Notification(BaseModel):
         help_text=_("ID de message côté fournisseur (utilisé pour les webhooks de statut)."),
     )
     error_message = models.TextField(blank=True)
+    error_code = models.CharField(
+        max_length=40, blank=True, default="", db_index=True,
+        help_text=_("Catégorie d'erreur normalisée (cf. services.errors)."),
+    )
     retry_count = models.PositiveSmallIntegerField(default=0)
     max_retries = models.PositiveSmallIntegerField(default=3)
+
+    # Clé d'idempotence des envois automatiques (rappel quotidien, relance,
+    # fin de suivi). Unique quand renseignée : un même rappel ne peut être
+    # enregistré deux fois, même par des tâches concurrentes. Vide pour les
+    # messages manuels et les alertes médicales urgentes (jamais bloqués).
+    dedup_key = models.CharField(max_length=120, blank=True, default="")
 
     # ── Audit & timestamps ──
     sent_by = models.ForeignKey(
@@ -173,6 +187,14 @@ class Notification(BaseModel):
             models.Index(fields=["channel", "status"]),
             models.Index(fields=["traveler", "-created_at"]),
             models.Index(fields=["provider_message_id"]),
+            models.Index(fields=["provider", "status"], name="notif_provider_status_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["dedup_key"],
+                condition=~models.Q(dedup_key=""),
+                name="notif_unique_dedup_key",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -237,6 +259,95 @@ class NotificationProviderConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Disponibilité des fournisseurs (crédit épuisé, panne) — reprise contrôlée
+# ---------------------------------------------------------------------------
+class ProviderState(models.TextChoices):
+    AVAILABLE = "available", _("Disponible")
+    QUOTA_EXHAUSTED = "quota_exhausted", _("Crédit épuisé")
+    UNAVAILABLE = "unavailable", _("Fournisseur indisponible")
+
+
+class ProviderAvailability(BaseModel):
+    """État opérationnel d'un fournisseur d'envoi.
+
+    Passe à `quota_exhausted` dès qu'Orange CI répond 403/POL0001 : les envois
+    automatiques sont alors mis en attente (statut `on_hold`) au lieu d'être
+    retentés. Le retour à `available` est une action explicite d'un
+    administrateur après réapprovisionnement (pas de reprise silencieuse).
+    """
+
+    provider = models.CharField(max_length=40, choices=Provider.choices, unique=True)
+    state = models.CharField(
+        max_length=20, choices=ProviderState.choices,
+        default=ProviderState.AVAILABLE, db_index=True,
+    )
+    reason_code = models.CharField(max_length=40, blank=True, default="")
+    technical_detail = models.TextField(
+        blank=True, help_text=_("Réponse brute du fournisseur (administrateurs uniquement)."),
+    )
+    suspended_at = models.DateTimeField(null=True, blank=True)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    blocked_attempts = models.PositiveIntegerField(
+        default=0, help_text=_("Envois mis en attente depuis la suspension."),
+    )
+    alert_sent_at = models.DateTimeField(null=True, blank=True)
+    resumed_at = models.DateTimeField(null=True, blank=True)
+    resumed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="resumed_providers",
+    )
+
+    history = HistoricalRecords()
+
+    class Meta(BaseModel.Meta):
+        verbose_name = _("Disponibilité fournisseur")
+        verbose_name_plural = _("Disponibilités fournisseurs")
+        ordering = ["provider"]
+
+    def __str__(self) -> str:
+        return f"{self.provider} · {self.state}"
+
+    @property
+    def is_suspended(self) -> bool:
+        return self.state != ProviderState.AVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# Réservation des rappels automatiques (idempotence en base)
+# ---------------------------------------------------------------------------
+class ReminderDispatch(BaseModel):
+    """Un rappel automatique par voyageur / type / date — tous canaux confondus.
+
+    La ligne est créée AVANT tout envoi (push, FCM, SMS). La contrainte
+    d'unicité garantit qu'un second déclenchement (Celery Beat en double,
+    retry de tâche, plusieurs suivis multimaladies) ne renvoie rien ; il
+    incrémente seulement `duplicates_avoided`.
+    """
+
+    traveler = models.ForeignKey(
+        "travelers.Traveler", on_delete=models.CASCADE, related_name="reminder_dispatches",
+    )
+    kind = models.CharField(max_length=40, db_index=True)
+    reminder_date = models.DateField(db_index=True)
+    duplicates_avoided = models.PositiveIntegerField(default=0)
+    last_duplicate_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(BaseModel.Meta):
+        verbose_name = _("Rappel automatique envoyé")
+        verbose_name_plural = _("Rappels automatiques envoyés")
+        ordering = ["-reminder_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["traveler", "kind", "reminder_date"],
+                name="uniq_reminder_per_traveler_kind_date",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind} · traveler#{self.traveler_id} · {self.reminder_date}"
+
+
+# ---------------------------------------------------------------------------
 # Audit log
 # ---------------------------------------------------------------------------
 class NotificationAuditAction(models.TextChoices):
@@ -247,6 +358,8 @@ class NotificationAuditAction(models.TextChoices):
     DELIVERED = "delivered", _("Reçu confirmé")
     FAILED = "failed", _("Échec")
     VIEW = "view", _("Consultation")
+    HOLD = "hold", _("Mise en attente fournisseur")
+    DUPLICATE = "duplicate", _("Doublon évité")
 
 
 class NotificationAuditLog(BaseModel):

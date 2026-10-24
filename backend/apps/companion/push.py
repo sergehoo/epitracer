@@ -142,8 +142,13 @@ def push_notify(
     extra: Optional[dict[str, Any]] = None,
     fallback_to_sms: bool = True,
     fallback_to_whatsapp: bool = False,
+    dedup_date=None,
 ) -> dict[str, Any]:
     """Envoie un push à tous les abonnements ACTIFS d'un voyageur.
+
+    `dedup_date` (rappels automatiques) : le SMS/WhatsApp de repli porte une
+    clé d'idempotence `<type>:<voyageur>:<date>:<canal>` — jamais deux fois le
+    même rappel le même jour, même en cas de tâche relancée.
 
     Si aucune subscription active OU si toutes échouent, retombe sur SMS
     (ou WhatsApp si flag activé) via apps.notifications — uniquement si
@@ -192,21 +197,51 @@ def push_notify(
     base = getattr(settings, "PUBLIC_BASE_URL", "https://destinationci.com")
     short_text = f"{short_text}\n{base}{url}"[:480]
 
-    try:
-        from apps.notifications.tasks import send_notification  # noqa: WPS433
-        if fallback_to_sms and traveler.phone_mobile:
-            send_notification.delay(  # type: ignore[attr-defined]
-                channel="sms", recipient=traveler.phone_mobile, body=short_text,
-                context={"traveler_id": traveler.public_id, "type": notification_type},
-            )
-            stats["sms_sent"] += 1
-        if fallback_to_whatsapp and getattr(traveler, "whatsapp_phone", "") and traveler.whatsapp_phone:
-            send_notification.delay(  # type: ignore[attr-defined]
-                channel="whatsapp", recipient=traveler.whatsapp_phone, body=short_text,
-                context={"traveler_id": traveler.public_id, "type": notification_type},
-            )
-            stats["whatsapp_sent"] += 1
-    except Exception:  # noqa: BLE001 — best-effort
-        logger.exception("Échec fallback SMS/WhatsApp pour %s", traveler.public_id)
+    targets = []
+    if fallback_to_sms and traveler.phone_mobile:
+        targets.append(("sms", traveler.phone_mobile))
+    if fallback_to_whatsapp and getattr(traveler, "whatsapp_phone", ""):
+        targets.append(("whatsapp", traveler.whatsapp_phone))
+    for channel, recipient in targets:
+        try:
+            if _enqueue_fallback(traveler, channel, recipient, short_text,
+                                 notification_type, dedup_date, stats):
+                stats[f"{channel}_sent"] += 1
+        except Exception:  # noqa: BLE001 — best-effort
+            logger.exception("Échec fallback %s pour %s", channel, traveler.public_id)
 
     return stats
+
+
+def _enqueue_fallback(
+    traveler, channel: str, recipient: str, text: str,
+    notification_type: str, dedup_date, stats: dict[str, Any],
+) -> bool:
+    """Repli SMS/WhatsApp via le dispatcher, voyageur lié (historique, filtre
+    par maladie) et clé d'idempotence pour les rappels datés."""
+    from apps.notifications.models import MessageType
+    from apps.notifications.services.dispatcher import enqueue_notification
+    from apps.notifications.services.idempotence import reminder_dedup_key
+
+    metadata = {"kind": notification_type, "fallback_from": "push"}
+    dedup_key = ""
+    if dedup_date is not None:
+        metadata["reminder_date"] = dedup_date.isoformat()
+        dedup_key = reminder_dedup_key(notification_type, traveler.pk, dedup_date, channel)
+    res = enqueue_notification(
+        channel=channel, recipient=recipient, body=text, traveler=traveler,
+        message_type=_FALLBACK_MESSAGE_TYPES.get(notification_type, MessageType.AUTOMATIC_REMINDER),
+        context={"type": notification_type},
+        metadata=metadata, dedup_key=dedup_key,
+    )
+    if res.duplicate:
+        stats["duplicates_avoided"] = stats.get("duplicates_avoided", 0) + 1
+    return bool(res.ok and not res.duplicate)
+
+
+# Type métier du repli SMS selon le type de push (filtre « type » de l'historique).
+_FALLBACK_MESSAGE_TYPES = {
+    "daily_checkin": "followup_reminder",
+    "missed_checkin": "followup_reminder",
+    "followup_complete": "followup_completed",
+}

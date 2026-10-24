@@ -355,29 +355,32 @@ def create_followup_schedule(self, traveler_id: int, disease_code: str | None = 
     max_retries=3,
 )
 def send_daily_followup_reminders(self) -> dict:
-    """Rappel quotidien — version enrichie protocole-aware.
+    """Rappel quotidien — volet médical (timeline), sans envoi de message.
 
-    Délègue d'abord à `companion.send_daily_checkin_reminders` pour les
-    canaux (FCM/VAPID/SMS/WhatsApp) puis enrichit la timeline médicale :
+    L'envoi (FCM / Web Push / SMS) est fait UNE fois par
+    `companion.send_daily_checkin_reminders` (Beat 08:00). Cette tâche (08:05)
+    le relançait auparavant via `.run()`, ce qui doublait chaque rappel
+    (SMS identiques à 08:00 et 08:05). Elle se limite désormais à enrichir la
+    timeline médicale pour les voyageurs effectivement rappelés ce jour :
       - `FollowUpAction(NOTIFICATION_SENT)` côté médical ;
       - `DailyCheck.notification_sent = True` du jour courant.
 
     Respecte `protocol.notification_schedule.daily_reminder_hour` si défini.
     """
-    try:
-        from apps.companion.tasks import send_daily_checkin_reminders
-
-        companion_stats = send_daily_checkin_reminders.run()
-    except Exception:  # pragma: no cover - défense
-        logger.exception("companion.send_daily_checkin_reminders a échoué")
-        companion_stats = {}
+    from apps.notifications.models import ReminderDispatch
+    from apps.notifications.services.idempotence import ReminderKind
 
     today = _today()
     stats = {
-        "companion": companion_stats,
         "actions_logged": 0,
         "days_marked": 0,
+        "not_reminded": 0,
     }
+    reminded_ids = set(
+        ReminderDispatch.objects.filter(
+            kind=ReminderKind.DAILY_CHECKIN, reminder_date=today,
+        ).values_list("traveler_id", flat=True)
+    )
 
     qs = QuarantineRecord.objects.filter(
         status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
@@ -385,6 +388,9 @@ def send_daily_followup_reminders(self) -> dict:
 
     for case in qs.iterator(chunk_size=500):
         if case.traveler is None:
+            continue
+        if case.traveler_id not in reminded_ids:
+            stats["not_reminded"] += 1
             continue
         protocol = _get_protocol(case.disease)
         if protocol and protocol.notification_schedule:
@@ -418,13 +424,7 @@ def send_daily_followup_reminders(self) -> dict:
                     f"{_mask_phone(case.traveler.phone_mobile)}."
                 ),
                 day=day,
-                metadata={
-                    "day_index": day.day_index,
-                    "channels": {
-                        k: v for k, v in companion_stats.items()
-                        if k.endswith("_sent")
-                    },
-                },
+                metadata={"day_index": day.day_index, "reminder_date": today.isoformat()},
             )
             stats["actions_logged"] += 1
 
@@ -853,18 +853,30 @@ def auto_close_completed_followups(self) -> dict:
 
         try:
             from apps.companion.push import push_notify
+            from apps.companion.tasks import has_other_active_followups
+            from apps.notifications.services.idempotence import ReminderKind, claim_reminder
 
-            push_notify(
-                traveler=case.traveler,
-                title="Période d'accompagnement terminée",
-                body=(
-                    "Merci ! Votre période de surveillance sanitaire est "
-                    "terminée. Une attestation est disponible."
-                ),
-                url=f"/voyageur/suivi?id={_public_id(case.traveler)}",
-                tag="followup-complete",
-                notification_type="followup_complete",
-            )
+            # Suivis multimaladies : un seul message, à la fin du dernier
+            # suivi ; même clé que companion.send_completion_messages (date
+            # de fin prévue) → jamais envoyé deux fois.
+            end_on = case.expected_end_on or today
+            if has_other_active_followups(case.traveler, end_on=end_on):
+                stats["completion_deferred"] = stats.get("completion_deferred", 0) + 1
+            elif not claim_reminder(case.traveler, ReminderKind.FOLLOWUP_COMPLETE, end_on):
+                stats["duplicates_avoided"] = stats.get("duplicates_avoided", 0) + 1
+            else:
+                push_notify(
+                    traveler=case.traveler,
+                    title="Période d'accompagnement terminée",
+                    body=(
+                        "Merci ! Votre période de surveillance sanitaire est "
+                        "terminée. Une attestation est disponible."
+                    ),
+                    url=f"/voyageur/suivi?id={_public_id(case.traveler)}",
+                    tag="followup-complete",
+                    notification_type="followup_complete",
+                    dedup_date=end_on,
+                )
         except Exception:  # pragma: no cover - best-effort
             logger.exception("Notif fin de suivi KO (case=%s)", case.pk)
 

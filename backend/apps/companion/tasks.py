@@ -17,6 +17,8 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 
+from apps.notifications.services.idempotence import ReminderKind, claim_reminder
+
 from .models import ConsentScope, PushSubscription
 from .push import push_notify
 from .services import has_consent
@@ -239,10 +241,13 @@ def send_daily_checkin_reminders(self) -> dict[str, int]:
         "whatsapp_sent": 0,
         "skipped_no_consent": 0,
         "skipped_day_overflow": 0,
+        "duplicates_avoided": 0,
     }
 
     # Un voyageur peut être suivi pour plusieurs maladies : un seul rappel par
-    # jour, basé sur le suivi qui se termine le plus tard.
+    # jour, basé sur le suivi qui se termine le plus tard. L'unicité est
+    # garantie en base (ReminderDispatch) : un second déclenchement le même
+    # jour (Beat en double, retry de la tâche, alias historique) n'envoie rien.
     active_qs = QuarantineRecord.objects.filter(
         status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
     ).select_related("traveler").order_by("traveler_id", "-expected_end_on")
@@ -272,6 +277,12 @@ def send_daily_checkin_reminders(self) -> dict[str, int]:
         if not has_consent(traveler, ConsentScope.PUSH_NOTIFICATIONS):
             stats["skipped_no_consent"] += 1
             DAILY_REMINDER_SKIPPED.labels(reason="no_consent").inc()
+            continue
+
+        # Réservation en base AVANT tout envoi (FCM, Web Push, SMS).
+        if not claim_reminder(traveler, ReminderKind.DAILY_CHECKIN, today):
+            stats["duplicates_avoided"] += 1
+            DAILY_REMINDER_SKIPPED.labels(reason="already_sent").inc()
             continue
 
         # ---- Préparation du payload de notification ------------------------
@@ -314,6 +325,7 @@ def send_daily_checkin_reminders(self) -> dict[str, int]:
             # mobile a déjà abouti, on n'a plus besoin du SMS.
             fallback_to_sms=(fcm_sent == 0),
             fallback_to_whatsapp=False,
+            dedup_date=today,
         )
         if vapid_result["sent"] > 0:
             stats["vapid_sent"] += vapid_result["sent"]
@@ -385,14 +397,23 @@ def detect_missed_checkins(self, threshold_hours: int = 48) -> dict[str, int]:
     from apps.quarantine.models import QuarantineRecord, QuarantineStatus
     from apps.surveillance.models import HealthAlert
 
-    stats = {"checked": 0, "missed": 0, "alerts_created": 0, "push_sent": 0}
+    stats = {
+        "checked": 0, "missed": 0, "alerts_created": 0, "push_sent": 0,
+        "duplicates_avoided": 0,
+    }
     cutoff = timezone.now() - timedelta(hours=threshold_hours)
+    today = date.today()
 
+    # Job toutes les 6 h + suivis multimaladies : la relance « Donnez-nous de
+    # vos nouvelles » part au plus une fois par voyageur et par jour.
     active_qs = QuarantineRecord.objects.filter(
         status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
-    ).select_related("traveler")
+    ).select_related("traveler").order_by("traveler_id", "-expected_end_on")
+    handled: set[int] = set()
 
     for q in active_qs:
+        if q.traveler is None or q.traveler_id in handled:
+            continue
         stats["checked"] += 1
         last_check = q.daily_checks.order_by("-check_date").first()
         last_date = last_check.check_date if last_check else q.started_on
@@ -407,6 +428,7 @@ def detect_missed_checkins(self, threshold_hours: int = 48) -> dict[str, int]:
             continue
 
         stats["missed"] += 1
+        handled.add(q.traveler_id)
 
         # Idempotence : un seul "missed checkin" par voyageur par jour
         alert_code = f"MISS-{q.traveler.public_id}-{date.today():%Y%m%d}"
@@ -425,8 +447,11 @@ def detect_missed_checkins(self, threshold_hours: int = 48) -> dict[str, int]:
             )
             stats["alerts_created"] += 1
 
-        # Push doux (uniquement si push consenti)
+        # Push doux (uniquement si push consenti), un seul par jour
         if has_consent(q.traveler, ConsentScope.PUSH_NOTIFICATIONS):
+            if not claim_reminder(q.traveler, ReminderKind.MISSED_CHECKIN, today):
+                stats["duplicates_avoided"] += 1
+                continue
             result = push_notify(
                 traveler=q.traveler,
                 title="Donnez-nous de vos nouvelles",
@@ -434,6 +459,7 @@ def detect_missed_checkins(self, threshold_hours: int = 48) -> dict[str, int]:
                 url=f"/voyageur/suivi?id={q.traveler.public_id}",
                 tag="missed-checkin",
                 notification_type="missed_checkin",
+                dedup_date=today,
             )
             stats["push_sent"] += result["sent"]
 
@@ -446,6 +472,23 @@ def detect_missed_checkins(self, threshold_hours: int = 48) -> dict[str, int]:
 # ============================================================================
 
 
+def has_other_active_followups(traveler, *, end_on) -> bool:
+    """Le voyageur a-t-il encore un suivi actif au-delà de `end_on` ?
+
+    Suivis multimaladies : le message « période terminée » n'est envoyé qu'à
+    la fin du DERNIER suivi, pas à chaque maladie close.
+    """
+    from django.db.models import Q
+
+    from apps.quarantine.models import QuarantineRecord, QuarantineStatus
+
+    return QuarantineRecord.objects.filter(
+        traveler=traveler,
+        status__in=[QuarantineStatus.ACTIVE, QuarantineStatus.EXTENDED],
+    ).filter(Q(expected_end_on__gt=end_on) | Q(expected_end_on__isnull=True)).exists()
+
+
+
 @shared_task(
     bind=True, name="companion.send_completion_messages",
     autoretry_for=(Exception,), retry_backoff=True, max_retries=3,
@@ -455,7 +498,7 @@ def send_completion_messages(self) -> dict[str, int]:
     chaque quarantaine arrivée à terme aujourd'hui."""
     from apps.quarantine.models import QuarantineRecord, QuarantineStatus
 
-    stats = {"completed": 0, "push_sent": 0}
+    stats = {"completed": 0, "push_sent": 0, "duplicates_avoided": 0, "deferred_other_followups": 0}
     today = date.today()
     qs = QuarantineRecord.objects.filter(
         expected_end_on=today,
@@ -466,20 +509,27 @@ def send_completion_messages(self) -> dict[str, int]:
         stats["completed"] += 1
         traveler = q.traveler
 
-        # Push final si consenti
+        # Push final si consenti — une seule fois, et seulement quand le
+        # dernier suivi du voyageur se termine (suivis multimaladies).
         if has_consent(traveler, ConsentScope.PUSH_NOTIFICATIONS):
-            result = push_notify(
-                traveler=traveler,
-                title="Période d'accompagnement terminée",
-                body=(
-                    "Votre période d'accompagnement sanitaire est terminée. "
-                    "Merci pour votre coopération et bon séjour."
-                ),
-                url=f"/voyageur/suivi?id={traveler.public_id}",
-                tag="followup-complete",
-                notification_type="followup_complete",
-            )
-            stats["push_sent"] += result["sent"]
+            if has_other_active_followups(traveler, end_on=today):
+                stats["deferred_other_followups"] += 1
+            elif not claim_reminder(traveler, ReminderKind.FOLLOWUP_COMPLETE, today):
+                stats["duplicates_avoided"] += 1
+            else:
+                result = push_notify(
+                    traveler=traveler,
+                    title="Période d'accompagnement terminée",
+                    body=(
+                        "Votre période d'accompagnement sanitaire est terminée. "
+                        "Merci pour votre coopération et bon séjour."
+                    ),
+                    url=f"/voyageur/suivi?id={traveler.public_id}",
+                    tag="followup-complete",
+                    notification_type="followup_complete",
+                    dedup_date=today,
+                )
+                stats["push_sent"] += result["sent"]
 
         # Marque la quarantaine comme COMPLETED
         q.status = QuarantineStatus.COMPLETED

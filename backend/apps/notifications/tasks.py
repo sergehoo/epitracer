@@ -11,6 +11,12 @@ Stratégie de retry :
     - max_retries=3
     - backoff exponentiel : 30s, 60s, 120s
     - statut FINAL = "failed" après épuisement
+    - erreurs définitives (crédit épuisé, numéro invalide, politique +225…) :
+      jamais retentées automatiquement (cf. services.errors.NON_RETRYABLE)
+
+Fournisseur suspendu (crédit Orange CI épuisé) : les envois non urgents passent
+en `on_hold` sans appel réseau, jusqu'à la reprise contrôlée par un admin
+(services.availability.resume_provider).
 """
 from __future__ import annotations
 
@@ -18,13 +24,16 @@ import logging
 from typing import Tuple
 
 from celery import shared_task
+from django.db import transaction
 from django.utils import timezone
 
 from .models import (
     Channel, MessageType, Notification, NotificationStatus,
     NotificationTemplate, Provider,
 )
+from .services import availability
 from .services.audit import Actions, log_action
+from .services.errors import NON_RETRYABLE, ErrorCode, classify_error, is_retryable
 
 logger = logging.getLogger("epidemitracker.notifications.tasks")
 
@@ -35,12 +44,32 @@ logger = logging.getLogger("epidemitracker.notifications.tasks")
 def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
     """Exécute l'envoi via le bon provider et met à jour la Notification.
 
-    Retourne (ok, provider_message_id, error_message).
+    Retourne (ok, provider_message_id, error_message). Une notification dont
+    le fournisseur est suspendu passe en `on_hold` (ok=False, sans appel).
     """
+    # Fournisseur suspendu : aucune tentative réseau pour les envois non
+    # urgents (pas de crédit consommé, pas de compteur d'essais gonflé).
+    if availability.is_suspended(notif.provider) and not availability.is_urgent(notif):
+        availability.record_blocked_attempt(notif.provider)
+        detail = "Envoi suspendu : fournisseur indisponible (crédit épuisé)."
+        availability.hold_notification(
+            notif, error_code=ErrorCode.PROVIDER_SUSPENDED, detail=detail,
+        )
+        return False, "", detail
+
     notif.retry_count += 1
+    error_code = ""
 
     try:
-        if notif.channel == Channel.SMS:
+        is_ci_number = (notif.normalized_phone or "").startswith("+225")
+        if notif.channel == Channel.SMS and is_ci_number and notif.provider != Provider.ORANGE_CI:
+            # Politique nationale : un +225 ne bascule JAMAIS vers Twilio ou
+            # un autre fournisseur, même si Orange CI est indisponible.
+            ok, msg_id, err = False, "", (
+                "Numéro ivoirien : envoi hors Orange CI refusé (politique nationale)."
+            )
+            error_code = ErrorCode.NATIONAL_POLICY
+        elif notif.channel == Channel.SMS:
             if notif.provider == Provider.ORANGE_CI:
                 from .services.sms_orange_ci import send_sms as send_orange
                 # callback_data = notif.id → permet au webhook Orange CI de
@@ -51,6 +80,7 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
                     callback_data=str(notif.id),
                 )
                 ok, msg_id, err = res.ok, res.provider_message_id, res.error
+                error_code = res.error_code
             elif notif.provider == Provider.TWILIO:
                 from .services.sms_twilio import send_sms as send_tw
                 res = send_tw(notif.normalized_phone, notif.body)
@@ -248,21 +278,40 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
         notif.status = NotificationStatus.SENT
         notif.sent_at = timezone.now()
         notif.error_message = ""
+        notif.error_code = ""
         notif.provider_message_id = msg_id[:200] if msg_id else ""
     else:
-        notif.status = NotificationStatus.FAILED
+        notif.error_code = error_code or classify_error(err) or ErrorCode.UNKNOWN
         notif.error_message = err[:1000] if err else ""
-        notif.failed_at = timezone.now()
+        if notif.error_code == ErrorCode.QUOTA_EXHAUSTED:
+            # Crédit épuisé : on suspend le fournisseur (alerte admin unique)
+            # et on garde le message en attente, sans retry ni bascule.
+            availability.suspend_provider(
+                notif.provider, reason_code=notif.error_code, detail=err,
+            )
+            notif.status = NotificationStatus.ON_HOLD
+        else:
+            notif.status = NotificationStatus.FAILED
+            notif.failed_at = timezone.now()
 
     notif.save(update_fields=[
-        "status", "sent_at", "failed_at", "error_message",
+        "status", "sent_at", "failed_at", "error_message", "error_code",
         "provider_message_id", "retry_count", "updated_at",
     ])
 
+    if ok:
+        action = Actions.SEND
+    elif notif.status == NotificationStatus.ON_HOLD:
+        action = Actions.HOLD
+    else:
+        action = Actions.FAILED
     log_action(
         notification=notif,
-        action=Actions.SEND if ok else Actions.FAILED,
-        metadata={"retry_count": notif.retry_count, "provider": notif.provider, "ok": ok},
+        action=action,
+        metadata={
+            "retry_count": notif.retry_count, "provider": notif.provider,
+            "ok": ok, "error_code": notif.error_code,
+        },
     )
     return ok, msg_id, err
 
@@ -280,27 +329,55 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
     max_retries=3,
 )
 def send_notification_task(self, notification_id: int) -> dict:
-    """Envoie la notification identifiée par son PK."""
-    try:
-        notif = Notification.objects.get(pk=notification_id)
-    except Notification.DoesNotExist:
-        logger.error("send_notification_task: notification %s introuvable", notification_id)
-        return {"ok": False, "error": "Notification not found"}
+    """Envoie la notification identifiée par son PK.
 
-    if notif.status in (NotificationStatus.SENT, NotificationStatus.DELIVERED, NotificationStatus.CANCELLED):
-        return {"ok": True, "skipped": True, "status": notif.status}
+    Concurrence : la ligne est verrouillée (`SELECT … FOR UPDATE SKIP LOCKED`)
+    pendant l'envoi. Une seconde exécution simultanée pour la même
+    notification (retry Celery + relance manuelle, double enqueue) est ignorée
+    au lieu d'envoyer un doublon ; une fois la première terminée, le statut
+    SENT la fait ignorer aussi.
+    """
+    with transaction.atomic():
+        notif = (
+            Notification.objects.select_for_update(skip_locked=True)
+            .filter(pk=notification_id).first()
+        )
+        if notif is None:
+            if Notification.objects.filter(pk=notification_id).exists():
+                logger.info("send_notification_task: notification %s déjà en cours d'envoi", notification_id)
+                return {"ok": True, "skipped": True, "status": "locked"}
+            logger.error("send_notification_task: notification %s introuvable", notification_id)
+            return {"ok": False, "error": "Notification not found"}
 
-    if notif.retry_count >= notif.max_retries:
-        notif.status = NotificationStatus.FAILED
-        notif.failed_at = timezone.now()
-        notif.save(update_fields=["status", "failed_at"])
-        return {"ok": False, "error": "Max retries exhausted"}
+        if notif.status in (
+            NotificationStatus.SENT, NotificationStatus.DELIVERED,
+            NotificationStatus.CANCELLED, NotificationStatus.READ,
+            NotificationStatus.ON_HOLD,
+        ):
+            return {"ok": True, "skipped": True, "status": notif.status}
 
-    ok, msg_id, err = _execute_send(notif)
-    if not ok and notif.retry_count < notif.max_retries:
-        # Laisse Celery faire le retry (raise → autoretry)
+        if notif.retry_count >= notif.max_retries:
+            notif.status = NotificationStatus.FAILED
+            notif.failed_at = timezone.now()
+            notif.save(update_fields=["status", "failed_at", "updated_at"])
+            return {"ok": False, "error": "Max retries exhausted"}
+
+        ok, msg_id, err = _execute_send(notif)
+
+    should_retry = (
+        not ok
+        and notif.status == NotificationStatus.FAILED
+        and is_retryable(notif.error_code)
+        and notif.retry_count < notif.max_retries
+    )
+    if should_retry:
+        # Laisse Celery faire le retry (raise → autoretry), hors transaction
+        # pour que le statut FAILED + retry_count soient bien persistés.
         raise RuntimeError(f"Envoi échoué (retry {notif.retry_count}/{notif.max_retries}) : {err}")
-    return {"ok": ok, "provider_message_id": msg_id, "error": err}
+    return {
+        "ok": ok, "provider_message_id": msg_id, "error": err,
+        "status": notif.status, "error_code": notif.error_code,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -317,10 +394,14 @@ def retry_failed_notifications(max_age_hours: int = 24, batch: int = 100) -> dic
             failed_at__gte=cutoff,
         )
         .filter(retry_count__lt=models_F("max_retries"))
+        # Erreurs définitives : retenter ne sert à rien (et coûte du crédit).
+        .exclude(error_code__in=NON_RETRYABLE)
         .order_by("failed_at")[:batch]
     )
     n = 0
     for notif in qs:
+        if availability.is_suspended(notif.provider) and not availability.is_urgent(notif):
+            continue
         notif.status = NotificationStatus.QUEUED
         notif.save(update_fields=["status", "updated_at"])
         send_notification_task.delay(notif.id)

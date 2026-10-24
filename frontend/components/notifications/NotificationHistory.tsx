@@ -44,6 +44,7 @@ const STATUS_META: Record<string, { label: string; icon: React.ReactNode; class:
   draft:     { label: 'Brouillon',  icon: <Clock className="h-3 w-3" />, class: 'bg-slate-100 text-slate-600' },
   pending:   { label: 'En attente', icon: <Clock className="h-3 w-3" />, class: 'bg-amber-100 text-amber-700' },
   queued:    { label: 'En file',    icon: <Clock className="h-3 w-3" />, class: 'bg-sky-100 text-sky-700' },
+  on_hold:   { label: 'Attente fournisseur', icon: <Clock className="h-3 w-3" />, class: 'bg-orange-100 text-orange-800' },
   sent:      { label: 'Envoyé',     icon: <Send className="h-3 w-3" />, class: 'bg-emerald-100 text-emerald-700' },
   delivered: { label: 'Délivré',    icon: <CheckCircle2 className="h-3 w-3" />, class: 'bg-emerald-200 text-emerald-900' },
   failed:    { label: 'Échec',      icon: <XCircle className="h-3 w-3" />, class: 'bg-rose-100 text-rose-700' },

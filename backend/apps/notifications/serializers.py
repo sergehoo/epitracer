@@ -1,9 +1,28 @@
 from rest_framework import serializers
 
 from .models import (
-    Notification, NotificationAuditLog, NotificationProviderConfig,
-    NotificationTemplate,
+    Channel, Notification, NotificationAuditLog, NotificationProviderConfig,
+    NotificationTemplate, Provider, ProviderAvailability, ProviderState,
 )
+from .services.errors import friendly_error
+
+
+def can_see_technical_errors(request) -> bool:
+    """Réponses brutes des fournisseurs : administrateurs nationaux seulement."""
+    user = getattr(request, "user", None)
+    if not (user and user.is_authenticated):
+        return False
+    if user.is_superuser:
+        return True
+    from apps.accounts.models import RoleCode
+
+    return RoleCode.NATIONAL_ADMIN in user.role_codes()
+
+
+def sms_segments(body: str) -> int:
+    """Nombre de SMS facturés (160 car. seul, 153 par segment concaténé)."""
+    n = len(body or "")
+    return 1 if n <= 160 else -(-n // 153)
 
 
 class NotificationTemplateSerializer(serializers.ModelSerializer):
@@ -52,6 +71,13 @@ class NotificationSerializer(serializers.ModelSerializer):
     )
     sent_by_email = serializers.CharField(source="sent_by.email", read_only=True, default=None)
     masked_recipient = serializers.CharField(read_only=True)
+    traveler_name = serializers.SerializerMethodField()
+    # `error_message` est exposé sous forme lisible (jamais la réponse brute
+    # du fournisseur) ; le détail technique n'est servi qu'aux admins.
+    error_message = serializers.SerializerMethodField()
+    error_label = serializers.SerializerMethodField()
+    technical_error = serializers.SerializerMethodField()
+    sms_segments = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
@@ -63,17 +89,95 @@ class NotificationSerializer(serializers.ModelSerializer):
             "subject", "body", "context",
             "direction", "message_type",
             "status", "provider", "provider_message_id",
-            "error_message", "retry_count", "max_retries",
+            "error_message", "error_code", "error_label", "technical_error",
+            "retry_count", "max_retries",
             "sent_by", "sent_by_email",
             "queued_at", "sent_at", "delivered_at", "failed_at",
             "metadata", "created_at", "updated_at",
+            "traveler_name", "sms_segments",
         ]
         read_only_fields = [
             "status", "provider", "provider_message_id", "error_message",
-            "retry_count", "queued_at", "sent_at", "delivered_at", "failed_at",
+            "error_code", "retry_count", "queued_at", "sent_at", "delivered_at", "failed_at",
             "normalized_phone", "masked_recipient", "sent_by_email",
             "template_code", "template_name", "traveler_public_id",
         ]
+
+    def _technical_allowed(self) -> bool:
+        # Calculé une fois par requête (partagé entre les lignes d'une liste).
+        if "_technical_allowed" not in self.context:
+            self.context["_technical_allowed"] = can_see_technical_errors(
+                self.context.get("request"),
+            )
+        return self.context["_technical_allowed"]
+
+    def get_traveler_name(self, obj) -> str | None:
+        if not obj.traveler_id or obj.traveler is None:
+            return None
+        return obj.traveler.full_name
+
+    def get_error_label(self, obj) -> str:
+        return friendly_error(obj.error_code, obj.error_message)
+
+    def get_error_message(self, obj) -> str:
+        return self.get_error_label(obj)
+
+    def get_technical_error(self, obj) -> str | None:
+        if not obj.error_message or not self._technical_allowed():
+            return None
+        return obj.error_message
+
+    def get_sms_segments(self, obj) -> int | None:
+        return sms_segments(obj.body) if obj.channel == Channel.SMS else None
+
+
+class ProviderAvailabilitySerializer(serializers.Serializer):
+    """État d'un fournisseur pour le bandeau de la page Notifications."""
+
+    provider = serializers.CharField()
+    provider_label = serializers.SerializerMethodField()
+    state = serializers.CharField()
+    state_label = serializers.SerializerMethodField()
+    is_suspended = serializers.BooleanField()
+    reason_label = serializers.SerializerMethodField()
+    suspended_at = serializers.DateTimeField(allow_null=True)
+    last_failure_at = serializers.DateTimeField(allow_null=True)
+    blocked_attempts = serializers.IntegerField()
+    held_count = serializers.SerializerMethodField()
+    resumed_at = serializers.DateTimeField(allow_null=True)
+    resumed_by_email = serializers.SerializerMethodField()
+    technical_detail = serializers.SerializerMethodField()
+
+    def get_provider_label(self, obj) -> str:
+        return Provider(obj.provider).label if obj.provider in Provider.values else obj.provider
+
+    def get_state_label(self, obj) -> str:
+        return ProviderState(obj.state).label
+
+    def get_reason_label(self, obj) -> str:
+        return friendly_error(obj.reason_code) if obj.reason_code else ""
+
+    def get_held_count(self, obj) -> int:
+        return self.context.get("held_counts", {}).get(obj.provider, 0)
+
+    def get_resumed_by_email(self, obj) -> str | None:
+        return obj.resumed_by.email if getattr(obj, "resumed_by_id", None) else None
+
+    def get_technical_detail(self, obj) -> str | None:
+        if not obj.technical_detail or not can_see_technical_errors(self.context.get("request")):
+            return None
+        return obj.technical_detail
+
+
+def provider_state_rows(providers: list[str]) -> list[ProviderAvailability]:
+    """États connus + lignes « disponible » par défaut (non persistées)."""
+    known = {
+        row.provider: row
+        for row in ProviderAvailability.objects.select_related("resumed_by").filter(
+            provider__in=providers,
+        )
+    }
+    return [known.get(p) or ProviderAvailability(provider=p) for p in providers]
 
 
 class SendNotificationSerializer(serializers.Serializer):
