@@ -7,8 +7,16 @@
  */
 import type { PublicAlertLevel, PublicDisease, PublicDiseaseDetail, PublicNotice } from '@/types/portal';
 
-const SERVER_API =
-  process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const PUBLIC_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+/**
+ * Serveur : URL interne d'abord (réseau Docker, ex. http://web:8000), puis
+ * l'URL publique en secours — un conteneur ne joint pas toujours l'URL
+ * publique de son propre hôte. Navigateur : même base que lib/api.ts.
+ */
+const SERVER_BASES = [process.env.INTERNAL_API_URL, PUBLIC_API].filter(
+  (base, i, all): base is string => !!base && all.indexOf(base) === i,
+);
 
 /** Délai de revalidation des pages publiques (secondes). */
 export const PORTAL_REVALIDATE = 300;
@@ -17,22 +25,29 @@ class PortalUnavailableError extends Error {}
 
 /** null si la ressource n'existe pas (404) ; lève PortalUnavailableError si l'API est injoignable. */
 async function getJson<T>(path: string): Promise<T | null> {
-  // Navigateur : même base que lib/api.ts ; serveur : URL interne si fournie.
-  const base = typeof window === 'undefined'
-    ? SERVER_API
-    : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  let res: Response;
-  try {
-    res = await fetch(`${base}/api/v1/public/${path}`, {
-      headers: { Accept: 'application/json' },
-      next: { revalidate: PORTAL_REVALIDATE },
-    } as RequestInit);
-  } catch (e) {
-    throw new PortalUnavailableError(`API publique injoignable : ${(e as Error).message}`);
+  const onServer = typeof window === 'undefined';
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  // Le saut interne est en HTTP : sans cet en-tête, SECURE_SSL_REDIRECT de
+  // Django redirigerait vers https://web:8000 (injoignable).
+  if (onServer) headers['X-Forwarded-Proto'] = 'https';
+  const failures: string[] = [];
+  for (const base of onServer ? SERVER_BASES : [PUBLIC_API]) {
+    let res: Response;
+    try {
+      res = await fetch(`${base}/api/v1/public/${path}`, {
+        headers,
+        next: { revalidate: PORTAL_REVALIDATE },
+      } as RequestInit);
+    } catch (e) {
+      const err = e as Error & { cause?: { code?: string; message?: string } };
+      failures.push(`${base} : ${err.cause?.code || err.cause?.message || err.message}`);
+      continue;
+    }
+    if (res.status === 404) return null;
+    if (res.ok) return (await res.json()) as T;
+    failures.push(`${base} : HTTP ${res.status}`);
   }
-  if (res.status === 404) return null;
-  if (!res.ok) throw new PortalUnavailableError(`API publique : HTTP ${res.status}`);
-  return (await res.json()) as T;
+  throw new PortalUnavailableError(`API publique injoignable — ${failures.join(' ; ')}`);
 }
 
 /** Listes : contenu vide si l'API est indisponible (build, coupure) — le portail reste utilisable. */

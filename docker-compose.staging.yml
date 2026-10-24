@@ -145,6 +145,9 @@ services:
       NEXT_PUBLIC_PUBLIC_HOST: ${PUBLIC_HOST:-staging.destinationci.com}
       NEXT_PUBLIC_ADMIN_HOST: ${ADMIN_HOST:-admin-staging.veillesanitaire.com}
       NEXT_PUBLIC_ENVIRONMENT: staging
+      # Rendu serveur (fiches maladies, accueil) : API jointe par le réseau Docker.
+      # Le conteneur ne peut pas toujours joindre l'URL publique de son propre hôte.
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://web:8000}
       NODE_ENV: production
     ports: []
     networks: [default, proxy]

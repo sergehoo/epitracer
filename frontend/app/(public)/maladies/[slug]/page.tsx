@@ -13,7 +13,9 @@ export const revalidate = 300;
 type Props = { params: { slug: string } };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const disease = await fetchPublicDisease(params.slug);
+  // API indisponible : métadonnées neutres, la page affiche alors error.tsx.
+  const disease = await fetchPublicDisease(params.slug).catch(() => undefined);
+  if (disease === undefined) return { title: 'Maladies sous surveillance', robots: { index: false } };
   if (!disease) return { title: 'Fiche introuvable', robots: { index: false } };
   const description = disease.description.slice(0, 160);
   return {
