@@ -41,7 +41,7 @@ const fr = {
     eyebrow: 'Akwaba — Bienvenue en Côte d’Ivoire',
     title: 'Voyagez serein, nous veillons sur votre santé.',
     subtitle:
-      "EpiTrace est le dispositif national d'information, de prévention et d'accompagnement sanitaire des voyageurs, porté par le MSHPCMU et l'INHP. Préparez votre arrivée en quelques minutes et recevez votre pass sanitaire numérique.",
+      "Destination Côte d'Ivoire est le dispositif national d'information, de prévention et d'accompagnement sanitaire des voyageurs, porté par le MSHPCMU et l'INHP. Préparez votre arrivée en quelques minutes et recevez votre pass sanitaire numérique.",
     ctaPrimary: 'Préparer mon arrivée',
     ctaSecondary: 'Consulter mon pass',
     reassurance: ['Gratuit', 'Données protégées', 'Accessible sur mobile'],
@@ -102,7 +102,7 @@ const fr = {
   },
   pwa: {
     eyebrow: 'Application mobile',
-    title: 'EpiTrace dans votre poche',
+    title: "Destination Côte d'Ivoire dans votre poche",
     text: 'Installez le portail sur votre téléphone, comme une application : sans magasin d’applications et sans compte.',
     benefits: [
       'Votre pass QR accessible même sans connexion',
@@ -179,7 +179,7 @@ const en: Dict = {
     eyebrow: 'Akwaba — Welcome to Côte d’Ivoire',
     title: 'Travel with peace of mind, we look after your health.',
     subtitle:
-      'EpiTrace is the national health information, prevention and support service for travellers, run by the Ministry of Health (MSHPCMU) and the National Institute of Public Hygiene (INHP). Prepare your arrival in a few minutes and get your digital health pass.',
+      "Destination Côte d'Ivoire is the national health information, prevention and support service for travellers, run by the Ministry of Health (MSHPCMU) and the National Institute of Public Hygiene (INHP). Prepare your arrival in a few minutes and get your digital health pass.",
     ctaPrimary: 'Prepare my arrival',
     ctaSecondary: 'View my pass',
     reassurance: ['Free', 'Data protected', 'Mobile friendly'],
@@ -240,7 +240,7 @@ const en: Dict = {
   },
   pwa: {
     eyebrow: 'Mobile app',
-    title: 'EpiTrace in your pocket',
+    title: "Destination Côte d'Ivoire in your pocket",
     text: 'Install the portal on your phone like an app: no app store and no account needed.',
     benefits: [
       'Your QR pass available even offline',

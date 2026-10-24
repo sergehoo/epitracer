@@ -6,6 +6,7 @@ import { Mail, PhoneCall } from 'lucide-react';
 import { adminUrl } from '@/lib/hosts';
 import { useLocale } from '@/lib/i18n';
 import { LANDING_PHOTOS } from '@/lib/landingPhotos';
+import { DestinationBrand } from '@/components/public/DestinationBrand';
 import { AfriqConsultingCredit } from './AfriqConsultingCredit';
 import { TricolorBand } from './InhpHeader';
 
@@ -50,7 +51,10 @@ export function InhpFooter() {
 
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:grid-cols-2 sm:px-6 lg:grid-cols-5">
         <div className="lg:col-span-2">
-          <p className="font-display text-2xl font-extrabold text-white">EpiTrace CI</p>
+          {/* Logo historique sur fond clair : couleurs d'origine conservées. */}
+          <Link href="/" aria-label="Destination Côte d'Ivoire — accueil" className={`inline-block rounded-2xl bg-white px-4 py-3 ${linkCls}`}>
+            <DestinationBrand size="md" />
+          </Link>
           <p className="mt-3 max-w-sm text-sm leading-6 text-emerald-100">{f.about}</p>
           <p className="mt-6 text-xs font-bold uppercase tracking-widest text-orange-200">{f.contact}</p>
           <ul className="mt-2 space-y-1.5 text-sm">
@@ -115,7 +119,7 @@ export function InhpFooter() {
         <p className="mx-auto max-w-7xl px-4 pb-5 text-[11px] text-emerald-100/90 sm:px-6">
           {f.photos} :{' '}
           {LANDING_PHOTOS.map((p, i) => (
-            <span key={p.src}>
+            <span key={p.key}>
               {i > 0 && ' · '}
               <a href={p.page} target="_blank" rel="noreferrer" className={linkCls}>{p.credit}</a>
             </span>

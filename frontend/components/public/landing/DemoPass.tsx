@@ -41,7 +41,7 @@ export function DemoPass({ className = '' }: { className?: string }) {
   const d = t.demo;
   return (
     <motion.figure
-      className={`relative w-[19rem] max-w-full rounded-3xl bg-white p-4 shadow-2xl ring-1 ring-slate-900/5 ${className}`}
+      className={`relative w-[17.5rem] max-w-full rounded-3xl bg-white p-4 shadow-[0_18px_40px_-20px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/5 ${className}`}
       initial={{ opacity: 0, y: 24, rotate: -2 }}
       animate={{ opacity: 1, y: [0, -6, 0], rotate: -2 }}
       transition={{

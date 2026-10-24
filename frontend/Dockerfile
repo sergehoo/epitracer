@@ -50,6 +50,10 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+# `next start` lit next.config.js À L'EXÉCUTION (images distantes autorisées,
+# réécritures /api et /media) : sans ce fichier, la configuration par défaut
+# s'applique et l'optimiseur d'images refuse les URL distantes (HTTP 400).
+COPY --from=builder /app/next.config.js ./next.config.js
 USER nextjs
 EXPOSE 3000
 CMD ["npx", "next", "start", "-p", "3000"]

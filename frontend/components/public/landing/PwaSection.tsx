@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BellRing, CheckCircle2, Download, PhoneCall, Smartphone, WifiOff } from 'lucide-react';
 import { useLocale } from '@/lib/i18n';
+import { DestinationBrand } from '@/components/public/DestinationBrand';
 import { Reveal } from './Reveal';
 
 /** Évènement non standard exposé par Chrome / Edge / Android. */
@@ -107,7 +108,7 @@ export function PwaSection() {
             <div className="overflow-hidden rounded-[2rem] bg-white">
               <div className="flex h-1.5"><span className="flex-1 bg-ciOrange" /><span className="flex-1 bg-white" /><span className="flex-1 bg-ciGreen" /></div>
               <div className="space-y-3 px-4 pb-6 pt-9 text-slate-900">
-                <p className="font-display text-lg font-extrabold text-ciForest">EpiTrace CI</p>
+                <DestinationBrand size="sm" tagline={false} />
                 <div className="rounded-2xl bg-emerald-50 p-3">
                   <div className="h-2 w-20 rounded bg-emerald-200" />
                   <div className="mt-2 grid grid-cols-[1fr,auto] items-center gap-2">

@@ -1,12 +1,12 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowRight, BadgeCheck, MapPin, QrCode } from 'lucide-react';
 import { useLocale } from '@/lib/i18n';
 import { heroPhoto } from '@/lib/landingPhotos';
 import { DemoPass } from './DemoPass';
+import { LandingPhoto } from './LandingPhoto';
 
 export function Hero() {
   const { t } = useLocale();
@@ -50,23 +50,22 @@ export function Hero() {
           </ul>
         </motion.div>
 
-        <div className="relative pb-24 sm:pb-16 lg:pb-0">
-          <div className="relative aspect-[4/3] overflow-hidden rounded-[2rem] bg-emerald-100 shadow-2xl ring-1 ring-slate-900/5">
-            <Image
+        <div className="relative pb-48 sm:pb-24 lg:pl-8">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-[2rem] bg-emerald-100 shadow-[0_24px_60px_-28px_rgba(2,44,34,0.45)] ring-1 ring-slate-900/5">
+            <LandingPhoto
               src={heroPhoto.src}
               alt={h.photoAlt}
-              fill
               priority
-              sizes="(min-width: 1024px) 48vw, 100vw"
-              className="object-cover"
+              sizes="(min-width: 1024px) 46vw, 100vw"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 via-transparent to-transparent" aria-hidden="true" />
-            <p className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-800 backdrop-blur">
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/35 via-transparent to-transparent" aria-hidden="true" />
+            <p className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm backdrop-blur">
               <MapPin className="h-3.5 w-3.5 text-ciForest" aria-hidden="true" /> {heroPhoto.place}
             </p>
           </div>
-          {/* Conteneur de positionnement : framer-motion pilote le transform de la carte. */}
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 lg:-bottom-10 lg:-left-10 lg:right-auto">
+          {/* Carte posée sur l'angle inférieur gauche de la photo, sans la masquer.
+              Conteneur de positionnement : framer-motion pilote le transform de la carte. */}
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 lg:bottom-0 lg:left-0 lg:right-auto">
             <DemoPass />
           </div>
         </div>

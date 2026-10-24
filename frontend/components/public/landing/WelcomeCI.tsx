@@ -1,9 +1,9 @@
 'use client';
 
-import Image from 'next/image';
 import { MapPin } from 'lucide-react';
 import { useLocale } from '@/lib/i18n';
 import { panoramaPhoto } from '@/lib/landingPhotos';
+import { LandingPhoto } from './LandingPhoto';
 import { Reveal } from './Reveal';
 
 /** Section Côte d'Ivoire : photographie panoramique et message d'accueil. */
@@ -12,14 +12,7 @@ export function WelcomeCI() {
   const c = t.ci;
   return (
     <section aria-labelledby="ci-title" className="relative isolate overflow-hidden bg-slate-900">
-      <Image
-        src={panoramaPhoto.src}
-        alt={c.photoAlt}
-        fill
-        sizes="100vw"
-        loading="lazy"
-        className="-z-10 object-cover"
-      />
+      <LandingPhoto src={panoramaPhoto.src} alt={c.photoAlt} sizes="100vw" className="-z-10" />
       <div className="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950/85 via-slate-950/60 to-slate-950/10" aria-hidden="true" />
       <div className="mx-auto flex min-h-[28rem] max-w-7xl items-end px-4 py-16 sm:min-h-[32rem] sm:px-6 lg:items-center">
         <Reveal className="max-w-xl">

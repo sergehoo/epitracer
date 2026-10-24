@@ -21,7 +21,9 @@ export const metadata: Metadata = {
     'alertes sanitaires', 'voyageurs', 'pass sanitaire', 'Ebola', 'Mpox', 'choléra', 'fièvre jaune',
   ],
   formatDetection: { telephone: true, email: true },
-  manifest: '/manifest.webmanifest',
+  // Administration (EpiTrace) ; le portail public surcharge ce manifeste
+  // dans app/(public)/layout.tsx (« Destination Côte d'Ivoire »).
+  manifest: '/admin.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

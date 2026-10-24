@@ -1,7 +1,7 @@
 {
-  "name": "EpiTrace CI — MSHPCMU · INHP",
-  "short_name": "EpiTrace CI",
-  "description": "Dispositif national MSHPCMU / INHP d'information, de prévention et d'accompagnement sanitaire des voyageurs en Côte d'Ivoire : maladies sous surveillance, alertes, pass sanitaire numérique et suivi.",
+  "name": "Destination Côte d'Ivoire — MSHPCMU · INHP",
+  "short_name": "Destination CI",
+  "description": "Portail national MSHPCMU / INHP d'information, de prévention et d'accompagnement sanitaire des voyageurs en Côte d'Ivoire : maladies sous surveillance, alertes, pass sanitaire numérique et suivi. Akwaba !",
   "lang": "fr-FR",
   "start_url": "/",
   "scope": "/",
@@ -9,7 +9,11 @@
   "orientation": "portrait",
   "background_color": "#FFFFFF",
   "theme_color": "#064E3B",
-  "categories": ["health", "government", "travel"],
+  "categories": [
+    "health",
+    "government",
+    "travel"
+  ],
   "icons": [
     {
       "src": "/logo-min-sante-2.png",
@@ -36,21 +40,24 @@
       "short_name": "Enregistrer",
       "description": "Remplir la fiche INHP",
       "url": "/voyageur",
-      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.svg",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Mon pass",
       "short_name": "Pass",
       "description": "Consulter mon pass sanitaire",
       "url": "/pass",
-      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192" }]
-    },
-    {
-      "name": "Vérifier un QR",
-      "short_name": "Vérifier",
-      "description": "Scanner un pass",
-      "url": "/verifier",
-      "icons": [{ "src": "/icons/icon-192.svg", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.svg",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

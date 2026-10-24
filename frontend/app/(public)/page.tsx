@@ -12,7 +12,7 @@ import { fetchPublicDiseases, fetchPublicNotices } from '@/lib/portal';
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: { absolute: "EpiTrace CI — Voyager en Côte d'Ivoire, accompagné en santé" },
+  title: { absolute: "Destination Côte d'Ivoire — Voyager serein, accompagné en santé" },
   description:
     "Portail national MSHPCMU · INHP : préparez votre arrivée en Côte d'Ivoire, obtenez votre pass sanitaire numérique, consultez les maladies sous surveillance et les recommandations aux voyageurs.",
   alternates: { canonical: '/' },
@@ -20,7 +20,8 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'fr_FR',
     alternateLocale: ['en_GB'],
-    title: "EpiTrace CI — Destination Côte d'Ivoire",
+    siteName: "Destination Côte d'Ivoire",
+    title: "Destination Côte d'Ivoire — Akwaba, voyagez serein",
     description: "Information, prévention et accompagnement sanitaire des voyageurs en Côte d'Ivoire.",
   },
 };
@@ -28,7 +29,7 @@ export const metadata: Metadata = {
 const JSON_LD = {
   '@context': 'https://schema.org',
   '@type': 'GovernmentService',
-  name: 'EpiTrace CI',
+  name: "Destination Côte d'Ivoire",
   serviceType: 'Accompagnement sanitaire des voyageurs',
   areaServed: { '@type': 'Country', name: "Côte d'Ivoire" },
   provider: [

@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     "Fiches d'information des maladies surveillées en Côte d'Ivoire : symptômes, transmission, prévention, recommandations aux voyageurs et niveau d'alerte. MSHPCMU · INHP.",
   alternates: { canonical: '/maladies' },
   openGraph: {
-    title: "Maladies sous surveillance — EpiTrace Côte d'Ivoire",
+    title: "Maladies sous surveillance — Destination Côte d'Ivoire",
     description: 'Informations sanitaires validées par le MSHPCMU et l’INHP pour les voyageurs.',
     type: 'website',
     locale: 'fr_FR',

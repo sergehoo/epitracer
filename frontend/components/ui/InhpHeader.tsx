@@ -4,10 +4,11 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, QrCode, X } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { adminUrl, publicUrl } from '@/lib/hosts';
 import { useLocale } from '@/lib/i18n';
+import { DestinationBrand } from '@/components/public/DestinationBrand';
 
 /** Liens de navigation publics ; les ancres pointent vers les sections de l'accueil. */
 const PUBLIC_NAV = [
@@ -100,20 +101,26 @@ function PublicHeader({ open, setOpen }: { open: boolean; setOpen: (b: boolean) 
       }`}
     >
       <TricolorBand />
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
+        {/* Identité publique : logo historique « Destination Côte d'Ivoire »
+            (EpiTrace reste réservé à l'administration). Jamais tronqué. */}
         <Link
           href="/"
-          className="flex min-w-0 items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ciForest"
+          aria-label="Destination Côte d'Ivoire — accueil"
+          className="flex shrink-0 items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ciForest sm:gap-3"
         >
-          <Image src="/armoirie-ci-2.png" alt="" width={36} height={36} className="h-9 w-9 shrink-0 object-contain" priority />
-          <Image src="/logo-min-sante-2.png" alt="" width={36} height={36} className="hidden h-9 w-9 shrink-0 object-contain sm:block" priority />
-          <span className="min-w-0 border-l border-slate-200 pl-2.5 leading-tight">
-            <span className="block truncate font-display text-base font-extrabold text-ciForest">
-              EpiTrace <span className="font-semibold text-slate-500">CI</span>
-            </span>
-            <span className="hidden truncate text-[11px] text-slate-500 sm:block">
-              {t.brand.tagline} · {t.brand.institutions}
-            </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <Image
+              src="/armoirie-ci-2.png" alt="Armoiries de la République de Côte d'Ivoire"
+              width={43} height={40} className="h-10 w-auto object-contain" priority
+            />
+            <Image
+              src="/logo-min-sante-2.png" alt="MSHPCMU"
+              width={40} height={40} className="hidden h-10 w-10 object-contain md:block" priority
+            />
+          </span>
+          <span className="border-l border-slate-200 pl-2.5 sm:pl-3">
+            <DestinationBrand size="md" />
           </span>
         </Link>
 
@@ -138,11 +145,15 @@ function PublicHeader({ open, setOpen }: { open: boolean; setOpen: (b: boolean) 
 
         <div className="hidden shrink-0 items-center gap-2 xl:flex">
           <LanguageSwitch />
+          {/* Bouton compact : la barre garde une navigation aérée sans débordement
+              (le libellé complet reste dans le hero et le menu mobile). */}
           <Link
             href="/pass"
-            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-bold text-ciForest transition hover:border-ciForest focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ciForest"
+            aria-label={t.nav.pass}
+            title={t.nav.pass}
+            className="grid h-10 w-10 place-items-center rounded-full border border-slate-300 text-ciForest transition hover:border-ciForest hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ciForest"
           >
-            {t.nav.pass}
+            <QrCode className="h-[1.1rem] w-[1.1rem]" aria-hidden="true" />
           </Link>
           <Link
             href="/voyageur"
@@ -153,7 +164,7 @@ function PublicHeader({ open, setOpen }: { open: boolean; setOpen: (b: boolean) 
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5 xl:hidden">
-          <LanguageSwitch />
+          <LanguageSwitch className="hidden sm:inline-flex" />
           <button
             onClick={() => setOpen(!open)}
             aria-label={open ? t.nav.menuClose : t.nav.menuOpen}
@@ -167,7 +178,8 @@ function PublicHeader({ open, setOpen }: { open: boolean; setOpen: (b: boolean) 
       </div>
 
       {open && (
-        <div id="public-mobile-menu" className="max-h-[calc(100vh-4.25rem)] overflow-y-auto border-t border-slate-100 bg-white px-4 pb-6 pt-2 xl:hidden">
+        <div id="public-mobile-menu" className="max-h-[calc(100vh-4.75rem)] overflow-y-auto border-t border-slate-100 bg-white px-4 pb-6 pt-2 xl:hidden">
+          <LanguageSwitch className="mb-2 mt-1 sm:hidden" />
           <nav aria-label={t.nav.main} className="flex flex-col">
             {PUBLIC_NAV.map((n) => (
               <a
