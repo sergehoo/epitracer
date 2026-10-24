@@ -135,12 +135,14 @@ class RegistrationConfigView(APIView):
             for s in sorted(d.symptoms.all(), key=lambda s: (s.order, s.label)):
                 if s.code not in COMMON_SYMPTOM_CODES and s.code not in extra:
                     extra[s.code] = s.label
-        return Response({
-            "ebola_questionnaire": ebola_active,
-            "common_symptom_fields": COMMON_SYMPTOM_FIELDS,
-            "extra_symptoms": [{"code": c, "label": label} for c, label in extra.items()],
-            "diseases": ScreeningDiseaseSerializer(diseases, many=True).data,
-        })
+        return Response(
+            {
+                "ebola_questionnaire": ebola_active,
+                "common_symptom_fields": COMMON_SYMPTOM_FIELDS,
+                "extra_symptoms": [{"code": c, "label": label} for c, label in extra.items()],
+                "diseases": ScreeningDiseaseSerializer(diseases, many=True).data,
+            }
+        )
 
 
 # -------------------------------------------------------------------- admin

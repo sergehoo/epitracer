@@ -12,6 +12,7 @@ Endpoints :
         body : { passport_number, phone, code }
         return: { access, refresh, traveler: {...} }
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -151,7 +152,9 @@ class VoyageurRequestOtpView(APIView):
             result = ratelimit.hit(rule, identity)
             if not result.allowed:
                 log_security_event(
-                    SecurityEventKind.RATE_LIMITED, source="otp_request", ip=ip,
+                    SecurityEventKind.RATE_LIMITED,
+                    source="otp_request",
+                    ip=ip,
                     details={"rule": rule, "count": result.count, "limit": result.limit},
                     dedupe=f"otp:{rule}:{identity}",
                 )
@@ -166,8 +169,12 @@ class VoyageurRequestOtpView(APIView):
         result = ratelimit.hit("otp_request_phone", to)
         if not result.allowed:
             log_security_event(
-                SecurityEventKind.RATE_LIMITED, source="otp_request", ip=ip, phone=to,
-                traveler=traveler, details={"rule": "otp_request_phone", "limit": result.limit},
+                SecurityEventKind.RATE_LIMITED,
+                source="otp_request",
+                ip=ip,
+                phone=to,
+                traveler=traveler,
+                details={"rule": "otp_request_phone", "limit": result.limit},
                 dedupe=f"otp:phone:{to}",
             )
             return _neutral(phone)
@@ -199,7 +206,9 @@ class VoyageurRequestOtpView(APIView):
         if not res.ok:
             logger.warning(
                 "Voyageur OTP non envoyé traveler=%s phone=%s code=%s",
-                traveler.pk, _mask_phone(to), res.error_code or res.error,
+                traveler.pk,
+                _mask_phone(to),
+                res.error_code or res.error,
             )
             return _neutral(phone)
 
@@ -247,8 +256,11 @@ class VoyageurVerifyOtpView(APIView):
         if not data:
             if cache.get(used_key):
                 log_security_event(
-                    SecurityEventKind.OTP_REPLAY, source="otp_verify", ip=client_ip(request),
-                    phone=_traveler_phone(traveler), traveler=traveler,
+                    SecurityEventKind.OTP_REPLAY,
+                    source="otp_verify",
+                    ip=client_ip(request),
+                    phone=_traveler_phone(traveler),
+                    traveler=traveler,
                     dedupe=f"otp_replay:{traveler.pk}",
                 )
             return Response(

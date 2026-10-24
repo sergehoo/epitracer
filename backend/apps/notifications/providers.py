@@ -2,6 +2,7 @@
 
 En l'absence de credentials, le provider 'stub' loggue le message — pratique en dev/CI.
 """
+
 from __future__ import annotations
 
 import logging
@@ -9,7 +10,6 @@ from dataclasses import dataclass
 
 import httpx
 from django.conf import settings
-from django.core.mail import send_mail
 
 logger = logging.getLogger("epidemitracker.notifications")
 
@@ -36,8 +36,10 @@ def send_sms(recipient: str, message: str) -> SendResult:
         url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
         try:
             r = httpx.post(
-                url, data={"From": from_, "To": recipient, "Body": message},
-                auth=(sid, token), timeout=15,
+                url,
+                data={"From": from_, "To": recipient, "Body": message},
+                auth=(sid, token),
+                timeout=15,
             )
             r.raise_for_status()
             return SendResult(ok=True, provider="twilio", provider_id=r.json().get("sid", ""))
@@ -83,7 +85,9 @@ def send_email(
 
         res = resend_email_log(email_log_id)
         return SendResult(
-            ok=res.ok, provider="email", provider_id=f"emaillog:{res.log_id or email_log_id}",
+            ok=res.ok,
+            provider="email",
+            provider_id=f"emaillog:{res.log_id or email_log_id}",
             error=res.error,
         )
     try:
@@ -103,6 +107,7 @@ def send_email(
             # Fallback texte minimal (extrait du <title> ou 1re ligne visible)
             # pour les clients qui n'affichent que text/plain.
             import re
+
             m = re.search(r"<title[^>]*>([^<]+)</title>", body, re.IGNORECASE)
             plain_fallback = (m.group(1) if m else subject or "Rapport EpiTrace").strip()
             result = send_email_by_type(
@@ -146,10 +151,13 @@ def send_whatsapp(recipient: str, message: str) -> SendResult:
         token = settings.NOTIFICATIONS["TWILIO_AUTH_TOKEN"]
         url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
         try:
-            r = httpx.post(url, data={"From": from_, "To": to, "Body": message},
-                           auth=(sid, token), timeout=15)
+            r = httpx.post(
+                url, data={"From": from_, "To": to, "Body": message}, auth=(sid, token), timeout=15
+            )
             r.raise_for_status()
-            return SendResult(ok=True, provider="twilio_whatsapp", provider_id=r.json().get("sid", ""))
+            return SendResult(
+                ok=True, provider="twilio_whatsapp", provider_id=r.json().get("sid", "")
+            )
         except Exception as exc:
             return SendResult(ok=False, provider="twilio_whatsapp", error=str(exc))
     logger.info("[WhatsApp:stub] to=%s body=%s", recipient, message[:120])
@@ -172,6 +180,8 @@ def send_push(token: str, title: str, body: str) -> SendResult:
             timeout=15,
         )
         r.raise_for_status()
-        return SendResult(ok=True, provider="fcm", provider_id=str(r.json().get("multicast_id", "")))
+        return SendResult(
+            ok=True, provider="fcm", provider_id=str(r.json().get("multicast_id", ""))
+        )
     except Exception as exc:
         return SendResult(ok=False, provider="fcm", error=str(exc))

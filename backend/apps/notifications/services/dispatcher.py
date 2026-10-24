@@ -6,25 +6,30 @@ Pipeline :
     3. dispatch synchrone (eager) OU enqueue Celery (recommandé)
     4. persiste l'état + audit log
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional
 
-from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.notifications.models import (
-    Channel, Direction, MessageType, Notification, NotificationStatus,
-    NotificationTemplate, Provider,
+    Channel,
+    Direction,
+    MessageType,
+    Notification,
+    NotificationStatus,
+    NotificationTemplate,
+    Provider,
 )
 from apps.notifications.services.audit import Actions, log_action
 from apps.notifications.services.errors import ErrorCode
 from apps.notifications.services.router import (
-    NotificationProviderRouter, PhoneValidationError,
+    NotificationProviderRouter,
+    PhoneValidationError,
 )
 
 logger = logging.getLogger("epidemitracker.notifications.dispatcher")
@@ -33,7 +38,7 @@ logger = logging.getLogger("epidemitracker.notifications.dispatcher")
 @dataclass
 class SendResult:
     ok: bool
-    notification_id: Optional[int] = None
+    notification_id: int | None = None
     provider: str = ""
     provider_message_id: str = ""
     error: str = ""
@@ -52,11 +57,12 @@ _UNRESOLVED_RE = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
 # ---------------------------------------------------------------------------
 class _SafeDict(dict):
     """dict qui retourne `{key}` au lieu de raise KeyError → format_map robuste."""
+
     def __missing__(self, key):
         return "{" + key + "}"
 
 
-def _enrich_context(context: Optional[dict], traveler=None, body: str = "") -> dict:
+def _enrich_context(context: dict | None, traveler=None, body: str = "") -> dict:
     """Ajoute automatiquement les attributs utiles du voyageur au context.
 
     Évite que les placeholders standards comme `{traveler_id}`, `{full_name}`,
@@ -91,6 +97,7 @@ def _enrich_context(context: Optional[dict], traveler=None, body: str = "") -> d
     if "telegram_link" not in enriched:
         try:
             from apps.notifications.services.telegram import build_deep_link
+
             link = build_deep_link(enriched["traveler_id"])
             if link:
                 enriched["telegram_link"] = link
@@ -103,9 +110,9 @@ def _enrich_context(context: Optional[dict], traveler=None, body: str = "") -> d
         try:
             # Import local pour éviter cycle d'imports notifications ↔ health_pass
             from apps.health_pass.models import HealthPass, HealthPassStatus
+
             pass_obj = (
-                HealthPass.objects
-                .filter(traveler=traveler, status=HealthPassStatus.ACTIVE)
+                HealthPass.objects.filter(traveler=traveler, status=HealthPassStatus.ACTIVE)
                 .order_by("-expires_at")
                 .first()
             )
@@ -113,12 +120,12 @@ def _enrich_context(context: Optional[dict], traveler=None, body: str = "") -> d
                 enriched["pass_number"] = pass_obj.pass_number
                 enriched.setdefault(
                     "expires_at",
-                    pass_obj.expires_at.strftime("%d/%m/%Y à %Hh%M")
-                    if pass_obj.expires_at else "",
+                    pass_obj.expires_at.strftime("%d/%m/%Y à %Hh%M") if pass_obj.expires_at else "",
                 )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Enrich pass lookup failed for traveler=%s : %s",
-                           getattr(traveler, "pk", "?"), exc)
+            logger.warning(
+                "Enrich pass lookup failed for traveler=%s : %s", getattr(traveler, "pk", "?"), exc
+            )
 
     return enriched
 
@@ -149,13 +156,13 @@ def enqueue_notification(
     body: str,
     subject: str = "",
     traveler=None,
-    template: Optional[NotificationTemplate] = None,
-    context: Optional[dict] = None,
+    template: NotificationTemplate | None = None,
+    context: dict | None = None,
     message_type: str = MessageType.AUTOMATIC_REMINDER,
     sent_by=None,
     request=None,
-    force_provider: Optional[str] = None,
-    metadata: Optional[dict] = None,
+    force_provider: str | None = None,
+    metadata: dict | None = None,
     dedup_key: str = "",
 ) -> SendResult:
     """Point d'entrée unique : valide, persiste, et enqueue l'envoi Celery.
@@ -180,7 +187,11 @@ def enqueue_notification(
     """
     channel = (channel or "").lower()
     if channel not in {
-        Channel.SMS, Channel.WHATSAPP, Channel.EMAIL, Channel.PUSH, Channel.TELEGRAM,
+        Channel.SMS,
+        Channel.WHATSAPP,
+        Channel.EMAIL,
+        Channel.PUSH,
+        Channel.TELEGRAM,
     }:
         return SendResult(ok=False, error=f"Canal non supporté : {channel!r}")
 
@@ -213,8 +224,10 @@ def enqueue_notification(
                 from .security import SecurityEventKind, log_security_event
 
                 log_security_event(
-                    SecurityEventKind.ROUTING_BLOCKED, source="dispatcher",
-                    phone=decision.normalized, user=sent_by,
+                    SecurityEventKind.ROUTING_BLOCKED,
+                    source="dispatcher",
+                    phone=decision.normalized,
+                    user=sent_by,
                     details={"forced": force_provider, "routed": decision.provider},
                 )
                 return SendResult(ok=False, error=refusal, error_code=ErrorCode.NATIONAL_POLICY)
@@ -235,6 +248,7 @@ def enqueue_notification(
             country_code = ""
             is_ivoirian = False
             provider = _prov
+
         decision = _NoDecision()
         final_provider = decision.provider
 
@@ -296,8 +310,12 @@ def enqueue_notification(
         from .sms_guard import check_and_reserve
 
         guard = check_and_reserve(
-            phone=decision.normalized, provider=final_provider, body=final_body,
-            message_type=message_type, metadata=metadata, traveler=traveler,
+            phone=decision.normalized,
+            provider=final_provider,
+            body=final_body,
+            message_type=message_type,
+            metadata=metadata,
+            traveler=traveler,
             source=(metadata or {}).get("kind", "") or message_type,
         )
         if not guard.allowed:
@@ -348,9 +366,15 @@ def enqueue_notification(
     # 7) Enqueue Celery (best-effort : si Celery KO, on essaye en sync)
     try:
         from apps.notifications.tasks import send_notification_task
+
         send_notification_task.delay(notif.id)
-        log_action(notification=notif, action=Actions.SEND, actor=sent_by, request=request,
-                   metadata={"mode": "celery_async"})
+        log_action(
+            notification=notif,
+            action=Actions.SEND,
+            actor=sent_by,
+            request=request,
+            metadata={"mode": "celery_async"},
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Celery enqueue failed, fallback to sync send : %s", exc)
         return _send_sync(notif)
@@ -366,7 +390,8 @@ def enqueue_notification(
 
 def _duplicate_result(existing: Notification, dedup_key: str) -> SendResult:
     log_action(
-        notification=existing, action=Actions.DUPLICATE,
+        notification=existing,
+        action=Actions.DUPLICATE,
         metadata={"dedup_key": dedup_key},
     )
     logger.info("Doublon évité (%s) → notification #%s", dedup_key, existing.id)
@@ -382,6 +407,7 @@ def _duplicate_result(existing: Notification, dedup_key: str) -> SendResult:
 def _send_sync(notif: Notification) -> SendResult:
     """Envoi synchrone si Celery indisponible — utilisé en fallback."""
     from apps.notifications.tasks import _execute_send  # import local pour éviter cycle
+
     ok, msg_id, err = _execute_send(notif)
     return SendResult(
         ok=ok,
@@ -430,7 +456,7 @@ def send_template_message(
     traveler,
     recipient: str,
     template_code: str,
-    context: Optional[dict] = None,
+    context: dict | None = None,
     channel: str = Channel.SMS,
     sent_by=None,
     request=None,

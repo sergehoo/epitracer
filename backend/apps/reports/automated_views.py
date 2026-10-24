@@ -20,17 +20,15 @@
 
 Signed URL download : token éphémère (7 jours) via django.core.signing.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import logging
-from datetime import datetime, timedelta
 
 from django.core import signing
 from django.http import FileResponse, Http404, HttpResponse
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
@@ -38,19 +36,29 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from .models import (
-    AutomatedReportRecipient, AutomatedReportSchedule, DeliveryStatus,
-    GeneratedReport, ReportDeliveryLog, ReportType,
+    AutomatedReportRecipient,
+    AutomatedReportSchedule,
+    GeneratedReport,
+    ReportDeliveryLog,
 )
 from .permissions import (
-    CanDownloadReports, CanGenerateWeeklyReports, CanManageReportRecipients,
-    CanManageReportSchedule, CanSendWeeklyReports, CanViewWeeklyReports,
+    CanDownloadReports,
+    CanGenerateWeeklyReports,
+    CanManageReportRecipients,
+    CanManageReportSchedule,
+    CanSendWeeklyReports,
+    CanViewWeeklyReports,
 )
 from .serializers import (
     AutomatedReportRecipientLightSerializer,
-    AutomatedReportRecipientSerializer, AutomatedReportScheduleSerializer,
-    GenerateReportInputSerializer, GeneratedReportDetailSerializer,
-    GeneratedReportLightSerializer, RecipientImportCsvInputSerializer,
-    ReportDeliveryLogSerializer, TestSendInputSerializer,
+    AutomatedReportRecipientSerializer,
+    AutomatedReportScheduleSerializer,
+    GeneratedReportDetailSerializer,
+    GeneratedReportLightSerializer,
+    GenerateReportInputSerializer,
+    RecipientImportCsvInputSerializer,
+    ReportDeliveryLogSerializer,
+    TestSendInputSerializer,
 )
 
 logger = logging.getLogger("epidemitracker.reports.views")
@@ -69,6 +77,7 @@ class WeeklyReportViewSet(
     viewsets.GenericViewSet,
 ):
     """CRUD lecture + actions (generate/send/download) sur GeneratedReport."""
+
     queryset = GeneratedReport.objects.all()
     lookup_field = "pk"
 
@@ -156,8 +165,10 @@ class WeeklyReportViewSet(
             return super().get_object()
         except Http404:
             pk = self.kwargs.get("pk")
-            raise NotFound(f"Rapport hebdomadaire #{pk} introuvable "
-                           "(peut-être supprimé ou pas encore généré).")
+            raise NotFound(
+                f"Rapport hebdomadaire #{pk} introuvable "
+                "(peut-être supprimé ou pas encore généré)."
+            )
 
     # ---------------------------------------------------------------- download
     @action(detail=True, methods=["get"], url_path="download")
@@ -204,8 +215,10 @@ class WeeklyReportViewSet(
 
         # Audit trail : trace l'IP + user-agent (AC-07 défense en profondeur)
         try:
-            from apps.audit.models import AuditLog
             from django.contrib.contenttypes.models import ContentType
+
+            from apps.audit.models import AuditLog
+
             AuditLog.objects.create(
                 actor=request.user if request.user.is_authenticated else None,
                 action="reports.weekly.download",
@@ -219,8 +232,7 @@ class WeeklyReportViewSet(
         except Exception as exc:  # noqa: BLE001
             logger.debug("Audit log download failed: %s", exc)
 
-        response = FileResponse(f.open("rb"), as_attachment=True,
-                                filename=f.name.split("/")[-1])
+        response = FileResponse(f.open("rb"), as_attachment=True, filename=f.name.split("/")[-1])
         response["X-Robots-Tag"] = "noindex, nofollow"  # non indexable
         return response
 
@@ -230,9 +242,7 @@ class WeeklyReportViewSet(
         """GET /weekly/{id}/signed-url/?fmt=pdf → URL signée 7j."""
         report = self.get_object()
         fmt = (
-            request.query_params.get("fmt")
-            or request.query_params.get("format")
-            or "pdf"
+            request.query_params.get("fmt") or request.query_params.get("format") or "pdf"
         ).lower()
         if fmt not in ("pdf", "xlsx"):
             return Response({"detail": "format invalide"}, status=400)
@@ -241,11 +251,13 @@ class WeeklyReportViewSet(
             {"report_id": report.pk, "format": fmt, "issued_to": request.user.pk},
             salt=SIGN_SALT,
         )
-        return Response({
-            "token": token,
-            "url": f"/api/v1/reports/weekly/signed-download/?token={token}",
-            "expires_in_seconds": DOWNLOAD_TOKEN_TTL_SECONDS,
-        })
+        return Response(
+            {
+                "token": token,
+                "url": f"/api/v1/reports/weekly/signed-download/?token={token}",
+                "expires_in_seconds": DOWNLOAD_TOKEN_TTL_SECONDS,
+            }
+        )
 
 
 # ============================================================================
@@ -259,6 +271,7 @@ class ReportRecipientViewSet(viewsets.ModelViewSet):
     fonctionnent. L'action ``import_csv`` re-déclare explicitement les parsers
     dont elle a besoin (MultiPart + Form uniquement).
     """
+
     queryset = AutomatedReportRecipient.objects.all()
 
     def get_permissions(self):
@@ -276,9 +289,13 @@ class ReportRecipientViewSet(viewsets.ModelViewSet):
         # Filtres
         q = self.request.query_params.get("q")
         if q:
-            qs = qs.filter(
-                full_name__icontains=q,
-            ) | qs.filter(email__icontains=q) | qs.filter(organization__icontains=q)
+            qs = (
+                qs.filter(
+                    full_name__icontains=q,
+                )
+                | qs.filter(email__icontains=q)
+                | qs.filter(organization__icontains=q)
+            )
         for param in ("preferred_channel", "language", "is_active"):
             val = self.request.query_params.get(param)
             if val is not None and val != "":
@@ -340,11 +357,13 @@ class ReportRecipientViewSet(viewsets.ModelViewSet):
             request=request,
         )
         if result.ok:
-            return Response({
-                "ok": True,
-                "notification_id": result.notification_id,
-                "provider": result.provider,
-            })
+            return Response(
+                {
+                    "ok": True,
+                    "notification_id": result.notification_id,
+                    "provider": result.provider,
+                }
+            )
         return Response(
             {"ok": False, "error": result.error},
             status=status.HTTP_400_BAD_REQUEST,
@@ -352,7 +371,9 @@ class ReportRecipientViewSet(viewsets.ModelViewSet):
 
     # ---------------------------------------------------------------- import CSV
     @action(
-        detail=False, methods=["post"], url_path="import-csv",
+        detail=False,
+        methods=["post"],
+        url_path="import-csv",
         parser_classes=[MultiPartParser, FormParser],
     )
     def import_csv(self, request):
@@ -408,13 +429,15 @@ class ReportRecipientViewSet(viewsets.ModelViewSet):
                 skipped += 1
                 errors.append({"line": i, "error": str(exc)[:200]})
 
-        return Response({
-            "ok": True,
-            "dry_run": dry_run,
-            "created_or_updated": created,
-            "skipped": skipped,
-            "errors": errors[:50],
-        })
+        return Response(
+            {
+                "ok": True,
+                "dry_run": dry_run,
+                "created_or_updated": created,
+                "skipped": skipped,
+                "errors": errors[:50],
+            }
+        )
 
     # ---------------------------------------------------------------- export CSV
     @action(detail=False, methods=["get"], url_path="export-csv")
@@ -422,20 +445,35 @@ class ReportRecipientViewSet(viewsets.ModelViewSet):
         """GET /recipients/export-csv/ — export CSV UTF-8 BOM."""
         buf = io.StringIO()
         writer = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
-        writer.writerow([
-            "full_name", "job_title", "organization",
-            "phone_number", "email", "preferred_channel",
-            "language", "district", "is_active", "consent_date",
-        ])
+        writer.writerow(
+            [
+                "full_name",
+                "job_title",
+                "organization",
+                "phone_number",
+                "email",
+                "preferred_channel",
+                "language",
+                "district",
+                "is_active",
+                "consent_date",
+            ]
+        )
         for rec in self.get_queryset():
-            writer.writerow([
-                rec.full_name, rec.job_title, rec.organization,
-                rec.phone_number, rec.email, rec.preferred_channel,
-                rec.language,
-                (rec.district.name if rec.district_id else ""),
-                "1" if rec.is_active else "0",
-                (rec.consent_date.isoformat() if rec.consent_date else ""),
-            ])
+            writer.writerow(
+                [
+                    rec.full_name,
+                    rec.job_title,
+                    rec.organization,
+                    rec.phone_number,
+                    rec.email,
+                    rec.preferred_channel,
+                    rec.language,
+                    (rec.district.name if rec.district_id else ""),
+                    "1" if rec.is_active else "0",
+                    (rec.consent_date.isoformat() if rec.consent_date else ""),
+                ]
+            )
         response = HttpResponse(
             "﻿" + buf.getvalue(),
             content_type="text/csv; charset=utf-8",
@@ -455,6 +493,7 @@ class ReportScheduleViewSet(
     viewsets.GenericViewSet,
 ):
     """GET liste + GET/PATCH sur le schedule courant (WEEKLY par défaut)."""
+
     queryset = AutomatedReportSchedule.objects.all()
     serializer_class = AutomatedReportScheduleSerializer
 
@@ -476,6 +515,7 @@ class ReportDeliveryLogViewSet(
     viewsets.GenericViewSet,
 ):
     """Historique des envois — read-only, filtres par report/status/channel."""
+
     queryset = ReportDeliveryLog.objects.all()
     serializer_class = ReportDeliveryLogSerializer
     permission_classes = [CanViewWeeklyReports]

@@ -18,12 +18,12 @@ Feuilles du XLSX :
 Sécurité — AC-06 : les valeurs commençant par =, +, -, @ sont préfixées
 d'une apostrophe pour neutraliser les formules injectées (CSV injection).
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import logging
-from datetime import datetime
 from typing import Any
 
 from .weekly_aggregator import ITINERARY_BREAKDOWNS, stay_duration_rows
@@ -149,8 +149,10 @@ def _render_xlsx_openpyxl(agg: dict) -> bytes:
     _style_header(ws3, 1, 2)
     cases = agg.get("cases", {})
     for code, label in [
-        ("suspect", "Suspects"), ("probable", "Probables"),
-        ("confirmed", "Confirmés"), ("discarded", "Exclus"),
+        ("suspect", "Suspects"),
+        ("probable", "Probables"),
+        ("confirmed", "Confirmés"),
+        ("discarded", "Exclus"),
     ]:
         ws3.append([label, cases.get(code, 0)])
     _autosize(ws3)
@@ -197,10 +199,14 @@ def _render_xlsx_openpyxl(agg: dict) -> bytes:
         ("alerts_created", "Alertes créées"),
     ]:
         data = comp.get(key, {}) or {}
-        ws8.append([
-            _neutralize(label), data.get("current", 0),
-            data.get("previous", 0), data.get("delta_pct", 0),
-        ])
+        ws8.append(
+            [
+                _neutralize(label),
+                data.get("current", 0),
+                data.get("previous", 0),
+                data.get("delta_pct", 0),
+            ]
+        )
     _autosize(ws8)
 
     # ─── Feuilles 9-12 : provenance & séjour (agrégés, sans donnée nominative) ──

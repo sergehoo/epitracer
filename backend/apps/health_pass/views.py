@@ -2,7 +2,7 @@ from django.http import FileResponse, Http404, HttpResponse
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -30,9 +30,14 @@ class HealthPassViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = HealthPassSerializer
     permission_classes = [IsAuthenticatedAndActive, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT,
-        RoleCode.BORDER_AGENT, RoleCode.FIELD_AGENT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.BORDER_AGENT,
+        RoleCode.FIELD_AGENT,
+        RoleCode.OBSERVER,
     ]
     lookup_field = "pass_number"
     filterset_fields = ["status", "risk_level", "disease", "traveler"]
@@ -61,8 +66,13 @@ class HealthPassViewSet(viewsets.ReadOnlyModelViewSet):
         hp = self.get_object()
         reason = request.data.get("reason", "")
         revoke_pass(hp, user=request.user, reason=reason)
-        audit(request, action="qr_revoke", summary=f"Révocation pass {hp.pass_number}", target=hp,
-              payload={"reason": reason})
+        audit(
+            request,
+            action="qr_revoke",
+            summary=f"Révocation pass {hp.pass_number}",
+            target=hp,
+            payload={"reason": reason},
+        )
         return Response(HealthPassSerializer(hp).data)
 
     @action(detail=True, methods=["get"], url_path="pdf")
@@ -70,7 +80,9 @@ class HealthPassViewSet(viewsets.ReadOnlyModelViewSet):
         hp = self.get_object()
         if not hp.pdf_file:
             raise Http404("PDF non disponible.")
-        return FileResponse(open(hp.pdf_file.path, "rb"), as_attachment=True, filename=f"{hp.pass_number}.pdf")
+        return FileResponse(
+            open(hp.pdf_file.path, "rb"), as_attachment=True, filename=f"{hp.pass_number}.pdf"
+        )
 
 
 class QRVerifyView(APIView):
@@ -80,7 +92,9 @@ class QRVerifyView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "qr_verify"
 
-    @extend_schema(request=QRVerifyRequestSerializer, responses=OpenApiResponse(description="Résultat vérif"))
+    @extend_schema(
+        request=QRVerifyRequestSerializer, responses=OpenApiResponse(description="Résultat vérif")
+    )
     def post(self, request):
         ser = QRVerifyRequestSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -95,8 +109,12 @@ class QRVerifyView(APIView):
             user=request.user if request.user.is_authenticated else None,
             online=ser.validated_data.get("online", True),
         )
-        audit(request, action="qr_verify", summary=f"Vérification QR ({result.get('reason') or 'ok'})",
-              payload={"is_valid": result["is_valid"], "reason": result.get("reason")})
+        audit(
+            request,
+            action="qr_verify",
+            summary=f"Vérification QR ({result.get('reason') or 'ok'})",
+            payload={"is_valid": result["is_valid"], "reason": result.get("reason")},
+        )
         return Response(result)
 
 
@@ -106,8 +124,11 @@ class PublicKeyView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        return HttpResponse(public_key_pem(), content_type="application/x-pem-file",
-                            headers={"X-Pass-Kid": public_kid()})
+        return HttpResponse(
+            public_key_pem(),
+            content_type="application/x-pem-file",
+            headers={"X-Pass-Kid": public_kid()},
+        )
 
 
 class PassBlacklistViewSet(viewsets.ModelViewSet):
@@ -121,11 +142,17 @@ class PassBlacklistViewSet(viewsets.ModelViewSet):
 
 
 class PassVerificationLogViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = PassVerificationLog.objects.select_related("pass_obj", "verified_by", "entry_point").all()[:5000]
+    queryset = PassVerificationLog.objects.select_related(
+        "pass_obj", "verified_by", "entry_point"
+    ).all()[:5000]
     serializer_class = PassVerificationLogSerializer
     permission_classes = [IsAuthenticatedAndActive, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.OBSERVER,
     ]
     filterset_fields = ["is_valid", "entry_point", "pass_number"]

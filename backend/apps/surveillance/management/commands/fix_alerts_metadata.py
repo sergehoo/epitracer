@@ -15,6 +15,7 @@ Usage :
     python manage.py fix_alerts_metadata             # exécute pour de vrai
     python manage.py fix_alerts_metadata --dry-run   # affiche sans modifier
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -22,9 +23,6 @@ from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
-from django.db import transaction
-from django.utils import timezone
-
 
 DEDUP_WINDOW = timedelta(hours=4)
 
@@ -34,7 +32,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--dry-run", action="store_true",
+            "--dry-run",
+            action="store_true",
             help="Affiche ce qui serait fait sans toucher à la DB.",
         )
 
@@ -47,9 +46,11 @@ class Command(BaseCommand):
         # =====================================================================
         # 1) Renseigner disease + entry_point manquants
         # =====================================================================
-        self.stdout.write(self.style.MIGRATE_HEADING(
-            "1) Inférence disease / entry_point sur les alertes incomplètes"
-        ))
+        self.stdout.write(
+            self.style.MIGRATE_HEADING(
+                "1) Inférence disease / entry_point sur les alertes incomplètes"
+            )
+        )
         trv_ct = ContentType.objects.get_for_model(Traveler)
         missing_qs = HealthAlert.objects.filter(target_ct=trv_ct).filter(
             disease__isnull=True
@@ -76,9 +77,11 @@ class Command(BaseCommand):
                 traveler_cache[alert.target_id] = traveler
 
             if traveler is None:
-                self.stdout.write(self.style.WARNING(
-                    f"  - alerte {alert.id} : voyageur introuvable (target_id={alert.target_id})"
-                ))
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  - alerte {alert.id} : voyageur introuvable (target_id={alert.target_id})"
+                    )
+                )
                 continue
 
             new_disease = alert.disease
@@ -86,7 +89,8 @@ class Command(BaseCommand):
             if new_disease is None:
                 qr = (
                     traveler.quarantines.order_by("-started_on").first()
-                    if hasattr(traveler, "quarantines") else None
+                    if hasattr(traveler, "quarantines")
+                    else None
                 )
                 if qr and qr.disease_id:
                     new_disease = qr.disease
@@ -107,21 +111,20 @@ class Command(BaseCommand):
                 alert.save(update_fields=["disease", "entry_point", "updated_at"])
             n_filled += 1
 
-        self.stdout.write(self.style.SUCCESS(
-            f"  → {n_filled} alertes complétées."
-        ))
+        self.stdout.write(self.style.SUCCESS(f"  → {n_filled} alertes complétées."))
 
         # =====================================================================
         # 2) Dédoublonnage : grouper par (target, severity) sur 4h glissantes
         # =====================================================================
         self.stdout.write("")
-        self.stdout.write(self.style.MIGRATE_HEADING(
-            "2) Dédoublonnage des alertes ouvertes (fenêtre 4h)"
-        ))
+        self.stdout.write(
+            self.style.MIGRATE_HEADING("2) Dédoublonnage des alertes ouvertes (fenêtre 4h)")
+        )
 
         open_alerts = (
-            HealthAlert.objects
-            .filter(status__in=["open", "ack", "investigating", "OPEN", "ACK", "INVESTIGATING"])
+            HealthAlert.objects.filter(
+                status__in=["open", "ack", "investigating", "OPEN", "ACK", "INVESTIGATING"]
+            )
             .filter(target_ct=trv_ct)
             .exclude(target_id__isnull=True)
             .exclude(target_id="")
@@ -162,18 +165,20 @@ class Command(BaseCommand):
                 if not dry:
                     # Met à jour le compteur sur l'alerte conservée
                     meta = keeper.metadata or {}
-                    meta["duplicate_count"] = (
-                        int(meta.get("duplicate_count") or 0) + len(obsoletes)
-                    )
+                    meta["duplicate_count"] = int(meta.get("duplicate_count") or 0) + len(obsoletes)
                     repeats = list(meta.get("repeat_reasons") or [])
                     for o in obsoletes:
-                        repeats.append({
-                            "at": o.created_at.isoformat(),
-                            "reasons": (o.description or "").split("\n"),
-                            "from_alert_id": o.id,
-                        })
+                        repeats.append(
+                            {
+                                "at": o.created_at.isoformat(),
+                                "reasons": (o.description or "").split("\n"),
+                                "from_alert_id": o.id,
+                            }
+                        )
                     meta["repeat_reasons"] = repeats[-20:]
-                    meta["merged_from"] = (meta.get("merged_from") or []) + [a.id for a in obsoletes]
+                    meta["merged_from"] = (meta.get("merged_from") or []) + [
+                        a.id for a in obsoletes
+                    ]
                     keeper.metadata = meta
                     keeper.save(update_fields=["metadata", "updated_at"])
 
@@ -193,16 +198,16 @@ class Command(BaseCommand):
                     window_start = a.created_at
             _flush(current_window)
 
-        self.stdout.write(self.style.SUCCESS(
-            f"  → {n_groups} clusters traités, {n_dismissed} alertes obsolètes marquées DISMISSED."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"  → {n_groups} clusters traités, {n_dismissed} alertes obsolètes marquées DISMISSED."
+            )
+        )
 
         # =====================================================================
         if dry:
             self.stdout.write("")
-            self.stdout.write(self.style.WARNING(
-                "Mode --dry-run : aucune modification appliquée."
-            ))
+            self.stdout.write(self.style.WARNING("Mode --dry-run : aucune modification appliquée."))
         else:
             self.stdout.write("")
             self.stdout.write(self.style.SUCCESS("Rattrapage terminé."))

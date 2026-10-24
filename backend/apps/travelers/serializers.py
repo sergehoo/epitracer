@@ -9,10 +9,19 @@ class TravelHistoryEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = TravelHistoryEntry
         fields = [
-            "id", "role", "country", "country_code", "city",
-            "residence_address", "hotel", "room_number",
-            "arrival_date", "departure_date",
-            "duration_days", "duration_text", "notes",
+            "id",
+            "role",
+            "country",
+            "country_code",
+            "city",
+            "residence_address",
+            "hotel",
+            "room_number",
+            "arrival_date",
+            "departure_date",
+            "duration_days",
+            "duration_text",
+            "notes",
         ]
 
 
@@ -33,38 +42,73 @@ class TravelerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Traveler
         fields = [
-            "id", "uuid", "public_id",
+            "id",
+            "uuid",
+            "public_id",
             # Section 1 — voyage
-            "arrival_date", "arrival_time", "planned_departure_date", "transport_mode",
-            "flight_or_voyage_number", "seat_number",
-            "entry_point", "entry_point_name",
+            "arrival_date",
+            "arrival_time",
+            "planned_departure_date",
+            "transport_mode",
+            "flight_or_voyage_number",
+            "seat_number",
+            "entry_point",
+            "entry_point_name",
             # Section 2 — identité
-            "last_name", "first_name", "middle_name",
-            "age", "age_unit", "date_of_birth", "gender",
+            "last_name",
+            "first_name",
+            "middle_name",
+            "age",
+            "age_unit",
+            "date_of_birth",
+            "gender",
             "profession",
-            "id_document_type", "id_document_number", "id_document_country",
-            "nationality", "nationality_code",
-            "phone_mobile", "email", "postal_address",
-            "passport_document", "passport_uploaded_at",
+            "id_document_type",
+            "id_document_number",
+            "id_document_country",
+            "nationality",
+            "nationality_code",
+            "phone_mobile",
+            "email",
+            "postal_address",
+            "passport_document",
+            "passport_uploaded_at",
             # Section 4 — confinement CI
-            "confinement_city", "confinement_commune", "confinement_neighborhood",
-            "confinement_street_number", "confinement_lot",
-            "confinement_hotel", "confinement_room_number",
-            "emergency_phone_ci", "confinement_address",
+            "confinement_city",
+            "confinement_commune",
+            "confinement_neighborhood",
+            "confinement_street_number",
+            "confinement_lot",
+            "confinement_hotel",
+            "confinement_room_number",
+            "emergency_phone_ci",
+            "confinement_address",
             # Statut
             "current_health_status",
             # Consentement / signature
-            "consented_data_processing", "signed_at", "signed_place",
+            "consented_data_processing",
+            "signed_at",
+            "signed_place",
             # Sous-objets
-            "travel_history", "companions",
-            "created_at", "updated_at",
+            "travel_history",
+            "companions",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ["id", "uuid", "public_id", "confinement_address", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "uuid",
+            "public_id",
+            "confinement_address",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate(self, attrs):
         arrival = attrs.get("arrival_date", getattr(self.instance, "arrival_date", None))
         departure = attrs.get(
-            "planned_departure_date", getattr(self.instance, "planned_departure_date", None),
+            "planned_departure_date",
+            getattr(self.instance, "planned_departure_date", None),
         )
         if arrival and departure and departure < arrival:
             raise serializers.ValidationError(

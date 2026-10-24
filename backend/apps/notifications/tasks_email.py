@@ -3,10 +3,10 @@
 Routées automatiquement vers la queue `notifications` via
 CELERY_TASK_ROUTES["notifications.*"] (cf. settings/base.py).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from celery import shared_task
 from django.utils import timezone
@@ -72,12 +72,12 @@ def send_email_task(self, log_id: int) -> dict:
 def retry_failed_emails(max_age_hours: int = 24, batch: int = 100) -> dict:
     """Relance les emails FAILED des dernières heures avec retry_count < max."""
     from datetime import timedelta
+
     from django.db.models import F
 
     cutoff = timezone.now() - timedelta(hours=max_age_hours)
     qs = (
-        EmailLog.objects
-        .filter(status=EmailStatus.FAILED, failed_at__gte=cutoff)
+        EmailLog.objects.filter(status=EmailStatus.FAILED, failed_at__gte=cutoff)
         .filter(retry_count__lt=F("max_retries"))
         .order_by("failed_at")[:batch]
     )
@@ -98,7 +98,7 @@ def send_admin_account_created_email(
     user_id: int,
     temporary_password: str,
     *,
-    admin_login_url: Optional[str] = None,
+    admin_login_url: str | None = None,
 ) -> dict:
     """Envoie l'email de bienvenue admin/agent depuis inhp@veillesanitaire.com.
 
@@ -114,13 +114,13 @@ def send_admin_account_created_email(
     if not user:
         return {"ok": False, "error": "User not found"}
 
-    full_name = (
-        f"{user.first_name} {user.last_name}".strip()
-        or user.get_username() or user.email
+    full_name = f"{user.first_name} {user.last_name}".strip() or user.get_username() or user.email
+    roles = (
+        ", ".join(
+            a.role.name for a in user.role_assignments.select_related("role").filter(is_active=True)
+        )
+        or "—"
     )
-    roles = ", ".join(
-        a.role.name for a in user.role_assignments.select_related("role").filter(is_active=True)
-    ) or "—"
 
     ctx = {
         "full_name": full_name,
@@ -128,8 +128,11 @@ def send_admin_account_created_email(
         "email": user.email,
         "temporary_password": temporary_password,
         "roles": roles,
-        "admin_login_url": admin_login_url or getattr(
-            settings, "ADMIN_LOGIN_URL", "https://admin.veillesanitaire.com/login",
+        "admin_login_url": admin_login_url
+        or getattr(
+            settings,
+            "ADMIN_LOGIN_URL",
+            "https://admin.veillesanitaire.com/login",
         ),
     }
 
@@ -196,16 +199,14 @@ def send_password_reset_email(user_id: int, raw_token: str) -> dict:
     # rstrip('/login') ne marche pas correctement (rstrip retire des CARACTÈRES,
     # pas une string), donc on utilise urlparse pour être sûr.
     from urllib.parse import urlparse
+
     base = getattr(settings, "ADMIN_LOGIN_URL", "https://admin.veillesanitaire.com/auth/login")
     parsed = urlparse(base)
     root = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else base
     reset_url = f"{root}/auth/reset-password?token={raw_token}"
     ttl_h = getattr(settings, "PASSWORD_RESET_TOKEN_TTL_HOURS", 24)
 
-    full_name = (
-        f"{user.first_name} {user.last_name}".strip()
-        or user.get_username() or user.email
-    )
+    full_name = f"{user.first_name} {user.last_name}".strip() or user.get_username() or user.email
 
     ctx = {"full_name": full_name, "reset_url": reset_url, "ttl_hours": ttl_h}
 
@@ -256,7 +257,7 @@ vérifiez la sécurité de votre compte.</p>
 def send_campaign_email_batch(
     template_code: str,
     recipients: list[str],
-    context: Optional[dict] = None,
+    context: dict | None = None,
     email_type: str = EmailType.TRAVELER_CAMPAIGN,
 ) -> dict:
     """Envoi en lot d'une campagne email — un EmailLog par destinataire."""

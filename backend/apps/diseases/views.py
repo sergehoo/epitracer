@@ -16,7 +16,11 @@ class DiseaseViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     lookup_field = "code"
     filterset_fields = [
-        "is_active", "severity", "requires_quarantine", "requires_pass", "is_published",
+        "is_active",
+        "severity",
+        "requires_quarantine",
+        "requires_pass",
+        "is_published",
     ]
     search_fields = ["name", "code", "short_name"]
 

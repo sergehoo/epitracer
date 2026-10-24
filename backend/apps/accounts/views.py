@@ -4,10 +4,9 @@ import secrets
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from drf_spectacular.utils import OpenApiResponse, extend_schema
-from rest_framework import status, viewsets, mixins
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -43,13 +42,14 @@ class EpidemiTokenObtainPairView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         """Override pour :
-          - Tracer les échecs login (compteur + lock auto après 5 essais)
-          - Auto-envoyer le code OTP email à la 1ère étape (password OK mais
-            mfa_code manquant → on génère et envoie le code immédiatement)
+        - Tracer les échecs login (compteur + lock auto après 5 essais)
+        - Auto-envoyer le code OTP email à la 1ère étape (password OK mais
+          mfa_code manquant → on génère et envoie le code immédiatement)
         """
+        from datetime import timedelta
+
         from django.contrib.auth import get_user_model
         from django.utils import timezone
-        from datetime import timedelta
 
         User = get_user_model()
         email = (request.data.get("email") or "").strip().lower()
@@ -59,30 +59,36 @@ class EpidemiTokenObtainPairView(TokenObtainPairView):
         except Exception as exc:
             # Vérifie si l'erreur indique "MFA requise" → envoyer auto le code
             from rest_framework.exceptions import ValidationError
+
             if isinstance(exc, ValidationError) and isinstance(exc.detail, dict):
                 if exc.detail.get("mfa_required"):
                     user = User.objects.filter(email=email).first()
                     if user and user.mfa_enabled:
                         # Génère + envoie le code OTP via Celery
-                        from apps.accounts.services.email_otp import send_otp_email
                         import logging
+
+                        from apps.accounts.services.email_otp import send_otp_email
+
                         log = logging.getLogger("epidemitracker.accounts.login")
                         try:
                             result = send_otp_email(user, request=request)
                             if not result.ok:
                                 log.error(
                                     "OTP envoi KO pour %s : %s",
-                                    user.email, result.error,
+                                    user.email,
+                                    result.error,
                                 )
                             else:
                                 log.info(
                                     "OTP envoyé pour %s (code_id=%s)",
-                                    user.email, result.code_id,
+                                    user.email,
+                                    result.code_id,
                                 )
                         except Exception as send_exc:  # noqa: BLE001
                             log.exception(
                                 "OTP envoi crash pour %s : %s",
-                                user.email, send_exc,
+                                user.email,
+                                send_exc,
                             )
                     # Re-lever l'erreur pour que le frontend voit mfa_required
                     raise exc
@@ -95,9 +101,13 @@ class EpidemiTokenObtainPairView(TokenObtainPairView):
                         if user.failed_login_attempts >= 5:
                             user.locked_until = timezone.now() + timedelta(minutes=15)
                             user.failed_login_attempts = 0
-                            user.save(update_fields=[
-                                "failed_login_attempts", "locked_until", "updated_at",
-                            ])
+                            user.save(
+                                update_fields=[
+                                    "failed_login_attempts",
+                                    "locked_until",
+                                    "updated_at",
+                                ]
+                            )
                         else:
                             user.save(update_fields=["failed_login_attempts", "updated_at"])
             raise
@@ -139,12 +149,8 @@ class MFASetupView(APIView):
         user = request.user
         # On supprime tout device non confirmé existant pour repartir propre
         TOTPDevice.objects.filter(user=user, confirmed=False).delete()
-        device = TOTPDevice.objects.create(
-            user=user, name=f"epidemi-{user.email}", confirmed=False
-        )
-        return Response(
-            {"otpauth_url": device.config_url, "secret": device.bin_key.hex()}
-        )
+        device = TOTPDevice.objects.create(user=user, name=f"epidemi-{user.email}", confirmed=False)
+        return Response({"otpauth_url": device.config_url, "secret": device.bin_key.hex()})
 
 
 class MFAVerifyView(APIView):
@@ -225,19 +231,25 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             from apps.notifications.services.email_router import generate_password_reset_token
             from apps.notifications.tasks_email import send_password_reset_email
+
             raw_token, _ = generate_password_reset_token(u, request=request)
             send_password_reset_email.delay(u.pk, raw_token)
         except Exception:  # noqa: BLE001
             import logging
+
             logging.getLogger("epidemitracker.accounts").warning(
-                "Envoi email reset password échoué (user_id=%s)", u.pk, exc_info=True,
+                "Envoi email reset password échoué (user_id=%s)",
+                u.pk,
+                exc_info=True,
             )
 
-        return Response({
-            "detail": "Mot de passe réinitialisé. Un email avec lien sécurisé "
-                      "a également été envoyé à l'utilisateur.",
-            "temporary_password": new_pwd,
-        })
+        return Response(
+            {
+                "detail": "Mot de passe réinitialisé. Un email avec lien sécurisé "
+                "a également été envoyé à l'utilisateur.",
+                "temporary_password": new_pwd,
+            }
+        )
 
 
 class RoleViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
@@ -272,39 +284,46 @@ class LoginEventListView(APIView):
 
     def get(self, request):
         qs = LoginEvent.objects.order_by("-created_at")[:200]
-        return Response([
-            {
-                "created_at": e.created_at,
-                "email": e.email_attempted,
-                "ip": e.ip_address,
-                "ua": e.user_agent,
-                "success": e.success,
-                "failure_reason": e.failure_reason,
-            }
-            for e in qs
-        ])
+        return Response(
+            [
+                {
+                    "created_at": e.created_at,
+                    "email": e.email_attempted,
+                    "ip": e.ip_address,
+                    "ua": e.user_agent,
+                    "success": e.success,
+                    "failure_reason": e.failure_reason,
+                }
+                for e in qs
+            ]
+        )
 
 
 # ===========================================================================
 # MFA EMAIL — endpoints
 # ===========================================================================
 
+
 class MfaEmailEnableView(APIView):
     """POST /auth/mfa/email/enable/ — active la MFA email pour soi-même."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         request.user.mfa_enabled = True
         request.user.save(update_fields=["mfa_enabled"])
-        return Response({
-            "ok": True,
-            "mfa_enabled": True,
-            "detail": "MFA email activée. Vous recevrez un code à chaque connexion.",
-        })
+        return Response(
+            {
+                "ok": True,
+                "mfa_enabled": True,
+                "detail": "MFA email activée. Vous recevrez un code à chaque connexion.",
+            }
+        )
 
 
 class MfaEmailDisableView(APIView):
     """POST /auth/mfa/email/disable/ — désactive la MFA email pour soi-même."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -324,12 +343,14 @@ class MfaEmailResendView(APIView):
     Public (pas auth). Body: {"email": "user@..."}. Pas de leak si email inexistant.
     Rate limit pour éviter le spam.
     """
+
     permission_classes = []
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "mfa_resend"  # à configurer côté settings : 6/min/IP par ex.
 
     def post(self, request):
         from django.contrib.auth import get_user_model
+
         from apps.accounts.services.email_otp import send_otp_email
 
         email = (request.data.get("email") or "").strip().lower()
@@ -341,21 +362,26 @@ class MfaEmailResendView(APIView):
         if user and user.mfa_enabled:
             send_otp_email(user, request=request)
         # Réponse identique pour éviter de leaker l'existence de l'email
-        return Response({"ok": True, "detail": "Si un compte avec MFA existe, un code a été envoyé."})
+        return Response(
+            {"ok": True, "detail": "Si un compte avec MFA existe, un code a été envoyé."}
+        )
 
 
 # ===========================================================================
 # PASSWORD RESET PUBLIC — request + confirm
 # ===========================================================================
 
+
 class PasswordResetRequestView(APIView):
     """POST /auth/password-reset/request/ — demande publique de reset par email."""
+
     permission_classes = []
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "password_reset"
 
     def post(self, request):
         from django.contrib.auth import get_user_model
+
         from apps.notifications.services.email_router import generate_password_reset_token
         from apps.notifications.tasks_email import send_password_reset_email
 
@@ -372,10 +398,12 @@ class PasswordResetRequestView(APIView):
             except Exception:
                 pass
         # Réponse identique dans tous les cas (anti-énumération)
-        return Response({
-            "ok": True,
-            "detail": "Si un compte existe avec cet email, un lien a été envoyé.",
-        })
+        return Response(
+            {
+                "ok": True,
+                "detail": "Si un compte existe avec cet email, un lien a été envoyé.",
+            }
+        )
 
 
 class PasswordResetConfirmView(APIView):
@@ -386,6 +414,7 @@ class PasswordResetConfirmView(APIView):
       2. Valide le nouveau mot de passe → 400 si rejeté
       3. Trouve OK + validation OK → consomme le token + applique le mdp
     """
+
     permission_classes = []
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "password_reset"
@@ -393,8 +422,10 @@ class PasswordResetConfirmView(APIView):
     def post(self, request):
         import hashlib
         import logging
+
         from django.contrib.auth.password_validation import validate_password
         from django.core.exceptions import ValidationError as DjValidationError
+
         from apps.notifications.email_models import PasswordResetToken
 
         log = logging.getLogger("epidemitracker.accounts.reset")
@@ -409,8 +440,7 @@ class PasswordResetConfirmView(APIView):
             # 1) LOOKUP du token (lecture seule — pas encore consommé)
             token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
             token_obj = (
-                PasswordResetToken.objects
-                .filter(token_hash=token_hash)
+                PasswordResetToken.objects.filter(token_hash=token_hash)
                 .select_related("user")
                 .first()
             )

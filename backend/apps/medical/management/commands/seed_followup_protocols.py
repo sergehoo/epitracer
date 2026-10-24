@@ -7,6 +7,7 @@ met à jour le `DiseaseFollowupProtocol` associé.
 Usage:
     python manage.py seed_followup_protocols
 """
+
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand
@@ -14,7 +15,6 @@ from django.db import transaction
 
 from apps.diseases.models import Disease, DiseaseSeverity
 from apps.medical.models import DiseaseFollowupProtocol
-
 
 EBOLA_PROTOCOL = {
     "duration_days": 21,
@@ -95,9 +95,11 @@ class Command(BaseCommand):
                 },
             )
             if created:
-                self.stdout.write(self.style.WARNING(
-                    "Disease EBOLA n'existait pas — créée avec les valeurs par défaut."
-                ))
+                self.stdout.write(
+                    self.style.WARNING(
+                        "Disease EBOLA n'existait pas — créée avec les valeurs par défaut."
+                    )
+                )
 
             protocol, was_created = DiseaseFollowupProtocol.objects.update_or_create(
                 disease=disease,
@@ -105,9 +107,11 @@ class Command(BaseCommand):
             )
 
             action = "créé" if was_created else "mis à jour"
-            self.stdout.write(self.style.SUCCESS(
-                f"Protocole Ebola {action} (id={protocol.pk}, "
-                f"durée={protocol.duration_days}j, "
-                f"géoloc={'oui' if protocol.require_geolocation else 'non'}, "
-                f"seuil alerte={protocol.geolocation_alert_after_hours}h)."
-            ))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Protocole Ebola {action} (id={protocol.pk}, "
+                    f"durée={protocol.duration_days}j, "
+                    f"géoloc={'oui' if protocol.require_geolocation else 'non'}, "
+                    f"seuil alerte={protocol.geolocation_alert_after_hours}h)."
+                )
+            )

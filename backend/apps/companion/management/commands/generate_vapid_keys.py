@@ -8,6 +8,7 @@ Les chemins sont définis dans settings.WEBPUSH.
 La clé publique est exposée à la PWA via /api/v1/public/push/public-key/
 et utilisée par `pushManager.subscribe({applicationServerKey})`.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +24,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--force", action="store_true",
+            "--force",
+            action="store_true",
             help="Écraser les clés existantes.",
         )
 
@@ -33,9 +35,11 @@ class Command(BaseCommand):
         priv_path.parent.mkdir(parents=True, exist_ok=True)
 
         if priv_path.exists() and not opts["force"]:
-            self.stdout.write(self.style.WARNING(
-                f"Une clé VAPID existe déjà à {priv_path}. Utiliser --force pour écraser."
-            ))
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Une clé VAPID existe déjà à {priv_path}. Utiliser --force pour écraser."
+                )
+            )
             return
 
         priv = generate_private_key(SECP256R1())
@@ -54,16 +58,21 @@ class Command(BaseCommand):
 
         # Convertir la publique en base64url pour la PWA
         from apps.companion.push import get_vapid_public_key_b64url
+
         get_vapid_public_key_b64url.cache_clear()  # type: ignore[attr-defined]
         b64 = get_vapid_public_key_b64url()
 
-        self.stdout.write(self.style.SUCCESS(
-            f"Clés VAPID générées :\n  - private : {priv_path}\n  - public  : {pub_path}\n"
-        ))
-        self.stdout.write(self.style.SUCCESS(
-            f"\nClé publique base64url (à exposer à la PWA) :\n  {b64}\n"
-        ))
-        self.stdout.write(self.style.WARNING(
-            "\n⚠️  Sauvegarder la clé privée hors-ligne. "
-            "Si elle est perdue ou volée, tous les abonnements deviennent caducs."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Clés VAPID générées :\n  - private : {priv_path}\n  - public  : {pub_path}\n"
+            )
+        )
+        self.stdout.write(
+            self.style.SUCCESS(f"\nClé publique base64url (à exposer à la PWA) :\n  {b64}\n")
+        )
+        self.stdout.write(
+            self.style.WARNING(
+                "\n⚠️  Sauvegarder la clé privée hors-ligne. "
+                "Si elle est perdue ou volée, tous les abonnements deviennent caducs."
+            )
+        )

@@ -6,14 +6,18 @@ Vérifie notamment :
     - REFUS de force_provider="twilio" sur un numéro CI (politique nationale)
     - Anti-spam : message vide ou trop long rejeté
 """
+
 import pytest
-from unittest.mock import patch
 
 from apps.notifications.models import (
-    Channel, MessageType, Notification, NotificationStatus, Provider,
+    MessageType,
+    Notification,
+    NotificationStatus,
+    Provider,
 )
 from apps.notifications.services.dispatcher import (
-    enqueue_notification, send_manual_message,
+    enqueue_notification,
+    send_manual_message,
 )
 
 
@@ -137,6 +141,7 @@ class TestEnqueueNotification:
 class TestSendManualMessage:
     def test_requires_authenticated_user(self, mock_celery):
         from django.contrib.auth.models import AnonymousUser
+
         result = send_manual_message(
             traveler=None,
             recipient="+2250700000000",
@@ -148,7 +153,9 @@ class TestSendManualMessage:
 
     def test_message_type_is_manual(self, mock_celery, django_user_model):
         user = django_user_model.objects.create_user(
-            username="agent1", email="agent1@example.com", password="x",
+            username="agent1",
+            email="agent1@example.com",
+            password="x",
         )
         result = send_manual_message(
             traveler=None,

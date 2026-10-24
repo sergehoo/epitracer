@@ -6,13 +6,14 @@ Conventions:
       collisions côté téléchargement utilisateur.
     * Les PDF sont au format A4 paysage avec un en-tête CI vert/orange.
 """
+
 from __future__ import annotations
 
 import csv
 import io
+from collections.abc import Iterable, Sequence
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Iterable, Optional, Sequence
 
 from django.http import HttpResponse
 from django.utils import timezone
@@ -20,16 +21,17 @@ from django.utils import timezone
 try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
     from reportlab.platypus import (
-        SimpleDocTemplate,
+        PageBreak,
         Paragraph,
+        SimpleDocTemplate,
         Spacer,
         Table,
         TableStyle,
-        PageBreak,
     )
+
     REPORTLAB_AVAILABLE = True
 except ImportError:  # pragma: no cover
     REPORTLAB_AVAILABLE = False
@@ -148,11 +150,11 @@ PDF_WRAP_COLUMNS = 12
 def pdf_response(
     filename: str,
     title: str,
-    subtitle: Optional[str],
+    subtitle: str | None,
     headers: Sequence[str],
     rows: Iterable[Sequence],
     *,
-    summary: Optional[Sequence[tuple[str, str]]] = None,
+    summary: Sequence[tuple[str, str]] | None = None,
     page_size=None,
 ) -> HttpResponse:
     """Génère un PDF tabulaire A4 paysage avec en-tête CI.
@@ -162,9 +164,7 @@ def pdf_response(
                  sous l'en-tête.
     """
     if not REPORTLAB_AVAILABLE:
-        return HttpResponse(
-            "reportlab non disponible côté serveur.", status=500
-        )
+        return HttpResponse("reportlab non disponible côté serveur.", status=500)
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -207,16 +207,20 @@ def pdf_response(
     if summary:
         kpi_data = [[Paragraph(f"<b>{lbl}</b>", styles["Normal"]), val] for lbl, val in summary]
         kpi_table = Table(kpi_data, colWidths=[60 * mm, None], hAlign="LEFT")
-        kpi_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (0, -1), CI_LIGHT_GREEN),
-            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
-            ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ]))
+        kpi_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (0, -1), CI_LIGHT_GREEN),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
+        )
         elements.append(kpi_table)
         elements.append(Spacer(1, 4 * mm))
 
@@ -224,7 +228,10 @@ def pdf_response(
     wide = len(headers) > PDF_WRAP_COLUMNS
     font_size = 6 if wide else 8
     cell_style = ParagraphStyle(
-        "cell", parent=styles["Normal"], fontSize=font_size, leading=font_size + 1.5,
+        "cell",
+        parent=styles["Normal"],
+        fontSize=font_size,
+        leading=font_size + 1.5,
     )
     head_style = ParagraphStyle("head", parent=cell_style, textColor=colors.white)
     if wide:
@@ -238,20 +245,24 @@ def pdf_response(
         for row in rows:
             table_data.append([_pdf_cell(c) for c in row])
         table = Table(table_data, repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), CI_GREEN),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTSIZE", (0, 0), (-1, -1), font_size),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
-        ("LINEBELOW", (0, 0), (-1, 0), 1, CI_DARK),
-        ("BOX", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
-        ("INNERGRID", (0, 1), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ]))
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), CI_GREEN),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTSIZE", (0, 0), (-1, -1), font_size),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+                ("LINEBELOW", (0, 0), (-1, 0), 1, CI_DARK),
+                ("BOX", (0, 0), (-1, -1), 0.25, colors.HexColor("#D1D5DB")),
+                ("INNERGRID", (0, 1), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
     elements.append(table)
 
     # Footer texte (rendu en bas de chaque page via onPage)
@@ -305,7 +316,7 @@ def _pdf_cell(value) -> str:
 # ---------------------------------------------------------------------------
 # Helpers de parsing de paramètres de requête
 # ---------------------------------------------------------------------------
-def parse_date(value: Optional[str]) -> Optional[date]:
+def parse_date(value: str | None) -> date | None:
     """Accepte YYYY-MM-DD ; retourne None si absent/invalide."""
     if not value:
         return None

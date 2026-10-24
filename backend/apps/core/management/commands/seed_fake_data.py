@@ -16,52 +16,123 @@ Usage :
     python manage.py seed_fake_data --reset          # purge les voyageurs démo avant
     python manage.py seed_fake_data --count 200      # plus de voyageurs aléatoires
 """
+
 from __future__ import annotations
 
 import random
 import string
-from datetime import date, datetime, time, timedelta
+from datetime import date, time, timedelta
 
 from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from apps.analytics.models import PageVisit, Portal
 from apps.diseases.models import Disease
 from apps.ebola.models import (
-    EbolaDeclaration, EbolaExposureAssessment, EbolaInvestigation, EbolaSymptomReport,
+    EbolaDeclaration,
+    EbolaExposureAssessment,
+    EbolaInvestigation,
+    EbolaSymptomReport,
 )
 from apps.ebola.services import apply_risk_outcome
 from apps.geo.models import Country, EntryPoint
 from apps.health_pass.services import issue_pass_for_ebola_investigation
 from apps.surveillance.models import AlertSeverity, AlertStatus, HealthAlert
-from apps.analytics.models import PageVisit, Portal
 from apps.travelers.models import CompanionLink, Traveler, TravelHistoryEntry
-
 
 # =========================================================================
 #                               Datasets
 # =========================================================================
 FIRST_NAMES_M = [
-    "Mamadou", "Jean-Paul", "Ibrahim", "Kouadio", "Bakary", "Adama", "Sékou",
-    "Yves", "Désiré", "Vincent", "Thierry", "Olivier", "Yao", "Étienne",
-    "Salif", "Souleymane", "Karim", "Lamine", "Ousmane", "Pierre",
+    "Mamadou",
+    "Jean-Paul",
+    "Ibrahim",
+    "Kouadio",
+    "Bakary",
+    "Adama",
+    "Sékou",
+    "Yves",
+    "Désiré",
+    "Vincent",
+    "Thierry",
+    "Olivier",
+    "Yao",
+    "Étienne",
+    "Salif",
+    "Souleymane",
+    "Karim",
+    "Lamine",
+    "Ousmane",
+    "Pierre",
 ]
 FIRST_NAMES_F = [
-    "Aïcha", "Sarah", "Fatim", "Awa", "Mariam", "Aminata", "Nadège", "Yvette",
-    "Christelle", "Akissi", "Affoué", "Adjoua", "Rokia", "Korotoumou",
-    "Mireille", "Sandra", "Edwige", "Solange", "Bintou", "Esther",
+    "Aïcha",
+    "Sarah",
+    "Fatim",
+    "Awa",
+    "Mariam",
+    "Aminata",
+    "Nadège",
+    "Yvette",
+    "Christelle",
+    "Akissi",
+    "Affoué",
+    "Adjoua",
+    "Rokia",
+    "Korotoumou",
+    "Mireille",
+    "Sandra",
+    "Edwige",
+    "Solange",
+    "Bintou",
+    "Esther",
 ]
 LAST_NAMES = [
-    "KONÉ", "OUATTARA", "TRAORÉ", "DIALLO", "BAMBA", "TOURÉ", "KEÏTA",
-    "DIABATÉ", "COULIBALY", "DIARRA", "KOUASSI", "YAO", "N'GUESSAN",
-    "ASSI", "KOUAMÉ", "BROU", "DJEDJE", "ADJOUMANI", "GBAGBO", "FOFANA",
-    "CISSÉ", "DRAMÉ", "SANOGO", "CAMARA", "DOUMBIA", "ZADI",
+    "KONÉ",
+    "OUATTARA",
+    "TRAORÉ",
+    "DIALLO",
+    "BAMBA",
+    "TOURÉ",
+    "KEÏTA",
+    "DIABATÉ",
+    "COULIBALY",
+    "DIARRA",
+    "KOUASSI",
+    "YAO",
+    "N'GUESSAN",
+    "ASSI",
+    "KOUAMÉ",
+    "BROU",
+    "DJEDJE",
+    "ADJOUMANI",
+    "GBAGBO",
+    "FOFANA",
+    "CISSÉ",
+    "DRAMÉ",
+    "SANOGO",
+    "CAMARA",
+    "DOUMBIA",
+    "ZADI",
 ]
 PROFESSIONS = [
-    "Commerçant(e)", "Étudiant(e)", "Ingénieur", "Médecin", "Enseignant(e)",
-    "Journaliste", "Cadre", "Chauffeur", "Pasteur", "Diplomate",
-    "Mineur", "Agent humanitaire", "Marin", "Pilote", "Comptable",
+    "Commerçant(e)",
+    "Étudiant(e)",
+    "Ingénieur",
+    "Médecin",
+    "Enseignant(e)",
+    "Journaliste",
+    "Cadre",
+    "Chauffeur",
+    "Pasteur",
+    "Diplomate",
+    "Mineur",
+    "Agent humanitaire",
+    "Marin",
+    "Pilote",
+    "Comptable",
 ]
 HOTELS_ABIDJAN = [
     ("Sofitel Hôtel Ivoire", "Cocody", "Riviera"),
@@ -85,22 +156,22 @@ PHONES_SHARED = [
 PHONE_PREFIXES = ["+22507", "+22501", "+22505", "+22577"]
 
 FLIGHTS_CLUSTERS = [
-    ("AF572", 5, "plane"),   # Paris–Abidjan, 5 voyageurs
-    ("KQ560", 3, "plane"),   # Nairobi–Abidjan, 3 voyageurs
-    ("ET924", 4, "plane"),   # Addis-Abeba–Abidjan, 4 voyageurs
+    ("AF572", 5, "plane"),  # Paris–Abidjan, 5 voyageurs
+    ("KQ560", 3, "plane"),  # Nairobi–Abidjan, 3 voyageurs
+    ("ET924", 4, "plane"),  # Addis-Abeba–Abidjan, 4 voyageurs
     ("RAM535", 3, "plane"),  # Casablanca–Abidjan, 3 voyageurs
     ("PORTABJ-22", 4, "boat"),  # bateau partagé
 ]
 
 ORIGIN_COUNTRIES = {
-    "CD": 7,   # RDC : 7 voyageurs (à risque Ebola)
-    "GN": 5,   # Guinée
-    "NG": 4,   # Nigeria
-    "FR": 6,   # France
-    "GH": 3,   # Ghana
-    "UG": 2,   # Ouganda (Ebola)
-    "SL": 2,   # Sierra Leone
-    "LR": 2,   # Liberia
+    "CD": 7,  # RDC : 7 voyageurs (à risque Ebola)
+    "GN": 5,  # Guinée
+    "NG": 4,  # Nigeria
+    "FR": 6,  # France
+    "GH": 3,  # Ghana
+    "UG": 2,  # Ouganda (Ebola)
+    "SL": 2,  # Sierra Leone
+    "LR": 2,  # Liberia
 }
 
 ABIDJAN_BBOX = (-4.05, 5.27, -3.85, 5.43)  # (lng_min, lat_min, lng_max, lat_max)
@@ -131,9 +202,8 @@ class Builder:
         self.entry_points: list[EntryPoint] = list(EntryPoint.objects.all())
         self.countries: dict[str, Country] = {c.code: c for c in Country.objects.all()}
         self.ci = self.countries.get("CI")
-        self.airport = (
-            next((e for e in self.entry_points if e.code == "ABJ-AIRPORT"), None)
-            or (self.entry_points[0] if self.entry_points else None)
+        self.airport = next((e for e in self.entry_points if e.code == "ABJ-AIRPORT"), None) or (
+            self.entry_points[0] if self.entry_points else None
         )
         self.seaport = next((e for e in self.entry_points if e.code == "ABJ-PORT"), self.airport)
         self.created: list[Traveler] = []
@@ -155,15 +225,15 @@ class Builder:
         days_ago: int | None = None,
     ) -> Traveler:
         gender = gender or random.choice(["M", "F"])
-        first_name = first_name or random.choice(
-            FIRST_NAMES_M if gender == "M" else FIRST_NAMES_F
-        )
+        first_name = first_name or random.choice(FIRST_NAMES_M if gender == "M" else FIRST_NAMES_F)
         last_name = last_name or random.choice(LAST_NAMES)
         days_ago = random.randint(0, 30) if days_ago is None else days_ago
         arrival = date.today() - timedelta(days=days_ago)
         arrival_time = time(hour=random.randint(6, 23), minute=random.choice([0, 15, 30, 45]))
-        nat = self.countries.get(nationality_code) if nationality_code else (
-            self.countries.get(random.choice(list(ORIGIN_COUNTRIES.keys())))
+        nat = (
+            self.countries.get(nationality_code)
+            if nationality_code
+            else (self.countries.get(random.choice(list(ORIGIN_COUNTRIES.keys()))))
         )
 
         if in_abidjan:
@@ -174,7 +244,11 @@ class Builder:
         else:
             ci_city = random.choice(NON_ABJ_CITIES)
             city, commune, neighborhood = ci_city[0], ci_city[1], ci_city[2]
-            loc = Point(ci_city[3] + random.uniform(-0.02, 0.02), ci_city[4] + random.uniform(-0.02, 0.02), srid=4326)
+            loc = Point(
+                ci_city[3] + random.uniform(-0.02, 0.02),
+                ci_city[4] + random.uniform(-0.02, 0.02),
+                srid=4326,
+            )
             hotel_name = ""
 
         t = Traveler.objects.create(
@@ -182,13 +256,20 @@ class Builder:
             arrival_time=arrival_time,
             transport_mode=transport_mode,
             flight_or_voyage_number=flight or "",
-            seat_number=f"{random.randint(1, 35)}{random.choice('ABCDEF')}" if transport_mode == "plane" else "",
-            entry_point=entry_point or (self.airport if transport_mode == "plane" else self.seaport),
+            seat_number=(
+                f"{random.randint(1, 35)}{random.choice('ABCDEF')}"
+                if transport_mode == "plane"
+                else ""
+            ),
+            entry_point=entry_point
+            or (self.airport if transport_mode == "plane" else self.seaport),
             last_name=last_name,
             first_name=first_name,
             age=random.randint(18, 70),
             age_unit="years",
-            date_of_birth=date(random.randint(1955, 2005), random.randint(1, 12), random.randint(1, 28)),
+            date_of_birth=date(
+                random.randint(1955, 2005), random.randint(1, 12), random.randint(1, 28)
+            ),
             gender=gender,
             profession=random.choice(PROFESSIONS),
             id_document_type="passport",
@@ -216,7 +297,9 @@ class Builder:
         return t
 
     # ---------- Historique de déplacement ----------
-    def _add_history(self, traveler: Traveler, origin_code: str, *, transits: list[str] | None = None):
+    def _add_history(
+        self, traveler: Traveler, origin_code: str, *, transits: list[str] | None = None
+    ):
         origin = self.countries.get(origin_code)
         if origin:
             TravelHistoryEntry.objects.create(
@@ -228,7 +311,7 @@ class Builder:
                 departure_date=traveler.arrival_date - timedelta(days=random.randint(1, 9)),
                 duration_text=f"{random.randint(3, 20)} jours",
             )
-        for code in (transits or []):
+        for code in transits or []:
             t_country = self.countries.get(code)
             if t_country:
                 TravelHistoryEntry.objects.create(
@@ -240,7 +323,9 @@ class Builder:
                 )
 
     # ---------- Enquête Ebola complète ----------
-    def _make_investigation(self, traveler: Traveler, *, risk_profile: str = "low") -> EbolaInvestigation:
+    def _make_investigation(
+        self, traveler: Traveler, *, risk_profile: str = "low"
+    ) -> EbolaInvestigation:
         """risk_profile in {low, moderate, high, critical}."""
         inv = EbolaInvestigation.objects.create(
             traveler=traveler,
@@ -249,10 +334,10 @@ class Builder:
             notes="Auto-généré par seed_fake_data.",
         )
         exposure = {
-            "low":      (False, False, False, False),
-            "moderate": (True,  False, False, False),
-            "high":     (True,  False, True,  True),
-            "critical": (True,  True,  True,  True),
+            "low": (False, False, False, False),
+            "moderate": (True, False, False, False),
+            "high": (True, False, True, True),
+            "critical": (True, True, True, True),
         }[risk_profile]
         EbolaExposureAssessment.objects.create(
             investigation=inv,
@@ -264,12 +349,18 @@ class Builder:
         )
         temp_map = {"low": 36.7, "moderate": 37.6, "high": 38.6, "critical": 39.3}
         symptoms = {
-            "low":      dict(fever=False, intense_fatigue=False, muscle_joint_pain=False),
-            "moderate": dict(fever=True,  intense_fatigue=True,  muscle_joint_pain=False),
-            "high":     dict(fever=True,  intense_fatigue=True,  muscle_joint_pain=True, severe_headache=True),
+            "low": dict(fever=False, intense_fatigue=False, muscle_joint_pain=False),
+            "moderate": dict(fever=True, intense_fatigue=True, muscle_joint_pain=False),
+            "high": dict(
+                fever=True, intense_fatigue=True, muscle_joint_pain=True, severe_headache=True
+            ),
             "critical": dict(
-                fever=True, intense_fatigue=True, muscle_joint_pain=True,
-                severe_headache=True, diarrhea_nausea_vomiting=True, unexplained_bleeding=True,
+                fever=True,
+                intense_fatigue=True,
+                muscle_joint_pain=True,
+                severe_headache=True,
+                diarrhea_nausea_vomiting=True,
+                unexplained_bleeding=True,
             ),
         }[risk_profile]
         EbolaSymptomReport.objects.create(
@@ -311,7 +402,8 @@ class Builder:
                 )
                 # Profil de risque varié par cluster
                 profile = (
-                    "high" if flight in ("AF572", "ET924") and i == 0
+                    "high"
+                    if flight in ("AF572", "ET924") and i == 0
                     else random.choices(
                         ["low", "moderate", "high"],
                         weights=[5, 3, 2],
@@ -321,7 +413,9 @@ class Builder:
                 # Si vol RAM535, lier à provenance CD
                 if flight in ("AF572", "RAM535", "ET924") and i < 2:
                     self._add_history(t, "CD", transits=["FR"])
-        self.stdout.write(self.style.SUCCESS(f"  → {sum(n for _, n, _ in FLIGHTS_CLUSTERS)} voyageurs créés"))
+        self.stdout.write(
+            self.style.SUCCESS(f"  → {sum(n for _, n, _ in FLIGHTS_CLUSTERS)} voyageurs créés")
+        )
 
     def build_phone_clusters(self):
         self.stdout.write("> Clusters par téléphone partagé")
@@ -350,21 +444,27 @@ class Builder:
                 self._add_history(t, code, transits=random.choice([[], ["FR"], ["ML"], ["MA"]]))
                 profile = "high" if code in ("CD", "UG") and random.random() < 0.4 else "low"
                 self._make_investigation(t, risk_profile=profile)
-        self.stdout.write(self.style.SUCCESS(f"  → {sum(ORIGIN_COUNTRIES.values())} voyageurs créés"))
+        self.stdout.write(
+            self.style.SUCCESS(f"  → {sum(ORIGIN_COUNTRIES.values())} voyageurs créés")
+        )
 
     def build_companion_clusters(self):
         self.stdout.write("> Clusters cas-contact (CompanionLink)")
         # Chaîne 1 : 4 voyageurs (famille élargie)
-        family = [self._make_traveler(
-            in_abidjan=True,
-            hotel=HOTELS_ABIDJAN[0],
-            flight="ET924",
-            transport_mode="plane",
-            days_ago=random.randint(0, 5),
-        ) for _ in range(4)]
+        family = [
+            self._make_traveler(
+                in_abidjan=True,
+                hotel=HOTELS_ABIDJAN[0],
+                flight="ET924",
+                transport_mode="plane",
+                days_ago=random.randint(0, 5),
+            )
+            for _ in range(4)
+        ]
         for i in range(1, 4):
             CompanionLink.objects.create(
-                traveler=family[0], companion=family[i],
+                traveler=family[0],
+                companion=family[i],
                 relationship=random.choice(["Conjoint(e)", "Enfant", "Frère/Sœur"]),
             )
         # Une enquête modérée pour le chef de famille
@@ -373,16 +473,21 @@ class Builder:
             self._make_investigation(member, risk_profile="low")
 
         # Chaîne 2 : 3 voyageurs (collègues)
-        team = [self._make_traveler(
-            in_abidjan=True, hotel=HOTELS_ABIDJAN[1],
-            flight="AF572", transport_mode="plane",
-            days_ago=random.randint(0, 6),
-        ) for _ in range(3)]
+        team = [
+            self._make_traveler(
+                in_abidjan=True,
+                hotel=HOTELS_ABIDJAN[1],
+                flight="AF572",
+                transport_mode="plane",
+                days_ago=random.randint(0, 6),
+            )
+            for _ in range(3)
+        ]
         CompanionLink.objects.create(traveler=team[0], companion=team[1], relationship="Collègue")
         CompanionLink.objects.create(traveler=team[1], companion=team[2], relationship="Collègue")
         for member in team:
             self._make_investigation(member, risk_profile=random.choice(["low", "moderate"]))
-        self.stdout.write(self.style.SUCCESS(f"  → 2 chaînes (4 + 3 voyageurs)"))
+        self.stdout.write(self.style.SUCCESS("  → 2 chaînes (4 + 3 voyageurs)"))
 
     def build_hotel_clusters(self):
         self.stdout.write("> Clusters résidence Abidjan (hôtel)")
@@ -395,8 +500,10 @@ class Builder:
                     flight=random.choice(["", "AT0532", "TP1543"]),
                     days_ago=random.randint(0, 15),
                 )
-                self._make_investigation(t, risk_profile=random.choices(
-                    ["low", "moderate", "high"], weights=[6, 3, 1])[0])
+                self._make_investigation(
+                    t,
+                    risk_profile=random.choices(["low", "moderate", "high"], weights=[6, 3, 1])[0],
+                )
         self.stdout.write(self.style.SUCCESS("  → ~10 voyageurs créés"))
 
     def build_random_extras(self):
@@ -406,12 +513,15 @@ class Builder:
         for _ in range(self.count_extra):
             t = self._make_traveler(
                 flight=random.choice(["", "SN230", "AT0532", "TK553", "DT4536"]),
-                transport_mode=random.choices(["plane", "car", "bus", "boat"], weights=[7, 2, 1, 1])[0],
+                transport_mode=random.choices(
+                    ["plane", "car", "bus", "boat"], weights=[7, 2, 1, 1]
+                )[0],
                 in_abidjan=random.random() > 0.3,
                 days_ago=random.randint(0, 60),
             )
             profile = random.choices(
-                ["low", "moderate", "high", "critical"], weights=[6, 3, 2, 1],
+                ["low", "moderate", "high", "critical"],
+                weights=[6, 3, 2, 1],
             )[0]
             self._make_investigation(t, risk_profile=profile)
         self.stdout.write(self.style.SUCCESS(f"  → {self.count_extra} voyageurs créés"))
@@ -462,9 +572,15 @@ class Builder:
         paths_admin = ["/dashboard", "/surveillance", "/cartographie", "/visites", "/relations"]
         languages = ["fr-FR", "fr", "en-US", "en-GB", "ar", "es"]
         countries = [
-            ("CI", "Côte d'Ivoire"), ("FR", "France"), ("US", "États-Unis"),
-            ("GH", "Ghana"), ("NG", "Nigeria"), ("CD", "RDC"),
-            ("ML", "Mali"), ("SN", "Sénégal"), ("MA", "Maroc"),
+            ("CI", "Côte d'Ivoire"),
+            ("FR", "France"),
+            ("US", "États-Unis"),
+            ("GH", "Ghana"),
+            ("NG", "Nigeria"),
+            ("CD", "RDC"),
+            ("ML", "Mali"),
+            ("SN", "Sénégal"),
+            ("MA", "Maroc"),
         ]
         sessions = [f"sess-{i:04d}" for i in range(30)]
         total = 0
@@ -504,15 +620,20 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--reset", action="store_true",
+            "--reset",
+            action="store_true",
             help="Purge toutes les données voyageurs/enquêtes/pass/alertes/visites avant de re-seeder.",
         )
         parser.add_argument(
-            "--count", type=int, default=20,
+            "--count",
+            type=int,
+            default=20,
             help="Voyageurs aléatoires supplémentaires (au-delà des clusters volontaires).",
         )
         parser.add_argument(
-            "--seed", type=int, default=42,
+            "--seed",
+            type=int,
+            default=42,
             help="Seed du RNG pour reproductibilité.",
         )
 
@@ -533,9 +654,11 @@ class Command(BaseCommand):
 
         # Pré-requis : références (countries + entry points + disease)
         if Country.objects.count() == 0 or EntryPoint.objects.count() == 0:
-            self.stdout.write(self.style.ERROR(
-                "Pré-requis manquants : lancez d'abord `python manage.py seed_reference_data`."
-            ))
+            self.stdout.write(
+                self.style.ERROR(
+                    "Pré-requis manquants : lancez d'abord `python manage.py seed_reference_data`."
+                )
+            )
             return
 
         builder = Builder(self.stdout, self.style, count_extra=opts["count"])
@@ -549,9 +672,11 @@ class Command(BaseCommand):
         builder.build_alerts()
         builder.build_page_visits()
 
-        self.stdout.write(self.style.SUCCESS(
-            f"\nSeed terminé : {len(builder.created)} voyageurs créés au total."
-        ))
-        self.stdout.write(self.style.SUCCESS(
-            "→ Lancez le portail admin et visitez /dashboard, /surveillance, /cartographie, /relations, /visites."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(f"\nSeed terminé : {len(builder.created)} voyageurs créés au total.")
+        )
+        self.stdout.write(
+            self.style.SUCCESS(
+                "→ Lancez le portail admin et visitez /dashboard, /surveillance, /cartographie, /relations, /visites."
+            )
+        )

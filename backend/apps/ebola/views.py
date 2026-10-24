@@ -27,9 +27,14 @@ class EbolaInvestigationViewSet(viewsets.ModelViewSet):
     serializer_class = EbolaInvestigationSerializer
     permission_classes = [IsAuthenticatedAndActive, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT,
-        RoleCode.BORDER_AGENT, RoleCode.FIELD_AGENT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.BORDER_AGENT,
+        RoleCode.FIELD_AGENT,
+        RoleCode.OBSERVER,
     ]
     lookup_field = "case_number"
     filterset_fields = {
@@ -51,7 +56,8 @@ class EbolaInvestigationViewSet(viewsets.ModelViewSet):
         investigation = serializer.save()
         apply_risk_outcome(investigation)
         audit(
-            self.request, action="create",
+            self.request,
+            action="create",
             summary=f"Création enquête Ebola {investigation.case_number}",
             target=investigation,
         )
@@ -77,14 +83,18 @@ class EbolaInvestigationViewSet(viewsets.ModelViewSet):
         if exposure is None:
             ser = EbolaExposureSerializer(data=request.data)
         else:
-            ser = EbolaExposureSerializer(exposure, data=request.data, partial=(request.method == "PATCH"))
+            ser = EbolaExposureSerializer(
+                exposure, data=request.data, partial=(request.method == "PATCH")
+            )
         ser.is_valid(raise_exception=True)
         if exposure is None:
             EbolaExposureAssessment.objects.create(investigation=inv, **ser.validated_data)
         else:
             ser.save()
         apply_risk_outcome(inv)
-        audit(request, action="update", summary=f"Mise à jour exposure {inv.case_number}", target=inv)
+        audit(
+            request, action="update", summary=f"Mise à jour exposure {inv.case_number}", target=inv
+        )
         return Response(EbolaExposureSerializer(inv.exposure).data)
 
     @extend_schema(request=EbolaSymptomReportSerializer, responses=EbolaSymptomReportSerializer)
@@ -96,7 +106,8 @@ class EbolaInvestigationViewSet(viewsets.ModelViewSet):
         ser = EbolaSymptomReportSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         EbolaSymptomReport.objects.create(
-            investigation=inv, reported_by=request.user,
+            investigation=inv,
+            reported_by=request.user,
             **{k: v for k, v in ser.validated_data.items() if k != "investigation"},
         )
         apply_risk_outcome(inv)
@@ -113,7 +124,9 @@ class EbolaInvestigationViewSet(viewsets.ModelViewSet):
         if declaration is None:
             ser = EbolaDeclarationSerializer(data=request.data)
         else:
-            ser = EbolaDeclarationSerializer(declaration, data=request.data, partial=(request.method == "PATCH"))
+            ser = EbolaDeclarationSerializer(
+                declaration, data=request.data, partial=(request.method == "PATCH")
+            )
         ser.is_valid(raise_exception=True)
         if declaration is None:
             EbolaDeclaration.objects.create(investigation=inv, **ser.validated_data)
@@ -128,12 +141,14 @@ class EbolaInvestigationViewSet(viewsets.ModelViewSet):
         inv = self.get_object()
         apply_risk_outcome(inv)
         audit(request, action="update", summary=f"Recompute score {inv.case_number}", target=inv)
-        return Response({
-            "case_number": inv.case_number,
-            "risk_score": inv.risk_score,
-            "risk_level": inv.risk_level,
-            "status": inv.status,
-        })
+        return Response(
+            {
+                "case_number": inv.case_number,
+                "risk_score": inv.risk_score,
+                "risk_level": inv.risk_level,
+                "status": inv.status,
+            }
+        )
 
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request, case_number=None):

@@ -15,6 +15,7 @@ Contient :
   - Lien signé vers le rapport complet
   - Footer avec disclaimer
 """
+
 from __future__ import annotations
 
 import base64
@@ -100,9 +101,9 @@ def _logo_tag(
         initials = "".join(w[0].upper() for w in alt.split()[:3])[:3]
         return (
             f'<div style="display:inline-block;padding:6px 10px;'
-            f'background:{SLATE_100};color:{CI_DARK};font-weight:bold;'
+            f"background:{SLATE_100};color:{CI_DARK};font-weight:bold;"
             f'font-size:12px;letter-spacing:1px;border-radius:6px;">'
-            f'{initials}</div>'
+            f"{initials}</div>"
         )
     wrapper_style = ""
     if bg or padding or radius:
@@ -111,7 +112,7 @@ def _logo_tag(
             f'padding:{padding}px;border-radius:{radius}px;"'
         )
         return (
-            f'<div {wrapper_style}>'
+            f"<div {wrapper_style}>"
             f'<img src="{uri}" alt="{_esc(alt)}" height="{height}" '
             f'style="height:{height}px;width:auto;display:block;" /></div>'
         )
@@ -145,7 +146,7 @@ def _delta_badge(delta_pct: float) -> str:
         bg = SLATE_100
     return (
         f'<span style="background:{bg};color:{color};'
-        f'padding:2px 8px;border-radius:10px;font-size:11px;'
+        f"padding:2px 8px;border-radius:10px;font-size:11px;"
         f'font-weight:bold;">{arrow} {abs(delta_pct):.1f}%</span>'
     )
 
@@ -203,7 +204,9 @@ def _generate_recommendations(agg: dict) -> list[str]:
     return recos
 
 
-def render_weekly_email_html(agg: dict, *, download_url: str = "", pdf_attached: bool = True) -> str:
+def render_weekly_email_html(
+    agg: dict, *, download_url: str = "", pdf_attached: bool = True
+) -> str:
     """Retourne le corps HTML complet du rapport pour envoi email.
 
     Args:
@@ -482,27 +485,26 @@ def _render_exec_summary(travelers, followups, checkins, assistance, alerts, lab
             f'padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 20px 0;">'
             f'<p style="margin:0;line-height:1.6;color:{SLATE_900};">'
             f'<strong style="color:{CI_GREEN};">Semaine calme</strong> — '
-            f'aucune activité enregistrée sur la période <strong>{label}</strong>. '
-            f'La surveillance de routine reste active.'
-            f'</p></div>'
+            f"aucune activité enregistrée sur la période <strong>{label}</strong>. "
+            f"La surveillance de routine reste active."
+            f"</p></div>"
         )
 
     return (
         f'<div style="background:{SLATE_50};border-left:4px solid {CI_ORANGE};'
         f'padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 20px 0;">'
         f'<p style="line-height:1.6;color:{SLATE_900};margin:0;">'
-        f'Sur la période <strong>{label}</strong>, EpiTrace a enregistré '
-        f'<strong>{_fmt_int(n_travelers)} voyageurs</strong>, '
-        f'ouvert <strong>{n_new_fu} nouveaux suivis</strong>, '
-        f'clos <strong>{n_done_fu} suivis</strong> et compte '
-        f'<strong>{_fmt_int(n_active)} personnes actuellement en suivi actif</strong>. '
-        f'Les équipes ont reçu <strong>{_fmt_int(n_checkins)} check-ins</strong> '
-        f'quotidiens ({n_missed} manqués) et traité '
-        f'<strong>{n_assist} demandes d\'assistance</strong>. '
-        f'{n_alerts_open} <strong>alertes sanitaires</strong> restent ouvertes.'
-        f'</p></div>'
+        f"Sur la période <strong>{label}</strong>, EpiTrace a enregistré "
+        f"<strong>{_fmt_int(n_travelers)} voyageurs</strong>, "
+        f"ouvert <strong>{n_new_fu} nouveaux suivis</strong>, "
+        f"clos <strong>{n_done_fu} suivis</strong> et compte "
+        f"<strong>{_fmt_int(n_active)} personnes actuellement en suivi actif</strong>. "
+        f"Les équipes ont reçu <strong>{_fmt_int(n_checkins)} check-ins</strong> "
+        f"quotidiens ({n_missed} manqués) et traité "
+        f"<strong>{n_assist} demandes d'assistance</strong>. "
+        f"{n_alerts_open} <strong>alertes sanitaires</strong> restent ouvertes."
+        f"</p></div>"
     )
-
 
 
 def _render_kpi_cards(travelers, followups, checkins, alerts, assistance) -> str:
@@ -531,7 +533,9 @@ def _render_kpi_cards(travelers, followups, checkins, alerts, assistance) -> str
         </td>
         """
     cells += "</tr>"
-    return f'<table role="presentation" cellpadding="0" cellspacing="0" width="100%">{cells}</table>'
+    return (
+        f'<table role="presentation" cellpadding="0" cellspacing="0" width="100%">{cells}</table>'
+    )
 
 
 def _render_risk_table(risks: dict) -> str:
@@ -652,12 +656,14 @@ def _render_breakdowns(agg: dict) -> str:
             f'<span style="float:right;font-weight:bold;color:{CI_ORANGE};">{_fmt_int(r.get("count", 0))}</span></li>'
             for r in rows
         )
-        sections.append(f"""
+        sections.append(
+            f"""
         <h3 style="color:{CI_DARK};font-size:14px;margin:24px 0 8px 0;">{emoji} {title}</h3>
         <ul style="list-style:none;padding:12px 16px;background:{SLATE_50};border-radius:8px;margin:0;">
           {items}
         </ul>
-        """)
+        """
+        )
     return "".join(sections)
 
 

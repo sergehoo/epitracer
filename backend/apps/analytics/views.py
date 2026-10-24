@@ -1,11 +1,12 @@
 """Endpoints d'agrégation pour le dashboard national + tracking visites."""
+
 from __future__ import annotations
 
 from collections import OrderedDict
 from datetime import timedelta
 
 from django.core.cache import cache
-from django.db.models import Avg, Count, F, Q
+from django.db.models import Count
 from django.db.models.functions import ExtractHour, ExtractIsoWeekDay, TruncDate
 from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -37,8 +38,12 @@ OPEN_ALERT_STATUSES = ["open", "ack", "investigating", "OPEN", "ACK", "INVESTIGA
 class DashboardOverviewView(APIView):
     permission_classes = [IsAuthenticated, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.OBSERVER,
     ]
 
     def get(self, request):
@@ -56,16 +61,22 @@ class DashboardOverviewView(APIView):
                 "total": Traveler.objects.count(),
                 "last_24h": Traveler.objects.filter(created_at__gte=last_24h).count(),
                 "by_status": dict(
-                    Traveler.objects.values_list("current_health_status").annotate(c=Count("id")).values_list("current_health_status", "c")
+                    Traveler.objects.values_list("current_health_status")
+                    .annotate(c=Count("id"))
+                    .values_list("current_health_status", "c")
                 ),
             },
             "ebola": {
                 "total": EbolaInvestigation.objects.count(),
                 "by_status": dict(
-                    EbolaInvestigation.objects.values_list("status").annotate(c=Count("id")).values_list("status", "c")
+                    EbolaInvestigation.objects.values_list("status")
+                    .annotate(c=Count("id"))
+                    .values_list("status", "c")
                 ),
                 "by_risk": dict(
-                    EbolaInvestigation.objects.values_list("risk_level").annotate(c=Count("id")).values_list("risk_level", "c")
+                    EbolaInvestigation.objects.values_list("risk_level")
+                    .annotate(c=Count("id"))
+                    .values_list("risk_level", "c")
                 ),
                 "last_7d": EbolaInvestigation.objects.filter(created_at__gte=last_7d).count(),
             },
@@ -80,10 +91,14 @@ class DashboardOverviewView(APIView):
             },
             "alerts": {
                 "open": HealthAlert.objects.filter(status="open").count(),
-                "critical_24h": HealthAlert.objects.filter(severity="critical", created_at__gte=last_24h).count(),
+                "critical_24h": HealthAlert.objects.filter(
+                    severity="critical", created_at__gte=last_24h
+                ).count(),
             },
             "visits": {
-                "today": PageVisit.objects.filter(is_bot=False, created_at__date=now.date()).count(),
+                "today": PageVisit.objects.filter(
+                    is_bot=False, created_at__date=now.date()
+                ).count(),
                 "last_7d": PageVisit.objects.filter(is_bot=False, created_at__gte=last_7d).count(),
             },
             "generated_at": now.isoformat(),
@@ -105,8 +120,12 @@ class NationalDashboardView(APIView):
 
     permission_classes = [IsAuthenticated, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.OBSERVER,
     ]
 
     def get(self, request):
@@ -151,7 +170,8 @@ class NationalDashboardView(APIView):
         if country_filter:
             try:
                 tids = TravelHistoryEntry.objects.filter(
-                    role="origin", country__code=country_filter,
+                    role="origin",
+                    country__code=country_filter,
                 ).values_list("traveler_id", flat=True)
                 travelers_qs = travelers_qs.filter(id__in=tids)
             except Exception:
@@ -198,10 +218,12 @@ class NationalDashboardView(APIView):
         period_travelers = travelers_qs.filter(created_at__gte=period_start)
         period_invests = invest_qs.filter(created_at__gte=period_start)
         prev_period_travelers = travelers_qs.filter(
-            created_at__gte=prev_period_start, created_at__lt=period_start,
+            created_at__gte=prev_period_start,
+            created_at__lt=period_start,
         )
         prev_period_invests = invest_qs.filter(
-            created_at__gte=prev_period_start, created_at__lt=period_start,
+            created_at__gte=prev_period_start,
+            created_at__lt=period_start,
         )
 
         # Demain pour anticipation opérationnelle (équipes points d'entrée)
@@ -227,11 +249,10 @@ class NationalDashboardView(APIView):
             ).count(),
             "passes_issued": HealthPass.objects.count(),
             "passes_active": HealthPass.objects.filter(status="active").count(),
-            "alerts_open": HealthAlert.objects.filter(
-                status__in=OPEN_ALERT_STATUSES
-            ).count(),
+            "alerts_open": HealthAlert.objects.filter(status__in=OPEN_ALERT_STATUSES).count(),
             "alerts_critical_24h": HealthAlert.objects.filter(
-                severity__iexact="critical", created_at__gte=last_24h,
+                severity__iexact="critical",
+                created_at__gte=last_24h,
             ).count(),
             "high_risk_travelers": travelers_qs.filter(
                 current_health_status__in=["suspect", "confirmed"],
@@ -242,6 +263,7 @@ class NationalDashboardView(APIView):
 
         # Comparaison période vs période précédente
         if compare:
+
             def _trend(curr: int, prev: int) -> dict:
                 if prev == 0:
                     return {"current": curr, "previous": 0, "trend_pct": 100 if curr > 0 else 0}
@@ -250,7 +272,8 @@ class NationalDashboardView(APIView):
 
             kpis["comparison"] = {
                 "travelers": _trend(
-                    period_travelers.count(), prev_period_travelers.count(),
+                    period_travelers.count(),
+                    prev_period_travelers.count(),
                 ),
                 "cases_critical": _trend(
                     period_invests.filter(risk_level="critical").count(),
@@ -265,9 +288,11 @@ class NationalDashboardView(APIView):
         # Check-ins (DailyCheck via quarantine)
         try:
             from apps.quarantine.models import DailyCheck
+
             kpis["checkins_today"] = DailyCheck.objects.filter(check_date=today).count()
             kpis["checkins_with_symptoms_today"] = DailyCheck.objects.filter(
-                check_date=today, has_symptoms=True,
+                check_date=today,
+                has_symptoms=True,
             ).count()
             # Missed = quarantines actives sans daily_check récent
             active_quars = QuarantineRecord.objects.filter(
@@ -285,17 +310,19 @@ class NationalDashboardView(APIView):
         # Série temporelle sur la période choisie
         # ------------------------------------------------------------------
         timeline_raw = (
-            period_travelers
-            .annotate(d=TruncDate("created_at"))
-            .values("d").annotate(count=Count("id")).order_by("d")
+            period_travelers.annotate(d=TruncDate("created_at"))
+            .values("d")
+            .annotate(count=Count("id"))
+            .order_by("d")
         )
         timeline_map = {row["d"].isoformat(): row["count"] for row in timeline_raw}
 
         # Cas confirmés/suspects par jour (Ebola investigations)
         cases_raw = (
-            period_invests
-            .annotate(d=TruncDate("created_at"))
-            .values("d", "risk_level").annotate(count=Count("id")).order_by("d")
+            period_invests.annotate(d=TruncDate("created_at"))
+            .values("d", "risk_level")
+            .annotate(count=Count("id"))
+            .order_by("d")
         )
         cases_map: dict[str, dict[str, int]] = {}
         for row in cases_raw:
@@ -322,22 +349,27 @@ class NationalDashboardView(APIView):
         top_entry_points = list(
             period_travelers.filter(entry_point__isnull=False)
             .values("entry_point__name", "entry_point__code")
-            .annotate(count=Count("id")).order_by("-count")[:8]
+            .annotate(count=Count("id"))
+            .order_by("-count")[:8]
         )
 
         # ------------------------------------------------------------------
         # Top pays/nationalités sur la période
         # ------------------------------------------------------------------
         period_origins = TravelHistoryEntry.objects.filter(
-            role="origin", traveler__in=period_travelers,
+            role="origin",
+            traveler__in=period_travelers,
         )
         try:
             top_origins = list(
                 period_origins.values(
-                    "country__code", "country__name",
-                    "country__risk_level", "country__is_monitored",
+                    "country__code",
+                    "country__name",
+                    "country__risk_level",
+                    "country__is_monitored",
                 )
-                .annotate(count=Count("id")).order_by("-count")[:10]
+                .annotate(count=Count("id"))
+                .order_by("-count")[:10]
             )
         except Exception:  # noqa: BLE001
             top_origins = []
@@ -371,7 +403,9 @@ class NationalDashboardView(APIView):
                 for c in Country.objects.filter(is_monitored=True)
             ),
             key=lambda r: (
-                -COUNTRY_RISK_RANK.get(r["risk_level"], 0), -r["arrivals_period"], r["name"],
+                -COUNTRY_RISK_RANK.get(r["risk_level"], 0),
+                -r["arrivals_period"],
+                r["name"],
             ),
         )
 
@@ -381,7 +415,8 @@ class NationalDashboardView(APIView):
         top_nationalities = list(
             period_travelers.exclude(nationality__isnull=True)
             .values("nationality__code", "nationality__name")
-            .annotate(count=Count("id")).order_by("-count")[:10]
+            .annotate(count=Count("id"))
+            .order_by("-count")[:10]
         )
 
         # ------------------------------------------------------------------
@@ -389,7 +424,8 @@ class NationalDashboardView(APIView):
         # ------------------------------------------------------------------
         statuses = dict(
             travelers_qs.values_list("current_health_status")
-            .annotate(c=Count("id")).values_list("current_health_status", "c")
+            .annotate(c=Count("id"))
+            .values_list("current_health_status", "c")
         )
 
         # ------------------------------------------------------------------
@@ -397,7 +433,8 @@ class NationalDashboardView(APIView):
         # ------------------------------------------------------------------
         risk_levels = dict(
             period_invests.values_list("risk_level")
-            .annotate(c=Count("id")).values_list("risk_level", "c")
+            .annotate(c=Count("id"))
+            .values_list("risk_level", "c")
         )
 
         # ------------------------------------------------------------------
@@ -410,9 +447,15 @@ class NationalDashboardView(APIView):
         funnel_followup = quars_qs.filter(traveler__in=period_travelers).count()
         try:
             from apps.quarantine.models import DailyCheck
-            funnel_checked = DailyCheck.objects.filter(
-                quarantine__traveler__in=period_travelers,
-            ).values("quarantine_id").distinct().count()
+
+            funnel_checked = (
+                DailyCheck.objects.filter(
+                    quarantine__traveler__in=period_travelers,
+                )
+                .values("quarantine_id")
+                .distinct()
+                .count()
+            )
         except Exception:
             funnel_checked = 0
         funnel_closed = quars_qs.filter(
@@ -432,14 +475,13 @@ class NationalDashboardView(APIView):
         # ------------------------------------------------------------------
         try:
             hourly_raw = (
-                period_travelers
-                .annotate(h=ExtractHour("created_at"))
-                .values("h").annotate(c=Count("id")).order_by("h")
+                period_travelers.annotate(h=ExtractHour("created_at"))
+                .values("h")
+                .annotate(c=Count("id"))
+                .order_by("h")
             )
             hourly_map = {row["h"]: row["c"] for row in hourly_raw}
-            arrivals_by_hour = [
-                {"hour": h, "count": hourly_map.get(h, 0)} for h in range(24)
-            ]
+            arrivals_by_hour = [{"hour": h, "count": hourly_map.get(h, 0)} for h in range(24)]
         except Exception:
             arrivals_by_hour = [{"hour": h, "count": 0} for h in range(24)]
 
@@ -448,15 +490,21 @@ class NationalDashboardView(APIView):
         # ------------------------------------------------------------------
         try:
             from apps.quarantine.models import DailyCheck
+
             active_q = quars_qs.filter(
                 status__in=[QuarantineStatus.ACTIVE, "EXTENDED"],
             )
             total_active = active_q.count()
-            with_recent = active_q.filter(
-                daily_checks__check_date__gte=last_48h.date(),
-            ).distinct().count()
+            with_recent = (
+                active_q.filter(
+                    daily_checks__check_date__gte=last_48h.date(),
+                )
+                .distinct()
+                .count()
+            )
             checkin_compliance_pct = round(
-                (with_recent / total_active * 100) if total_active else 0, 1,
+                (with_recent / total_active * 100) if total_active else 0,
+                1,
             )
         except Exception:
             checkin_compliance_pct = 0
@@ -477,7 +525,9 @@ class NationalDashboardView(APIView):
             }
             for a in HealthAlert.objects.filter(
                 status__in=OPEN_ALERT_STATUSES,
-            ).order_by("-created_at")[:10]
+            ).order_by(
+                "-created_at"
+            )[:10]
         ]
 
         data = {
@@ -516,15 +566,21 @@ class NationalDashboardView(APIView):
 class EntryPointFlowsView(APIView):
     permission_classes = [IsAuthenticated, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.OBSERVER,
     ]
 
     def get(self, request):
         since = timezone.now().date() - timedelta(days=7)
         data = (
             Traveler.objects.filter(arrival_date__gte=since)
-            .values("entry_point__name").annotate(count=Count("id")).order_by("-count")
+            .values("entry_point__name")
+            .annotate(count=Count("id"))
+            .order_by("-count")
         )
         return Response(list(data))
 
@@ -534,14 +590,16 @@ class HeatmapView(APIView):
 
     permission_classes = [IsAuthenticated, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.OBSERVER,
     ]
 
     def get(self, request):
         qs = (
-            Traveler.objects
-            .exclude(confinement_location__isnull=True)
+            Traveler.objects.exclude(confinement_location__isnull=True)
             .select_related("entry_point", "nationality")
             .prefetch_related("ebola_investigations")
         )
@@ -564,20 +622,22 @@ class HeatmapView(APIView):
         out = []
         for t in qs:
             last_inv = t.ebola_investigations.order_by("-created_at").first()
-            out.append({
-                "public_id": t.public_id,
-                "lat": t.confinement_location.y,
-                "lng": t.confinement_location.x,
-                "status": t.current_health_status,
-                "full_name": t.full_name,
-                "entry_point": t.entry_point.name if t.entry_point_id else None,
-                "entry_point_id": t.entry_point_id,
-                "nationality": t.nationality.code if t.nationality_id else None,
-                "risk_level": last_inv.risk_level if last_inv else None,
-                "risk_score": last_inv.risk_score if last_inv else None,
-                "city": t.confinement_city or t.confinement_commune,
-                "arrival_date": t.arrival_date.isoformat() if t.arrival_date else None,
-            })
+            out.append(
+                {
+                    "public_id": t.public_id,
+                    "lat": t.confinement_location.y,
+                    "lng": t.confinement_location.x,
+                    "status": t.current_health_status,
+                    "full_name": t.full_name,
+                    "entry_point": t.entry_point.name if t.entry_point_id else None,
+                    "entry_point_id": t.entry_point_id,
+                    "nationality": t.nationality.code if t.nationality_id else None,
+                    "risk_level": last_inv.risk_level if last_inv else None,
+                    "risk_score": last_inv.risk_score if last_inv else None,
+                    "city": t.confinement_city or t.confinement_commune,
+                    "arrival_date": t.arrival_date.isoformat() if t.arrival_date else None,
+                }
+            )
         return Response(out)
 
 
@@ -626,7 +686,10 @@ class VisitsOverviewView(APIView):
 
     permission_classes = [IsAuthenticated, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.OBSERVER,
     ]
 
     def get(self, request):
@@ -666,7 +729,9 @@ class VisitsOverviewView(APIView):
 
         by_day_qs = (
             current_qs.annotate(day=TruncDate("created_at"))
-            .values("day").annotate(count=Count("id")).order_by("day")
+            .values("day")
+            .annotate(count=Count("id"))
+            .order_by("day")
         )
         day_map = OrderedDict()
         cur = start.date()
@@ -693,20 +758,19 @@ class VisitsOverviewView(APIView):
         top_paths = list(
             current_qs.values("path").annotate(count=Count("id")).order_by("-count")[:15]
         )
-        by_portal = list(
-            current_qs.values("portal").annotate(count=Count("id")).order_by("-count")
-        )
+        by_portal = list(current_qs.values("portal").annotate(count=Count("id")).order_by("-count"))
         top_languages = list(
             current_qs.exclude(language="")
-            .values("language").annotate(count=Count("id")).order_by("-count")[:10]
+            .values("language")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:10]
         )
 
         # Top referrers (nettoyés : on ne garde que host + éventuellement les
         # sous-arbres critiques). On dédoublonne « (direct) » pour visites sans
         # referrer.
         top_referrers_raw = (
-            current_qs.values("referrer")
-            .annotate(count=Count("id")).order_by("-count")[:40]
+            current_qs.values("referrer").annotate(count=Count("id")).order_by("-count")[:40]
         )
         ref_map: dict[str, int] = {}
         for row in top_referrers_raw:
@@ -717,9 +781,12 @@ class VisitsOverviewView(APIView):
                 # Normalisation : garde host + premier segment de path
                 try:
                     from urllib.parse import urlparse
+
                     p = urlparse(raw if "://" in raw else f"https://{raw}")
                     host = (p.hostname or raw).replace("www.", "")
-                    key = host if not p.path or p.path in ("/", "") else f"{host}{p.path.rstrip('/')}"
+                    key = (
+                        host if not p.path or p.path in ("/", "") else f"{host}{p.path.rstrip('/')}"
+                    )
                     # Filtre auto-referrers internes
                     if host.endswith(("destinationci.com", "veillesanitaire.com")):
                         key = "(interne)"
@@ -728,7 +795,8 @@ class VisitsOverviewView(APIView):
             ref_map[key] = ref_map.get(key, 0) + row["count"]
         top_referrers = sorted(
             ({"referrer": k, "count": v} for k, v in ref_map.items()),
-            key=lambda x: x["count"], reverse=True,
+            key=lambda x: x["count"],
+            reverse=True,
         )[:10]
 
         # Heatmap : jour de la semaine (1=lundi..7=dimanche) × heure locale
@@ -747,7 +815,9 @@ class VisitsOverviewView(APIView):
         # Distribution par heure sur la période (0..23)
         by_hour_qs = (
             current_qs.annotate(hour=ExtractHour("created_at"))
-            .values("hour").annotate(count=Count("id")).order_by("hour")
+            .values("hour")
+            .annotate(count=Count("id"))
+            .order_by("hour")
         )
         hour_map = OrderedDict((h, 0) for h in range(24))
         for row in by_hour_qs:
@@ -757,13 +827,18 @@ class VisitsOverviewView(APIView):
 
         # Bots (dénombrement rapide sur la période — utile pour toggle)
         bots_count = PageVisit.objects.filter(
-            created_at__gte=start, is_bot=True,
+            created_at__gte=start,
+            is_bot=True,
             **({"portal": portal} if portal else {}),
         ).count()
 
         # Utilisateurs "actifs" (proxy : visites dans les 5 dernières minutes)
-        active_now = base_qs.filter(created_at__gte=now - timedelta(minutes=5)) \
-            .values("session_id").distinct().count()
+        active_now = (
+            base_qs.filter(created_at__gte=now - timedelta(minutes=5))
+            .values("session_id")
+            .distinct()
+            .count()
+        )
 
         # Répartition device (mobile / desktop / api) — heuristique user-agent
         mobile = current_qs.filter(user_agent__iregex=r"(iphone|android|mobile|ipad)").count()
@@ -775,20 +850,22 @@ class VisitsOverviewView(APIView):
             {"device": "api", "count": api_hits},
         ]
 
-        return Response({
-            "days": days,
-            "exclude_bots": exclude_bots,
-            "portal_filter": portal,
-            "kpi": {**kpi, "bots_count": bots_count, "active_now": active_now},
-            "by_day": by_day,
-            "by_hour": by_hour,
-            "by_hour_dow": by_hour_dow,
-            "top_countries": top_countries,
-            "top_cities": top_cities,
-            "top_paths": top_paths,
-            "top_referrers": top_referrers,
-            "by_portal": by_portal,
-            "top_languages": top_languages,
-            "devices": devices,
-            "generated_at": now.isoformat(),
-        })
+        return Response(
+            {
+                "days": days,
+                "exclude_bots": exclude_bots,
+                "portal_filter": portal,
+                "kpi": {**kpi, "bots_count": bots_count, "active_now": active_now},
+                "by_day": by_day,
+                "by_hour": by_hour,
+                "by_hour_dow": by_hour_dow,
+                "top_countries": top_countries,
+                "top_cities": top_cities,
+                "top_paths": top_paths,
+                "top_referrers": top_referrers,
+                "by_portal": by_portal,
+                "top_languages": top_languages,
+                "devices": devices,
+                "generated_at": now.isoformat(),
+            }
+        )

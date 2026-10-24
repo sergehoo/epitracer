@@ -9,6 +9,7 @@
 - GET /api/v1/ebola/public/pass/<public_id>/
     Consultation publique du statut du voyageur + lien PDF + QR token.
 """
+
 from __future__ import annotations
 
 import base64
@@ -128,14 +129,19 @@ def _rate_limited(request, rule: str, identity: str, *, phone: str = "") -> Resp
         return None
     ip = ratelimit.client_ip(request)
     log_security_event(
-        SecurityEventKind.RATE_LIMITED, source="public_registration", ip=ip, phone=phone,
+        SecurityEventKind.RATE_LIMITED,
+        source="public_registration",
+        ip=ip,
+        phone=phone,
         details={"rule": rule, "count": result.count, "limit": result.limit},
         dedupe=f"registration:{rule}:{identity}",
     )
     resp = Response(
-        {"detail": (
-            "Trop d'inscriptions depuis cette connexion ou pour ce numéro. Réessayez plus tard."
-        )},
+        {
+            "detail": (
+                "Trop d'inscriptions depuis cette connexion ou pour ce numéro. Réessayez plus tard."
+            )
+        },
         status=status.HTTP_429_TOO_MANY_REQUESTS,
     )
     resp["Retry-After"] = str(result.retry_after)
@@ -151,7 +157,8 @@ def _registration_guard(request) -> Response | None:
     captcha = turnstile.check_request(request, "public_registration")
     if not captcha.ok:
         return Response(
-            {"detail": turnstile.failure_message(captcha)}, status=status.HTTP_400_BAD_REQUEST,
+            {"detail": turnstile.failure_message(captcha)},
+            status=status.HTTP_400_BAD_REQUEST,
         )
     return (
         _rate_limited(request, "registration_ip", ratelimit.client_ip(request))
@@ -190,7 +197,7 @@ class PublicTravelerRegisterView(APIView):
         responses={201: OpenApiResponse(description="Voyageur enregistré, pass délivré.")},
         summary="Enregistrement public voyageur (fiche INHP Ebola)",
         description="Soumission publique stricte conforme à la fiche officielle INHP. "
-                    "Crée le voyageur, ouvre une enquête Ebola, calcule le score, génère le pass.",
+        "Crée le voyageur, ouvre une enquête Ebola, calcule le score, génère le pass.",
     )
     def post(self, request):
         key = dedup.idempotency_key(request)  # 400 si l'en-tête est malformé
@@ -308,7 +315,8 @@ class PublicTravelerRegisterView(APIView):
 
             # --- Section 7 : signature, conservée sur le voyageur quelle que soit la maladie ---
             sig_file, sig_hash = _decode_signature(
-                declaration.get("signature_data_url", ""), traveler.public_id,
+                declaration.get("signature_data_url", ""),
+                traveler.public_id,
             )
             if sig_file is not None:
                 traveler.consent_signature.save(sig_file.name, sig_file, save=False)
@@ -318,12 +326,19 @@ class PublicTravelerRegisterView(APIView):
             investigation = None
             if Disease.objects.filter(code="EBOLA", is_active=True).exists():
                 investigation = _create_ebola_investigation(
-                    traveler, entry_point, exposure, symptoms, declaration, sig_file, sig_hash,
+                    traveler,
+                    entry_point,
+                    exposure,
+                    symptoms,
+                    declaration,
+                    sig_file,
+                    sig_hash,
                 )
 
             # --- Autres maladies : qualification par règles, un suivi par maladie ---
             qualification = apply_screenings(
-                traveler, data.get("screenings") or [],
+                traveler,
+                data.get("screenings") or [],
                 symptom_codes=data.get("symptom_codes") or [],
                 common_symptoms=symptoms,
             )
@@ -333,15 +348,22 @@ class PublicTravelerRegisterView(APIView):
             # --- Pass : dépend de l'enregistrement, jamais d'une maladie ---
             level, score = _registration_risk(investigation, qualification)
             hp = issue_pass_for_registration(
-                traveler, risk_level=level, risk_score=score,
+                traveler,
+                risk_level=level,
+                risk_score=score,
                 reference=investigation.case_number if investigation else traveler.public_id,
             )
 
             audit(
-                request, action="create",
+                request,
+                action="create",
                 summary=f"Auto-enregistrement portail public — {traveler.public_id} → {hp.pass_number}",
                 target=investigation or traveler,
-                payload={"level": level, "score": score, "followups": [f["disease_code"] for f in followups]},
+                payload={
+                    "level": level,
+                    "score": score,
+                    "followups": [f["disease_code"] for f in followups],
+                },
             )
 
         # Règle de surveillance : pays de provenance/transit à risque élevé ou critique.
@@ -349,7 +371,11 @@ class PublicTravelerRegisterView(APIView):
 
         return Response(
             _registration_payload(
-                traveler, investigation, hp, level, followups,
+                traveler,
+                investigation,
+                hp,
+                level,
+                followups,
                 review_pending=any(q["review_pending"] for q in qualification),
             ),
             status=status.HTTP_201_CREATED,
@@ -377,7 +403,13 @@ def _claim_registration(request, key: str, identite: dict, voyage: dict):
 
 
 def _registration_payload(
-    traveler, investigation, hp, level, followups, *, review_pending,
+    traveler,
+    investigation,
+    hp,
+    level,
+    followups,
+    *,
+    review_pending,
 ) -> dict:
     return {
         "traveler": {
@@ -389,15 +421,19 @@ def _registration_payload(
         "investigation": (
             EbolaInvestigationSerializer(investigation).data if investigation else None
         ),
-        "pass": {
-            "pass_number": hp.pass_number,
-            "uuid": str(hp.uuid),
-            "status": hp.status,
-            "expires_at": hp.expires_at,
-            "qr_url": hp.qr_image.url if hp.qr_image else None,
-            "pdf_url": hp.pdf_file.url if hp.pdf_file else None,
-            "qr_token": _safe_qr_token(hp),
-        } if hp else None,
+        "pass": (
+            {
+                "pass_number": hp.pass_number,
+                "uuid": str(hp.uuid),
+                "status": hp.status,
+                "expires_at": hp.expires_at,
+                "qr_url": hp.qr_image.url if hp.qr_image else None,
+                "pdf_url": hp.pdf_file.url if hp.pdf_file else None,
+                "qr_token": _safe_qr_token(hp),
+            }
+            if hp
+            else None
+        ),
         "instructions": _public_instructions(level, followups),
         "followups": followups,
         # Un agent vérifiera certaines réponses : le voyageur est simplement prévenu.
@@ -431,19 +467,26 @@ def _already_registered(request, traveler) -> Response:
         if s.decision == ScreeningDecision.FOLLOWUP
     ]
     audit(
-        request, action="read",
+        request,
+        action="read",
         summary=f"Soumission en double — fiche existante renvoyée {traveler.public_id}",
         target=traveler,
     )
     data = _registration_payload(
-        traveler, investigation, hp, hp.risk_level if hp else "low", followups,
+        traveler,
+        investigation,
+        hp,
+        hp.risk_level if hp else "low",
+        followups,
         review_pending=any(s.review_status == ScreeningReviewStatus.PENDING for s in screenings),
     )
     data["already_registered"] = True
     return Response(data, status=status.HTTP_200_OK)
 
 
-def _create_ebola_investigation(traveler, entry_point, exposure, symptoms, declaration, sig_file, sig_hash):
+def _create_ebola_investigation(
+    traveler, entry_point, exposure, symptoms, declaration, sig_file, sig_hash
+):
     """Fiche passager INHP Ebola : enquête, exposition, symptômes, déclaration, score."""
     investigation = EbolaInvestigation.objects.create(
         traveler=traveler,
@@ -517,8 +560,10 @@ def _safe_qr_token(hp: HealthPass) -> str:
     """Reconstruit le token QR à partir des données stockées."""
     # On régénère le token signé à la volée pour l'afficher côté front.
     from apps.health_pass.crypto import PREFIX, _b64u_encode, sign_payload
+
     if hp.payload and hp.signature_b64:
         import json
+
         payload_json = json.dumps(hp.payload, separators=(",", ":"), sort_keys=True).encode()
         return f"{PREFIX}.{_b64u_encode(payload_json)}.{hp.signature_b64}"
     token, _ = sign_payload(hp.payload or {})
@@ -579,7 +624,9 @@ class PublicPassConsultView(APIView):
     def get(self, request, public_id: str):
         traveler = get_object_or_404(Traveler, public_id=public_id)
         hp = HealthPass.objects.filter(traveler=traveler).order_by("-created_at").first()
-        last_inv = EbolaInvestigation.objects.filter(traveler=traveler).order_by("-created_at").first()
+        last_inv = (
+            EbolaInvestigation.objects.filter(traveler=traveler).order_by("-created_at").first()
+        )
         data = {
             "traveler": {
                 "public_id": traveler.public_id,
@@ -641,8 +688,12 @@ class PublicPassPdfView(APIView):
         hp = HealthPass.objects.filter(traveler=traveler).order_by("-created_at").first()
         if not hp or not hp.pdf_file:
             return Response({"detail": "Pass PDF indisponible."}, status=404)
-        audit(request, action="export",
-              summary=f"Téléchargement public pass {hp.pass_number}", target=hp)
+        audit(
+            request,
+            action="export",
+            summary=f"Téléchargement public pass {hp.pass_number}",
+            target=hp,
+        )
         return FileResponse(
             open(hp.pdf_file.path, "rb"),
             as_attachment=True,
@@ -659,9 +710,12 @@ class PublicOfficialFormPdfView(APIView):
     def get(self, request, public_id: str):
         traveler = get_object_or_404(Traveler, public_id=public_id)
         pdf_bytes = render_official_form_pdf(traveler)
-        audit(request, action="export",
-              summary=f"Téléchargement fiche officielle INHP {traveler.public_id}",
-              target=traveler)
+        audit(
+            request,
+            action="export",
+            summary=f"Téléchargement fiche officielle INHP {traveler.public_id}",
+            target=traveler,
+        )
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = (
             f'attachment; filename="FicheINHP_{traveler.public_id}.pdf"'
@@ -690,6 +744,7 @@ class PublicPassportUploadView(APIView):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         from rest_framework.parsers import FormParser, MultiPartParser
+
         self.parser_classes = [MultiPartParser, FormParser]
 
     @extend_schema(
@@ -723,7 +778,8 @@ class PublicPassportUploadView(APIView):
         except DjangoValidationError as exc:
             # Aucun PII dans le message (le validator évite déjà de logger le nom).
             detail = (
-                exc.messages[0] if getattr(exc, "messages", None)
+                exc.messages[0]
+                if getattr(exc, "messages", None)
                 else "Format de fichier non supporté."
             )
             return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
@@ -731,15 +787,20 @@ class PublicPassportUploadView(APIView):
         traveler.passport_document = file
         traveler.passport_uploaded_at = timezone.now()
         traveler.save(update_fields=["passport_document", "passport_uploaded_at"])
-        audit(request, action="update",
-              summary=f"Upload passeport public {traveler.public_id}",
-              target=traveler,
-              # On audite la taille + le MIME effectivement détecté (PAS le
-              # Content-Type déclaré, qui peut être falsifié).
-              payload={"size": file.size, "detected_mime": detected_mime})
-        return Response({
-            "detail": "Document de voyage enregistré.",
-            "public_id": traveler.public_id,
-            "url": traveler.passport_document.url,
-            "uploaded_at": traveler.passport_uploaded_at,
-        })
+        audit(
+            request,
+            action="update",
+            summary=f"Upload passeport public {traveler.public_id}",
+            target=traveler,
+            # On audite la taille + le MIME effectivement détecté (PAS le
+            # Content-Type déclaré, qui peut être falsifié).
+            payload={"size": file.size, "detected_mime": detected_mime},
+        )
+        return Response(
+            {
+                "detail": "Document de voyage enregistré.",
+                "public_id": traveler.public_id,
+                "url": traveler.passport_document.url,
+                "uploaded_at": traveler.passport_uploaded_at,
+            }
+        )

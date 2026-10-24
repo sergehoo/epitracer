@@ -8,6 +8,7 @@ puisqu'il est généré aléatoirement et n'est connu que du voyageur).
 Les rate-limits par scope sont configurés dans `urls.py` via
 `ScopedRateThrottle`.
 """
+
 from rest_framework import serializers
 
 from .models import ConsentScope, LocationEventType
@@ -46,8 +47,12 @@ class CheckinSerializer(serializers.Serializer):
     )
     symptoms = serializers.DictField(child=serializers.BooleanField(), required=False, default=dict)
     temperature_celsius = serializers.DecimalField(
-        max_digits=4, decimal_places=1, min_value=30, max_value=45,
-        required=False, allow_null=True,
+        max_digits=4,
+        decimal_places=1,
+        min_value=30,
+        max_value=45,
+        required=False,
+        allow_null=True,
     )
     notes = serializers.CharField(required=False, allow_blank=True, max_length=500)
     needs_contact = serializers.BooleanField(required=False, default=False)
@@ -73,7 +78,8 @@ class LocationPingSerializer(serializers.Serializer):
     speed_mps = serializers.FloatField(required=False, allow_null=True)
     heading_deg = serializers.FloatField(required=False, allow_null=True)
     event_type = serializers.ChoiceField(
-        choices=LocationEventType.choices, required=False,
+        choices=LocationEventType.choices,
+        required=False,
         default=LocationEventType.MANUAL_SHARE,
     )
     device_info = serializers.CharField(required=False, allow_blank=True, max_length=200)

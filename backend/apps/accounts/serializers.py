@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-from django_otp.plugins.otp_totp.models import TOTPDevice
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -30,6 +29,7 @@ class EpidemiTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         from django.utils import timezone
+
         from apps.accounts.services.email_otp import verify_otp
 
         mfa_code = attrs.pop("mfa_code", "") or ""
@@ -39,32 +39,40 @@ class EpidemiTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # ── Vérouillage compte (manuel ou temporaire automatique) ─────
         if user.is_locked:
-            raise serializers.ValidationError({"detail": "Compte verrouillé. Contactez l'administrateur."})
+            raise serializers.ValidationError(
+                {"detail": "Compte verrouillé. Contactez l'administrateur."}
+            )
         if user.locked_until and user.locked_until > timezone.now():
             remaining_min = int((user.locked_until - timezone.now()).total_seconds() / 60) + 1
-            raise serializers.ValidationError({
-                "detail": f"Compte verrouillé temporairement. Réessayer dans {remaining_min} minute(s).",
-            })
+            raise serializers.ValidationError(
+                {
+                    "detail": f"Compte verrouillé temporairement. Réessayer dans {remaining_min} minute(s).",
+                }
+            )
 
         # ── Vérification MFA email si activée pour l'utilisateur ──────
         if user.mfa_enabled:
             if not mfa_code:
                 # 1ère étape : email/password OK → backend va envoyer le code OTP
-                raise serializers.ValidationError({
-                    "mfa": "Code MFA requis.",
-                    "mfa_required": True,
-                    "mfa_method": "email",
-                    "email_masked": _mask_email(user.email),
-                })
+                raise serializers.ValidationError(
+                    {
+                        "mfa": "Code MFA requis.",
+                        "mfa_required": True,
+                        "mfa_method": "email",
+                        "email_masked": _mask_email(user.email),
+                    }
+                )
             # 2ème étape : vérification du code OTP saisi
             result = verify_otp(user, mfa_code)
             if not result.ok:
-                raise serializers.ValidationError({
-                    "mfa": result.error,
-                    "mfa_required": True,
-                    "mfa_method": "email",
-                    "attempts_remaining": result.attempts_remaining,
-                })
+                raise serializers.ValidationError(
+                    {
+                        "mfa": result.error,
+                        "mfa_required": True,
+                        "mfa_method": "email",
+                        "attempts_remaining": result.attempts_remaining,
+                    }
+                )
 
         # ── Reset compteur d'échecs sur connexion réussie ─────────────
         if user.failed_login_attempts > 0:
@@ -96,7 +104,17 @@ def _mask_email(email: str) -> str:
 class OrganizationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
-        fields = ["id", "uuid", "code", "name", "type", "parent", "contact_email", "contact_phone", "address"]
+        fields = [
+            "id",
+            "uuid",
+            "code",
+            "name",
+            "type",
+            "parent",
+            "contact_email",
+            "contact_phone",
+            "address",
+        ]
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -112,9 +130,15 @@ class RoleAssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoleAssignment
         fields = [
-            "id", "user", "role", "role_code",
-            "organization", "organization_name",
-            "is_active", "valid_from", "valid_to",
+            "id",
+            "user",
+            "role",
+            "role_code",
+            "organization",
+            "organization_name",
+            "is_active",
+            "valid_from",
+            "valid_to",
         ]
 
 
@@ -128,10 +152,23 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "uuid", "email", "username", "first_name", "last_name", "full_name",
-            "phone", "job_title", "is_active", "is_locked",
-            "mfa_enabled", "mfa_enforced", "must_change_password",
-            "date_joined", "last_login", "roles",
+            "id",
+            "uuid",
+            "email",
+            "username",
+            "first_name",
+            "last_name",
+            "full_name",
+            "phone",
+            "job_title",
+            "is_active",
+            "is_locked",
+            "mfa_enabled",
+            "mfa_enforced",
+            "must_change_password",
+            "date_joined",
+            "last_login",
+            "roles",
         ]
         read_only_fields = ["id", "uuid", "date_joined", "last_login", "is_locked"]
 
@@ -152,7 +189,9 @@ class UserSerializer(serializers.ModelSerializer):
                 "name": a.role.name,
                 "organization": a.organization.name if a.organization else None,
             }
-            for a in obj.role_assignments.select_related("role", "organization").filter(is_active=True)
+            for a in obj.role_assignments.select_related("role", "organization").filter(
+                is_active=True
+            )
         ]
 
 
@@ -166,9 +205,13 @@ class UserCreateSerializer(serializers.ModelSerializer):
     - `role_codes` reçoit la liste des codes de rôles à affecter directement
       (raccourci pour ne pas appeler /role-assignments/ après).
     """
+
     # write_only=True + required=False → password optionnel à la création.
     password = serializers.CharField(
-        write_only=True, required=False, allow_blank=True, validators=[validate_password],
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        validators=[validate_password],
     )
     # `username` est calculé depuis l'email si absent dans le payload.
     # Sans `required=False` explicite, DRF reprend le champ du modèle qui
@@ -183,9 +226,19 @@ class UserCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "uuid", "email", "username", "first_name", "last_name",
-            "phone", "job_title", "is_active", "mfa_enforced",
-            "password", "role_codes", "temporary_password",
+            "id",
+            "uuid",
+            "email",
+            "username",
+            "first_name",
+            "last_name",
+            "phone",
+            "job_title",
+            "is_active",
+            "mfa_enforced",
+            "password",
+            "role_codes",
+            "temporary_password",
         ]
         read_only_fields = ["id", "uuid", "temporary_password"]
 
@@ -193,13 +246,13 @@ class UserCreateSerializer(serializers.ModelSerializer):
     def _generate_temporary_password(length: int = 14) -> str:
         """Mot de passe fort : majuscules + minuscules + chiffres + symboles."""
         import secrets
-        import string
+
         # On évite les caractères ambigus (0/O, 1/l/I) côté humain.
         alphabet = (
-            "ABCDEFGHJKLMNPQRSTUVWXYZ"      # majuscules sans I, O
-            "abcdefghijkmnopqrstuvwxyz"     # minuscules sans l
-            "23456789"                       # chiffres sans 0, 1
-            "!@#$%&*+-=?"                    # symboles safe URL
+            "ABCDEFGHJKLMNPQRSTUVWXYZ"  # majuscules sans I, O
+            "abcdefghijkmnopqrstuvwxyz"  # minuscules sans l
+            "23456789"  # chiffres sans 0, 1
+            "!@#$%&*+-=?"  # symboles safe URL
         )
         # Au moins 1 de chaque catégorie pour passer validate_password.
         groups = [
@@ -265,11 +318,15 @@ class UserCreateSerializer(serializers.ModelSerializer):
         # même créé (l'admin a déjà le password temporaire en main).
         try:
             from apps.notifications.tasks_email import send_admin_account_created_email
+
             send_admin_account_created_email.delay(user.pk, password)
         except Exception:  # noqa: BLE001
             import logging
+
             logging.getLogger("epidemitracker.accounts").warning(
-                "Envoi email création compte échoué (user_id=%s)", user.pk, exc_info=True,
+                "Envoi email création compte échoué (user_id=%s)",
+                user.pk,
+                exc_info=True,
             )
         return user
 

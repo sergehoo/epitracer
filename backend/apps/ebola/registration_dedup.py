@@ -15,6 +15,7 @@ protections, appliquées dans la transaction d'inscription :
 
 Aucune fiche existante n'est modifiée, fusionnée ni supprimée.
 """
+
 from __future__ import annotations
 
 import hashlib

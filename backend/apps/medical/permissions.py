@@ -10,6 +10,7 @@ Note : les permissions vérifient `has_permission` (au niveau de la vue) ET
 la vue avant l'action. Lorsque l'objet n'est pas encore accessible (POST
 de création), le check d'assignation se fait dans la vue après résolution.
 """
+
 from __future__ import annotations
 
 import logging
@@ -69,8 +70,11 @@ def log_data_access(*, request, traveler, resource: str, reason: str = ""):
         role_label = ""
 
     fwd = request.META.get("HTTP_X_FORWARDED_FOR") if hasattr(request, "META") else None
-    ip = (fwd.split(",")[0].strip() if fwd else
-          request.META.get("REMOTE_ADDR") if hasattr(request, "META") else None)
+    ip = (
+        fwd.split(",")[0].strip()
+        if fwd
+        else request.META.get("REMOTE_ADDR") if hasattr(request, "META") else None
+    )
     ua = request.META.get("HTTP_USER_AGENT", "") if hasattr(request, "META") else ""
 
     try:
@@ -109,8 +113,11 @@ class CanViewFollowupDetail(_BaseAuthPermission):
             return False
         if _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-            RoleCode.DISTRICT, RoleCode.ENTRY_POINT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.MINISTRY,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
+            RoleCode.ENTRY_POINT,
         ):
             return True
         # FIELD_AGENT — exige une assignation, validée dans la vue.
@@ -119,8 +126,11 @@ class CanViewFollowupDetail(_BaseAuthPermission):
     def has_object_permission(self, request, view, obj):
         if _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-            RoleCode.DISTRICT, RoleCode.ENTRY_POINT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.MINISTRY,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
+            RoleCode.ENTRY_POINT,
         ):
             return True
         if _has_any_role(request.user, RoleCode.FIELD_AGENT):
@@ -150,14 +160,18 @@ class CanAddMedicalAction(_BaseAuthPermission):
             return False
         return _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.DISTRICT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
             RoleCode.FIELD_AGENT,
         )
 
     def has_object_permission(self, request, view, obj):
         if _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.DISTRICT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
         ):
             return True
         if _has_any_role(request.user, RoleCode.FIELD_AGENT):
@@ -173,14 +187,18 @@ class CanRequestSample(_BaseAuthPermission):
             return False
         return _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.DISTRICT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
             RoleCode.FIELD_AGENT,
         )
 
     def has_object_permission(self, request, view, obj):
         if _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.DISTRICT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
         ):
             return True
         if _has_any_role(request.user, RoleCode.FIELD_AGENT):
@@ -238,14 +256,18 @@ class CanSendFollowupNotification(_BaseAuthPermission):
             return False
         return _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.DISTRICT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
             RoleCode.FIELD_AGENT,
         )
 
     def has_object_permission(self, request, view, obj):
         if _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.DISTRICT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
         ):
             return True
         if _has_any_role(request.user, RoleCode.FIELD_AGENT):
@@ -261,14 +283,18 @@ class CanViewSensitiveMedicalData(_BaseAuthPermission):
             return False
         return _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.LABORATORY,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.LABORATORY,
             RoleCode.FIELD_AGENT,
         )
 
     def has_object_permission(self, request, view, obj):
         if _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.LABORATORY,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.LABORATORY,
         ):
             return True
         if _has_any_role(request.user, RoleCode.FIELD_AGENT):
@@ -284,14 +310,18 @@ class CanViewLocationHistory(_BaseAuthPermission):
             return False
         return _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.DISTRICT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
             RoleCode.FIELD_AGENT,
         )
 
     def has_object_permission(self, request, view, obj):
         if _has_any_role(
             request.user,
-            RoleCode.NATIONAL_ADMIN, RoleCode.INHP, RoleCode.DISTRICT,
+            RoleCode.NATIONAL_ADMIN,
+            RoleCode.INHP,
+            RoleCode.DISTRICT,
         ):
             return True
         if _has_any_role(request.user, RoleCode.FIELD_AGENT):

@@ -1,7 +1,8 @@
 """Permissions DRF transversales basées sur le RBAC EpidemiTracker."""
+
 from __future__ import annotations
 
-from rest_framework.permissions import BasePermission, SAFE_METHODS
+from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 
 class IsAuthenticatedAndActive(BasePermission):

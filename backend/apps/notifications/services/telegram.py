@@ -19,11 +19,12 @@ Sécurité :
     - Les commandes acceptées sont whitelistées : /start /stop /help /link.
     - Pas de PII dans les logs — juste `chat_id` + type de commande.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import requests
 from django.conf import settings
@@ -42,7 +43,7 @@ class TelegramNotConfigured(RuntimeError):
 @dataclass
 class TelegramSendResult:
     ok: bool
-    message_id: Optional[int] = None
+    message_id: int | None = None
     error: str = ""
 
 
@@ -52,9 +53,7 @@ class TelegramSendResult:
 def _bot_token() -> str:
     token = getattr(settings, "TELEGRAM_BOT_TOKEN", "") or ""
     if not token:
-        raise TelegramNotConfigured(
-            "TELEGRAM_BOT_TOKEN n'est pas configuré dans les settings."
-        )
+        raise TelegramNotConfigured("TELEGRAM_BOT_TOKEN n'est pas configuré dans les settings.")
     return token
 
 
@@ -116,9 +115,9 @@ def send_message(
     chat_id: str,
     text: str,
     *,
-    parse_mode: Optional[str] = "HTML",
+    parse_mode: str | None = "HTML",
     disable_web_page_preview: bool = True,
-    reply_markup: Optional[dict] = None,
+    reply_markup: dict | None = None,
 ) -> TelegramSendResult:
     """Envoie un message texte à un chat Telegram (POST sendMessage).
 
@@ -172,7 +171,9 @@ def send_message(
         safe_desc = _scrub(str(desc))
         logger.info(
             "Telegram sendMessage rejected chat=%s status=%s desc=%s",
-            chat_id, r.status_code, safe_desc,
+            chat_id,
+            r.status_code,
+            safe_desc,
         )
         return TelegramSendResult(ok=False, error=f"Telegram {r.status_code} : {safe_desc}")
 
@@ -243,6 +244,7 @@ def handle_incoming_update(update: dict) -> dict:
     d'auto-répondeur — c'est un canal broadcast admin → voyageur).
     """
     from django.utils import timezone
+
     from apps.notifications.models import TelegramSubscription
     from apps.travelers.models import Traveler
 
@@ -324,7 +326,9 @@ def handle_incoming_update(update: dict) -> dict:
         if is_rebranding:
             try:
                 from django.contrib.contenttypes.models import ContentType
+
                 from apps.audit.models import AuditLog
+
                 AuditLog.objects.create(
                     actor=None,  # webhook Telegram = système
                     action="telegram.subscription.rebrand",
@@ -361,9 +365,9 @@ def handle_incoming_update(update: dict) -> dict:
         return result
 
     if command == "stop":
-        updated = TelegramSubscription.objects.filter(
-            chat_id=chat_id, is_active=True
-        ).update(is_active=False)
+        updated = TelegramSubscription.objects.filter(chat_id=chat_id, is_active=True).update(
+            is_active=False
+        )
         if updated:
             send_message(
                 chat_id,

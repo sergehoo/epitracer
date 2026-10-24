@@ -18,6 +18,7 @@ Le format du payload envoyé au navigateur est un JSON simple :
 Le service worker se charge ensuite de l'affichage (icône, action,
 redirection au clic). Cf. `frontend/public/sw.js`.
 """
+
 from __future__ import annotations
 
 import base64
@@ -25,7 +26,7 @@ import json
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from django.conf import settings
 
@@ -93,7 +94,9 @@ def _build_subscription_info(sub: PushSubscription) -> dict[str, Any]:
 
 
 def send_push_to_subscription(
-    sub: PushSubscription, payload: dict[str, Any], ttl: int = 60 * 60,
+    sub: PushSubscription,
+    payload: dict[str, Any],
+    ttl: int = 60 * 60,
 ) -> tuple[bool, str]:
     """Envoie un payload JSON à un seul abonnement.
 
@@ -139,7 +142,7 @@ def push_notify(
     url: str = "/voyageur/suivi",
     tag: str = "epitrace",
     notification_type: str = "generic",
-    extra: Optional[dict[str, Any]] = None,
+    extra: dict[str, Any] | None = None,
     fallback_to_sms: bool = True,
     fallback_to_whatsapp: bool = False,
     dedup_date=None,
@@ -187,6 +190,7 @@ def push_notify(
     # Import différé pour éviter cycle / dépendance dure
     from .models import ConsentScope
     from .services import has_consent
+
     if not has_consent(traveler, ConsentScope.PUSH_NOTIFICATIONS):
         return stats
 
@@ -194,6 +198,7 @@ def push_notify(
     short_text = f"{title}\n{body}"
     # Construire l'URL absolue (best-effort) : on utilise DESTINATION_BASE_URL si défini.
     from django.conf import settings
+
     base = getattr(settings, "PUBLIC_BASE_URL", "https://destinationci.com")
     short_text = f"{short_text}\n{base}{url}"[:480]
 
@@ -204,8 +209,9 @@ def push_notify(
         targets.append(("whatsapp", traveler.whatsapp_phone))
     for channel, recipient in targets:
         try:
-            if _enqueue_fallback(traveler, channel, recipient, short_text,
-                                 notification_type, dedup_date, stats):
+            if _enqueue_fallback(
+                traveler, channel, recipient, short_text, notification_type, dedup_date, stats
+            ):
                 stats[f"{channel}_sent"] += 1
         except Exception:  # noqa: BLE001 — best-effort
             logger.exception("Échec fallback %s pour %s", channel, traveler.public_id)
@@ -214,8 +220,13 @@ def push_notify(
 
 
 def _enqueue_fallback(
-    traveler, channel: str, recipient: str, text: str,
-    notification_type: str, dedup_date, stats: dict[str, Any],
+    traveler,
+    channel: str,
+    recipient: str,
+    text: str,
+    notification_type: str,
+    dedup_date,
+    stats: dict[str, Any],
 ) -> bool:
     """Repli SMS/WhatsApp via le dispatcher, voyageur lié (historique, filtre
     par maladie) et clé d'idempotence pour les rappels datés."""
@@ -229,10 +240,14 @@ def _enqueue_fallback(
         metadata["reminder_date"] = dedup_date.isoformat()
         dedup_key = reminder_dedup_key(notification_type, traveler.pk, dedup_date, channel)
     res = enqueue_notification(
-        channel=channel, recipient=recipient, body=text, traveler=traveler,
+        channel=channel,
+        recipient=recipient,
+        body=text,
+        traveler=traveler,
         message_type=_FALLBACK_MESSAGE_TYPES.get(notification_type, MessageType.AUTOMATIC_REMINDER),
         context={"type": notification_type},
-        metadata=metadata, dedup_key=dedup_key,
+        metadata=metadata,
+        dedup_key=dedup_key,
     )
     if res.duplicate:
         stats["duplicates_avoided"] = stats.get("duplicates_avoided", 0) + 1

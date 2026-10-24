@@ -3,6 +3,7 @@
 Tous les champs sont aplatis (snake_case → snake_case, pas de nested complexes)
 pour faciliter le mapping côté Flutter avec freezed + json_serializable.
 """
+
 from __future__ import annotations
 
 from rest_framework import serializers
@@ -11,7 +12,10 @@ from apps.accounts.models import User
 from apps.health_pass.models import HealthPass
 
 from .models import (
-    AssistanceRequest, LocationShare, MobileDevice, Vaccination,
+    AssistanceRequest,
+    LocationShare,
+    MobileDevice,
+    Vaccination,
 )
 
 
@@ -25,8 +29,15 @@ class MobileProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "uuid", "email", "full_name", "first_name", "last_name",
-            "phone", "mfa_enabled", "has_active_followup",
+            "id",
+            "uuid",
+            "email",
+            "full_name",
+            "first_name",
+            "last_name",
+            "phone",
+            "mfa_enabled",
+            "has_active_followup",
         ]
         read_only_fields = fields
 
@@ -37,8 +48,10 @@ class MobileProfileSerializer(serializers.ModelSerializer):
         # Heuristique : si on a un traveler lié avec un followup non clos
         try:
             from apps.companion.models import FollowupTracking
+
             return FollowupTracking.objects.filter(
-                traveler__email=obj.email, status="active",
+                traveler__email=obj.email,
+                status="active",
             ).exists()
         except Exception:
             return False
@@ -49,6 +62,7 @@ class MobileProfileSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 class MobilePassSerializer(serializers.ModelSerializer):
     """Pass aplati pour mobile — inclut le payload QR signé."""
+
     disease_code = serializers.SerializerMethodField()
     disease_name = serializers.SerializerMethodField()
     traveler_full_name = serializers.SerializerMethodField()
@@ -60,10 +74,19 @@ class MobilePassSerializer(serializers.ModelSerializer):
     class Meta:
         model = HealthPass
         fields = [
-            "id", "uuid", "pass_number", "public_id", "status",
-            "disease_code", "disease_name", "traveler_full_name",
-            "entry_point_name", "issued_at", "expires_at",
-            "qr_payload", "pdf_url",
+            "id",
+            "uuid",
+            "pass_number",
+            "public_id",
+            "status",
+            "disease_code",
+            "disease_name",
+            "traveler_full_name",
+            "entry_point_name",
+            "issued_at",
+            "expires_at",
+            "qr_payload",
+            "pdf_url",
         ]
         read_only_fields = fields
 
@@ -92,6 +115,7 @@ class MobilePassSerializer(serializers.ModelSerializer):
         # On retourne le payload signé (utilisé par scan offline)
         try:
             from apps.health_pass.services import build_qr_payload
+
             return build_qr_payload(obj)
         except Exception:
             return obj.pass_number
@@ -112,14 +136,35 @@ class VaccinationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vaccination
         fields = [
-            "id", "uuid", "disease_code", "disease_name", "vaccine_name",
-            "manufacturer", "lot_number", "administered_at", "next_dose_at",
-            "dose_number", "total_doses", "center_name", "country_code",
-            "certificate_pdf", "certificate_pdf_url", "qr_payload",
-            "verified", "notes", "created_at", "updated_at",
+            "id",
+            "uuid",
+            "disease_code",
+            "disease_name",
+            "vaccine_name",
+            "manufacturer",
+            "lot_number",
+            "administered_at",
+            "next_dose_at",
+            "dose_number",
+            "total_doses",
+            "center_name",
+            "country_code",
+            "certificate_pdf",
+            "certificate_pdf_url",
+            "qr_payload",
+            "verified",
+            "notes",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ["id", "uuid", "verified", "created_at", "updated_at",
-                            "certificate_pdf_url"]
+        read_only_fields = [
+            "id",
+            "uuid",
+            "verified",
+            "created_at",
+            "updated_at",
+            "certificate_pdf_url",
+        ]
         extra_kwargs = {
             "certificate_pdf": {"write_only": True, "required": False},
         }
@@ -127,7 +172,11 @@ class VaccinationSerializer(serializers.ModelSerializer):
     def get_certificate_pdf_url(self, obj):
         if obj.certificate_pdf:
             request = self.context.get("request")
-            return request.build_absolute_uri(obj.certificate_pdf.url) if request else obj.certificate_pdf.url
+            return (
+                request.build_absolute_uri(obj.certificate_pdf.url)
+                if request
+                else obj.certificate_pdf.url
+            )
         return None
 
 
@@ -136,6 +185,7 @@ class VaccinationSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 class FollowupSummarySerializer(serializers.Serializer):
     """Vue agrégée du suivi pour l'écran d'accueil mobile."""
+
     active = serializers.BooleanField()
     day = serializers.IntegerField()
     total_days = serializers.IntegerField()
@@ -146,6 +196,7 @@ class FollowupSummarySerializer(serializers.Serializer):
 
 class CheckinCreateSerializer(serializers.Serializer):
     """POST /api/mobile/checkins/ — payload journalier de check-in."""
+
     feeling_well = serializers.BooleanField(default=True)
     fever = serializers.BooleanField(default=False)
     unusual_fatigue = serializers.BooleanField(default=False)
@@ -166,8 +217,12 @@ class MobileDeviceRegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = MobileDevice
         fields = [
-            "fcm_token", "platform", "device_id",
-            "app_version", "os_version", "locale",
+            "fcm_token",
+            "platform",
+            "device_id",
+            "app_version",
+            "os_version",
+            "locale",
         ]
 
 
@@ -178,8 +233,16 @@ class AssistanceRequestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssistanceRequest
         fields = [
-            "id", "uuid", "reason", "message", "callback_phone",
-            "preferred_time", "latitude", "longitude", "status", "created_at",
+            "id",
+            "uuid",
+            "reason",
+            "message",
+            "callback_phone",
+            "preferred_time",
+            "latitude",
+            "longitude",
+            "status",
+            "created_at",
         ]
         read_only_fields = ["id", "uuid", "status", "created_at"]
 
@@ -199,6 +262,7 @@ class LocationShareCreateSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 class QrImportSerializer(serializers.Serializer):
     """POST /api/mobile/qr/import/ — body : { qr_payload: 'epitrace://...' }"""
+
     qr_payload = serializers.CharField()
 
 
@@ -207,6 +271,7 @@ class QrImportSerializer(serializers.Serializer):
 # ---------------------------------------------------------------------------
 class MobileNotificationSerializer(serializers.Serializer):
     """Vue mobile-friendly d'une notification (lecture seule)."""
+
     id = serializers.IntegerField()
     title = serializers.CharField()
     body = serializers.CharField()

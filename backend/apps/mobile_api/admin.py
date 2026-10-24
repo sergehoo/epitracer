@@ -14,8 +14,12 @@ class MobileDeviceAdmin(admin.ModelAdmin):
 @admin.register(Vaccination)
 class VaccinationAdmin(admin.ModelAdmin):
     list_display = (
-        "disease_name", "vaccine_name", "user", "administered_at",
-        "dose_number", "verified",
+        "disease_name",
+        "vaccine_name",
+        "user",
+        "administered_at",
+        "dose_number",
+        "verified",
     )
     list_filter = ("disease_code", "verified", "country_code")
     search_fields = ("user__email", "vaccine_name", "lot_number", "center_name")

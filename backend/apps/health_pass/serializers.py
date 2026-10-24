@@ -13,14 +13,27 @@ class HealthPassSerializer(serializers.ModelSerializer):
     class Meta:
         model = HealthPass
         fields = [
-            "id", "uuid", "pass_number",
-            "traveler", "traveler_public_id",
-            "disease", "disease_code", "investigation_ref",
-            "status", "risk_level", "risk_score",
-            "issued_at", "expires_at", "is_valid",
-            "payload", "signature_b64", "signing_kid",
-            "revoked_at", "revocation_reason",
-            "qr_url", "pdf_url",
+            "id",
+            "uuid",
+            "pass_number",
+            "traveler",
+            "traveler_public_id",
+            "disease",
+            "disease_code",
+            "investigation_ref",
+            "status",
+            "risk_level",
+            "risk_score",
+            "issued_at",
+            "expires_at",
+            "is_valid",
+            "payload",
+            "signature_b64",
+            "signing_kid",
+            "revoked_at",
+            "revocation_reason",
+            "qr_url",
+            "pdf_url",
         ]
 
     def get_qr_url(self, obj):
@@ -64,6 +77,12 @@ class PassVerificationLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = PassVerificationLog
         fields = [
-            "id", "pass_number", "verified_at", "is_valid",
-            "reason", "entry_point", "verified_by", "metadata",
+            "id",
+            "pass_number",
+            "verified_at",
+            "is_valid",
+            "reason",
+            "entry_point",
+            "verified_by",
+            "metadata",
         ]

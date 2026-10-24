@@ -1,4 +1,5 @@
 """Tâches Celery périodiques pour la surveillance épidémiologique."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -27,9 +28,11 @@ def cluster_detection(threshold: int = 5, hours: int = 24):
     """Détecte un cluster (>= threshold cas suspects/probables sur la même fenêtre)."""
     since = timezone.now() - timedelta(hours=hours)
     qs = (
-        EbolaInvestigation.objects
-        .filter(created_at__gte=since, risk_level__in=["high", "critical"])
-        .values("entry_point").order_by()
+        EbolaInvestigation.objects.filter(
+            created_at__gte=since, risk_level__in=["high", "critical"]
+        )
+        .values("entry_point")
+        .order_by()
     )
     counts: dict = {}
     for row in qs:

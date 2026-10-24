@@ -1,4 +1,5 @@
 """Pass sanitaire numérique avec QR signé cryptographiquement (Ed25519)."""
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -28,7 +29,10 @@ class HealthPass(BaseModel):
     investigation_ref = models.CharField(max_length=24, blank=True, db_index=True)
 
     status = models.CharField(
-        max_length=20, choices=HealthPassStatus.choices, default=HealthPassStatus.ACTIVE, db_index=True
+        max_length=20,
+        choices=HealthPassStatus.choices,
+        default=HealthPassStatus.ACTIVE,
+        db_index=True,
     )
     risk_level = models.CharField(max_length=20, blank=True)
     risk_score = models.PositiveSmallIntegerField(default=0)
@@ -39,13 +43,18 @@ class HealthPass(BaseModel):
     # Données signées
     payload = models.JSONField(default=dict)
     signature_b64 = models.TextField(blank=True)
-    signing_kid = models.CharField(max_length=32, blank=True, help_text=_("Identifiant de la clé utilisée."))
+    signing_kid = models.CharField(
+        max_length=32, blank=True, help_text=_("Identifiant de la clé utilisée.")
+    )
 
     # Révocation
     revoked_at = models.DateTimeField(null=True, blank=True)
     revoked_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="revoked_passes",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="revoked_passes",
     )
     revocation_reason = models.CharField(max_length=200, blank=True)
 
@@ -72,8 +81,7 @@ class HealthPass(BaseModel):
 
     def __str__(self) -> str:
         traveler_str = (
-            f"{self.traveler.last_name} {self.traveler.first_name}"
-            if self.traveler_id else "?"
+            f"{self.traveler.last_name} {self.traveler.first_name}" if self.traveler_id else "?"
         )
         return f"{self.pass_number} — {traveler_str}"
 
@@ -87,11 +95,17 @@ class PassVerificationLog(BaseModel):
     pass_number = models.CharField(max_length=24, db_index=True)
     verified_at = models.DateTimeField(auto_now_add=True, db_index=True)
     verified_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="pass_verifications",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="pass_verifications",
     )
     entry_point = models.ForeignKey(
-        "geo.EntryPoint", null=True, blank=True, on_delete=models.SET_NULL,
+        "geo.EntryPoint",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="pass_verifications",
     )
     is_valid = models.BooleanField()
@@ -110,8 +124,11 @@ class PassBlacklistEntry(BaseModel):
     pass_number = models.CharField(max_length=24, unique=True, db_index=True)
     reason = models.CharField(max_length=200)
     added_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="blacklisted_passes",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="blacklisted_passes",
     )
 
     class Meta(BaseModel.Meta):

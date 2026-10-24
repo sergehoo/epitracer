@@ -5,6 +5,7 @@ Usage :
 
 Les chemins sont définis dans settings.HEALTHPASS.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,9 +28,11 @@ class Command(BaseCommand):
         priv_path.parent.mkdir(parents=True, exist_ok=True)
 
         if priv_path.exists() and not opts["force"]:
-            self.stdout.write(self.style.WARNING(
-                f"Une clé existe déjà à {priv_path}. Utiliser --force pour écraser."
-            ))
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Une clé existe déjà à {priv_path}. Utiliser --force pour écraser."
+                )
+            )
             return
 
         private_key = Ed25519PrivateKey.generate()
@@ -46,9 +49,13 @@ class Command(BaseCommand):
         pub_path.write_bytes(pub_bytes)
         priv_path.chmod(0o600)
 
-        self.stdout.write(self.style.SUCCESS(
-            f"Clés Ed25519 générées :\n  - private : {priv_path}\n  - public  : {pub_path}"
-        ))
-        self.stdout.write(self.style.WARNING(
-            "⚠️  Ces clés sont CRITIQUES. Sauvegarder hors-ligne et restreindre les accès."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Clés Ed25519 générées :\n  - private : {priv_path}\n  - public  : {pub_path}"
+            )
+        )
+        self.stdout.write(
+            self.style.WARNING(
+                "⚠️  Ces clés sont CRITIQUES. Sauvegarder hors-ligne et restreindre les accès."
+            )
+        )

@@ -1,13 +1,12 @@
 """Envoi SMS via Twilio (numéros internationaux hors +225)."""
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 import httpx
 from django.conf import settings
-from django.urls import reverse
 
 logger = logging.getLogger("epidemitracker.notifications.twilio")
 
@@ -17,7 +16,7 @@ class TwilioSendResult:
     ok: bool
     provider_message_id: str = ""
     error: str = ""
-    raw_response: Optional[dict] = None
+    raw_response: dict | None = None
 
 
 def _get_settings() -> dict:
@@ -32,7 +31,7 @@ def _get_settings() -> dict:
     }
 
 
-def send_sms(to: str, body: str, metadata: Optional[dict] = None) -> TwilioSendResult:
+def send_sms(to: str, body: str, metadata: dict | None = None) -> TwilioSendResult:
     """Envoie un SMS via Twilio.
 
     Args:
@@ -49,7 +48,8 @@ def send_sms(to: str, body: str, metadata: Optional[dict] = None) -> TwilioSendR
 
     if not (cfg["account_sid"] and cfg["auth_token"] and cfg["from_number"]):
         return TwilioSendResult(
-            ok=False, error="Twilio : credentials manquants.",
+            ok=False,
+            error="Twilio : credentials manquants.",
         )
 
     url = f"https://api.twilio.com/2010-04-01/Accounts/{cfg['account_sid']}/Messages.json"

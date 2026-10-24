@@ -23,6 +23,7 @@ Champs payload signés :
     "exp": "<ISO>"
 }
 """
+
 from __future__ import annotations
 
 import base64
@@ -39,7 +40,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 from django.conf import settings
-
 
 PREFIX = "EPMS1"
 
@@ -119,4 +119,5 @@ def is_expired(payload: dict) -> bool:
     except ValueError:
         return True
     from django.utils import timezone as tz
+
     return dt <= tz.now()

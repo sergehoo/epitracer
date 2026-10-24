@@ -19,14 +19,19 @@ from .services import close_quarantine
 class QuarantineRecordViewSet(viewsets.ModelViewSet):
     queryset = (
         QuarantineRecord.objects.select_related("traveler", "disease")
-        .prefetch_related("daily_checks", "visits").all()
+        .prefetch_related("daily_checks", "visits")
+        .all()
     )
     serializer_class = QuarantineRecordSerializer
     permission_classes = [IsAuthenticatedAndActive, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT,
-        RoleCode.FIELD_AGENT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.FIELD_AGENT,
+        RoleCode.OBSERVER,
     ]
     filterset_fields = ["status", "disease", "traveler"]
     search_fields = ["traveler__public_id", "traveler__last_name", "investigation_ref"]
@@ -49,7 +54,9 @@ class DailyCheckViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         instance = serializer.save(reported_by_user=self.request.user)
         # Alerte si symptômes ou fièvre élevée
-        if instance.has_symptoms or (instance.temperature_celsius and instance.temperature_celsius >= 38.5):
+        if instance.has_symptoms or (
+            instance.temperature_celsius and instance.temperature_celsius >= 38.5
+        ):
             instance.alert_raised = True
             instance.save(update_fields=["alert_raised"])
             qr = instance.quarantine

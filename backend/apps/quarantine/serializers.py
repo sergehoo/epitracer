@@ -7,9 +7,18 @@ class DailyCheckSerializer(serializers.ModelSerializer):
     class Meta:
         model = DailyCheck
         fields = [
-            "id", "quarantine", "day_index", "check_date", "temperature_celsius",
-            "has_symptoms", "symptoms_details", "reported_by_user", "is_self_reported",
-            "notes", "alert_raised", "created_at",
+            "id",
+            "quarantine",
+            "day_index",
+            "check_date",
+            "temperature_celsius",
+            "has_symptoms",
+            "symptoms_details",
+            "reported_by_user",
+            "is_self_reported",
+            "notes",
+            "alert_raised",
+            "created_at",
         ]
         read_only_fields = ["alert_raised", "reported_by_user"]
 
@@ -20,8 +29,16 @@ class FollowUpVisitSerializer(serializers.ModelSerializer):
     class Meta:
         model = FollowUpVisit
         fields = [
-            "id", "quarantine", "visit_datetime", "agent", "agent_name",
-            "found_person", "temperature_celsius", "observations", "photo", "created_at",
+            "id",
+            "quarantine",
+            "visit_datetime",
+            "agent",
+            "agent_name",
+            "found_person",
+            "temperature_celsius",
+            "observations",
+            "photo",
+            "created_at",
         ]
 
 
@@ -34,10 +51,22 @@ class QuarantineRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuarantineRecord
         fields = [
-            "id", "uuid", "traveler", "traveler_public_id",
-            "disease", "disease_code", "investigation_ref",
-            "started_on", "expected_end_on", "actual_end_on",
-            "status", "address", "notes", "opened_by",
-            "daily_checks", "visits",
-            "created_at", "updated_at",
+            "id",
+            "uuid",
+            "traveler",
+            "traveler_public_id",
+            "disease",
+            "disease_code",
+            "investigation_ref",
+            "started_on",
+            "expected_end_on",
+            "actual_end_on",
+            "status",
+            "address",
+            "notes",
+            "opened_by",
+            "daily_checks",
+            "visits",
+            "created_at",
+            "updated_at",
         ]

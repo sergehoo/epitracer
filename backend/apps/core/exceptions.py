@@ -15,6 +15,7 @@ Le `message` est calculé pour être **actionnable pour l'utilisateur final** :
   - ValidationError 1 champ → "Nom du champ : message"
   - ValidationError N champs → "3 champs invalides : email, phone_number, ..."
 """
+
 from __future__ import annotations
 
 import logging
@@ -116,8 +117,7 @@ def _build_message(detail: dict) -> str:
 
     # Filtre les métadonnées éventuelles (pas des champs à afficher)
     field_errors = {
-        k: v for k, v in detail.items()
-        if k not in ("detail", "non_field_errors", "code")
+        k: v for k, v in detail.items() if k not in ("detail", "non_field_errors", "code")
     }
     if not field_errors:
         # Fallback si rien d'exploitable

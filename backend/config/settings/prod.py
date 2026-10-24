@@ -1,4 +1,5 @@
 """Settings de production - sécurité durcie, observabilité activée."""
+
 from __future__ import annotations
 
 import sentry_sdk
@@ -63,9 +64,13 @@ if OTEL_EXPORTER_OTLP_ENDPOINT:
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-        resource = Resource.create({"service.name": env("OTEL_SERVICE_NAME", default="epidemitracker-api")})
+        resource = Resource.create(
+            {"service.name": env("OTEL_SERVICE_NAME", default="epidemitracker-api")}
+        )
         provider = TracerProvider(resource=resource)
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT)))
+        provider.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT))
+        )
         trace.set_tracer_provider(provider)
         DjangoInstrumentor().instrument()
     except Exception:  # pragma: no cover - opt-in best effort
@@ -91,7 +96,7 @@ if TELEGRAM_BOT_TOKEN:
             "TELEGRAM_BOT_TOKEN est défini. Sans lui, le webhook /api/v1/telegram/"
             "webhook/ accepte n'importe quel POST — risque de hijacking des "
             "abonnements voyageur. Générer un secret : "
-            "python -c \"import secrets;print(secrets.token_urlsafe(48))\" "
+            'python -c "import secrets;print(secrets.token_urlsafe(48))" '
             "puis l'ajouter au .env de prod."
         )
     if len(TELEGRAM_WEBHOOK_SECRET) < 32:

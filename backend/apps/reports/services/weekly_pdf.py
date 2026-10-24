@@ -5,6 +5,7 @@ Utilise reportlab (déjà installé). Design cohérent avec l'existant :
   - Sections : Résumé, Risques, Cas, Labo, Répartitions, Événements
   - Footer avec disclaimer + code rapport + généré le
 """
+
 from __future__ import annotations
 
 from io import BytesIO
@@ -20,12 +21,16 @@ from .weekly_aggregator import ITINERARY_BREAKDOWNS, stay_duration_rows
 # (mêmes fichiers static/branding/{mshpcmu,inhp,armoirie}.png)
 try:
     from apps.health_pass.branding import (
-        draw_ci_emblem, draw_ci_flag_band,
-        get_armoirie_logo, get_inhp_logo, get_mshpcmu_logo,
+        draw_ci_emblem,
+        draw_ci_flag_band,
+        get_armoirie_logo,
+        get_inhp_logo,
+        get_mshpcmu_logo,
     )
 except Exception:  # noqa: BLE001
     # Fallback safe : si l'app health_pass est absente, on désactive les logos
     get_mshpcmu_logo = get_inhp_logo = get_armoirie_logo = lambda: None
+
     def draw_ci_flag_band(c, x, y, w, h):
         c.setFillColor(colors.HexColor("#F77F00"))
         c.rect(x, y, w / 3, h, stroke=0, fill=1)
@@ -33,6 +38,7 @@ except Exception:  # noqa: BLE001
         c.rect(x + w / 3, y, w / 3, h, stroke=0, fill=1)
         c.setFillColor(colors.HexColor("#009E60"))
         c.rect(x + 2 * w / 3, y, w / 3, h, stroke=0, fill=1)
+
     def draw_ci_emblem(c, cx, cy, r):
         pass
 
@@ -73,8 +79,10 @@ def render_weekly_pdf(agg: dict) -> bytes:
     # ─── Zone institutionnelle blanche avec 3 logos officiels ───────
     inst_h = 30 * mm
     inst_top = H - 5
-    c.setFillColor(CI_WHITE); c.rect(0, inst_top - inst_h, W, inst_h, stroke=0, fill=1)
-    c.setStrokeColor(colors.HexColor("#E2E8F0")); c.setLineWidth(0.5)
+    c.setFillColor(CI_WHITE)
+    c.rect(0, inst_top - inst_h, W, inst_h, stroke=0, fill=1)
+    c.setStrokeColor(colors.HexColor("#E2E8F0"))
+    c.setLineWidth(0.5)
     c.line(0, inst_top - inst_h, W, inst_top - inst_h)
 
     logo_size = 22 * mm
@@ -83,33 +91,41 @@ def render_weekly_pdf(agg: dict) -> bytes:
     # MSHPCMU (gauche)
     mshpcmu = get_mshpcmu_logo()
     if mshpcmu:
-        c.drawImage(mshpcmu, 10 * mm, logo_y, logo_size, logo_size,
-                    preserveAspectRatio=True, mask="auto")
+        c.drawImage(
+            mshpcmu, 10 * mm, logo_y, logo_size, logo_size, preserveAspectRatio=True, mask="auto"
+        )
 
     # Armoirie de la République (droite)
     armoirie = get_armoirie_logo()
     if armoirie:
-        c.drawImage(armoirie, W - 10 * mm - logo_size, logo_y,
-                    logo_size, logo_size, preserveAspectRatio=True, mask="auto")
+        c.drawImage(
+            armoirie,
+            W - 10 * mm - logo_size,
+            logo_y,
+            logo_size,
+            logo_size,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
     else:
-        draw_ci_emblem(c, W - 10 * mm - logo_size / 2,
-                       logo_y + logo_size / 2, logo_size / 2)
+        draw_ci_emblem(c, W - 10 * mm - logo_size / 2, logo_y + logo_size / 2, logo_size / 2)
 
     # Texte institutionnel au centre
     text_cx = W / 2
     text_top = inst_top - 8 * mm
-    c.setFillColor(CI_ORANGE); c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(CI_ORANGE)
+    c.setFont("Helvetica-Bold", 8)
     c.drawCentredString(text_cx, text_top, "RÉPUBLIQUE DE CÔTE D'IVOIRE")
-    c.setFillColor(colors.HexColor("#64748B")); c.setFont("Helvetica-Oblique", 7)
+    c.setFillColor(colors.HexColor("#64748B"))
+    c.setFont("Helvetica-Oblique", 7)
     c.drawCentredString(text_cx, text_top - 4 * mm, "Union • Discipline • Travail")
-    c.setFillColor(CI_DARK); c.setFont("Helvetica-Bold", 8.5)
-    c.drawCentredString(text_cx, text_top - 10 * mm,
-                        "Ministère de la Santé, de l'Hygiène Publique")
-    c.drawCentredString(text_cx, text_top - 13.5 * mm,
-                        "et de la Couverture Maladie Universelle")
-    c.setFillColor(colors.HexColor("#64748B")); c.setFont("Helvetica", 7.5)
-    c.drawCentredString(text_cx, text_top - 18 * mm,
-                        "Institut National d'Hygiène Publique — INHP")
+    c.setFillColor(CI_DARK)
+    c.setFont("Helvetica-Bold", 8.5)
+    c.drawCentredString(text_cx, text_top - 10 * mm, "Ministère de la Santé, de l'Hygiène Publique")
+    c.drawCentredString(text_cx, text_top - 13.5 * mm, "et de la Couverture Maladie Universelle")
+    c.setFillColor(colors.HexColor("#64748B"))
+    c.setFont("Helvetica", 7.5)
+    c.drawCentredString(text_cx, text_top - 18 * mm, "Institut National d'Hygiène Publique — INHP")
 
     # ─── Bandeau titre du rapport ───────────────────────────────────
     title_h = 20 * mm
@@ -121,17 +137,26 @@ def render_weekly_pdf(agg: dict) -> bytes:
     inhp = get_inhp_logo()
     inhp_size = 14 * mm
     if inhp:
-        c.drawImage(inhp, 12 * mm, title_top - title_h / 2 - inhp_size / 2,
-                    inhp_size, inhp_size, preserveAspectRatio=True, mask="auto")
+        c.drawImage(
+            inhp,
+            12 * mm,
+            title_top - title_h / 2 - inhp_size / 2,
+            inhp_size,
+            inhp_size,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
 
-    c.setFillColor(CI_GOLD); c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(CI_GOLD)
+    c.setFont("Helvetica-Bold", 8)
     c.drawString(30 * mm, title_top - 7 * mm, "VEILLE SANITAIRE NATIONALE")
-    c.setFillColor(CI_WHITE); c.setFont("Helvetica-Bold", 15)
-    c.drawString(30 * mm, title_top - 13 * mm,
-                 "Rapport hebdomadaire de surveillance")
+    c.setFillColor(CI_WHITE)
+    c.setFont("Helvetica-Bold", 15)
+    c.drawString(30 * mm, title_top - 13 * mm, "Rapport hebdomadaire de surveillance")
     c.setFont("Helvetica-Oblique", 9)
-    c.drawString(30 * mm, title_top - 18 * mm,
-                 f"{label} · Fuseau {meta.get('tz', 'Africa/Abidjan')}")
+    c.drawString(
+        30 * mm, title_top - 18 * mm, f"{label} · Fuseau {meta.get('tz', 'Africa/Abidjan')}"
+    )
 
     y = title_top - title_h - 10 * mm
 
@@ -173,21 +198,32 @@ def render_weekly_pdf(agg: dict) -> bytes:
     cases = agg.get("cases", {})
     samples = agg.get("samples", {})
     analyses = agg.get("analyses", {})
-    y = _draw_two_col_lists(c, [
-        ("Cas classifiés", [
-            f"Suspects : {cases.get('suspect', 0)}",
-            f"Probables : {cases.get('probable', 0)}",
-            f"Confirmés : {cases.get('confirmed', 0)}",
-            f"Exclus : {cases.get('discarded', 0)}",
-        ]),
-        ("Laboratoire", [
-            f"Prélèvements demandés : {samples.get('requested', 0)}",
-            f"Prélèvements réalisés : {samples.get('collected', 0)}",
-            f"Analyses en attente : {analyses.get('pending', 0)}",
-            f"Analyses positives : {analyses.get('positive', 0)}",
-            f"Analyses négatives : {analyses.get('negative', 0)}",
-        ]),
-    ], y, W)
+    y = _draw_two_col_lists(
+        c,
+        [
+            (
+                "Cas classifiés",
+                [
+                    f"Suspects : {cases.get('suspect', 0)}",
+                    f"Probables : {cases.get('probable', 0)}",
+                    f"Confirmés : {cases.get('confirmed', 0)}",
+                    f"Exclus : {cases.get('discarded', 0)}",
+                ],
+            ),
+            (
+                "Laboratoire",
+                [
+                    f"Prélèvements demandés : {samples.get('requested', 0)}",
+                    f"Prélèvements réalisés : {samples.get('collected', 0)}",
+                    f"Analyses en attente : {analyses.get('pending', 0)}",
+                    f"Analyses positives : {analyses.get('positive', 0)}",
+                    f"Analyses négatives : {analyses.get('negative', 0)}",
+                ],
+            ),
+        ],
+        y,
+        W,
+    )
 
     # ─── Section : Comparaison ──────────────────────────────────────
     y -= 8 * mm
@@ -237,15 +273,20 @@ def render_weekly_pdf(agg: dict) -> bytes:
 # Helpers de rendu
 # ---------------------------------------------------------------------------
 def _section_title(c, title: str, y: float, W: float) -> float:
-    c.setFillColor(CI_ORANGE); c.rect(10 * mm, y - 2, 2, 6 * mm, stroke=0, fill=1)
-    c.setFillColor(CI_DARK); c.setFont("Helvetica-Bold", 13)
+    c.setFillColor(CI_ORANGE)
+    c.rect(10 * mm, y - 2, 2, 6 * mm, stroke=0, fill=1)
+    c.setFillColor(CI_DARK)
+    c.setFont("Helvetica-Bold", 13)
     c.drawString(14 * mm, y, title)
-    c.setStrokeColor(SLATE_100); c.setLineWidth(0.5)
+    c.setStrokeColor(SLATE_100)
+    c.setLineWidth(0.5)
     c.line(14 * mm, y - 2, W - 10 * mm, y - 2)
     return y - 10 * mm
 
 
-def _draw_kpi_grid(c, kpis: list, y: float, W: float, cols: int = 4, cell_h: float = 20 * mm) -> float:
+def _draw_kpi_grid(
+    c, kpis: list, y: float, W: float, cols: int = 4, cell_h: float = 20 * mm
+) -> float:
     margin = 10 * mm
     cell_w = (W - 2 * margin) / cols
     for i, (label, value, color) in enumerate(kpis):
@@ -256,11 +297,14 @@ def _draw_kpi_grid(c, kpis: list, y: float, W: float, cols: int = 4, cell_h: flo
 
         c.setFillColor(SLATE_50)
         c.roundRect(x + 1, cy - cell_h + 2, cell_w - 2, cell_h - 4, 2, stroke=0, fill=1)
-        c.setFillColor(color); c.rect(x + 1, cy - cell_h + 2, 3, cell_h - 4, stroke=0, fill=1)
+        c.setFillColor(color)
+        c.rect(x + 1, cy - cell_h + 2, 3, cell_h - 4, stroke=0, fill=1)
 
-        c.setFillColor(SLATE_600); c.setFont("Helvetica-Bold", 6.5)
+        c.setFillColor(SLATE_600)
+        c.setFont("Helvetica-Bold", 6.5)
         c.drawString(x + 6, cy - 4, label.upper()[:26])
-        c.setFillColor(CI_DARK); c.setFont("Helvetica-Bold", 15)
+        c.setFillColor(CI_DARK)
+        c.setFont("Helvetica-Bold", 15)
         c.drawString(x + 6, cy - 14, value)
     rows = (len(kpis) + cols - 1) // cols
     return y - rows * cell_h
@@ -274,7 +318,8 @@ def _draw_risk_table(c, rows: list, total: int, y: float, W: float) -> float:
     # Header
     c.setFillColor(SLATE_100)
     c.rect(margin, y - row_h, W - 2 * margin, row_h, stroke=0, fill=1)
-    c.setFillColor(SLATE_600); c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(SLATE_600)
+    c.setFont("Helvetica-Bold", 8)
     c.drawString(margin + 4, y - row_h + 3, "NIVEAU")
     c.drawRightString(margin + col_widths[0] + col_widths[1] - 4, y - row_h + 3, "NOMBRE")
     c.drawRightString(W - margin - 4, y - row_h + 3, "PART")
@@ -283,18 +328,24 @@ def _draw_risk_table(c, rows: list, total: int, y: float, W: float) -> float:
     for label, data, color in rows:
         cnt = data.get("count", 0)
         pct = data.get("pct", 0)
-        c.setFillColor(color); c.rect(margin + 4, y - row_h + 3, 3, 3, stroke=0, fill=1)
-        c.setFillColor(SLATE_900); c.setFont("Helvetica-Bold", 10)
+        c.setFillColor(color)
+        c.rect(margin + 4, y - row_h + 3, 3, 3, stroke=0, fill=1)
+        c.setFillColor(SLATE_900)
+        c.setFont("Helvetica-Bold", 10)
         c.drawString(margin + 12, y - row_h + 3, label)
         c.drawRightString(margin + col_widths[0] + col_widths[1] - 4, y - row_h + 3, _fmt_int(cnt))
-        c.setFillColor(SLATE_600); c.setFont("Helvetica", 10)
+        c.setFillColor(SLATE_600)
+        c.setFont("Helvetica", 10)
         c.drawRightString(W - margin - 4, y - row_h + 3, f"{pct} %")
-        c.setStrokeColor(SLATE_100); c.line(margin, y - row_h, W - margin, y - row_h)
+        c.setStrokeColor(SLATE_100)
+        c.line(margin, y - row_h, W - margin, y - row_h)
         y -= row_h
 
     # Total
-    c.setFillColor(SLATE_100); c.rect(margin, y - row_h, W - 2 * margin, row_h, stroke=0, fill=1)
-    c.setFillColor(CI_DARK); c.setFont("Helvetica-Bold", 10)
+    c.setFillColor(SLATE_100)
+    c.rect(margin, y - row_h, W - 2 * margin, row_h, stroke=0, fill=1)
+    c.setFillColor(CI_DARK)
+    c.setFont("Helvetica-Bold", 10)
     c.drawString(margin + 4, y - row_h + 3, "TOTAL")
     c.drawRightString(margin + col_widths[0] + col_widths[1] - 4, y - row_h + 3, _fmt_int(total))
     c.drawRightString(W - margin - 4, y - row_h + 3, "100 %")
@@ -308,11 +359,20 @@ def _draw_two_col_lists(c, cols: list, y: float, W: float) -> float:
     for i, (title, items) in enumerate(cols):
         x = margin + i * (col_w + 4 * mm)
         c.setFillColor(SLATE_50)
-        c.roundRect(x, start_y - (len(items) * 5 * mm + 10 * mm), col_w,
-                    len(items) * 5 * mm + 10 * mm, 3, stroke=0, fill=1)
-        c.setFillColor(SLATE_600); c.setFont("Helvetica-Bold", 7)
+        c.roundRect(
+            x,
+            start_y - (len(items) * 5 * mm + 10 * mm),
+            col_w,
+            len(items) * 5 * mm + 10 * mm,
+            3,
+            stroke=0,
+            fill=1,
+        )
+        c.setFillColor(SLATE_600)
+        c.setFont("Helvetica-Bold", 7)
         c.drawString(x + 4, start_y - 6, title.upper())
-        c.setFillColor(SLATE_900); c.setFont("Helvetica", 10)
+        c.setFillColor(SLATE_900)
+        c.setFont("Helvetica", 10)
         for j, line in enumerate(items):
             c.drawString(x + 4, start_y - 12 - j * 5 * mm, line)
     return start_y - (max(len(cols[0][1]), len(cols[1][1])) * 5 * mm + 10 * mm)
@@ -325,16 +385,19 @@ def _draw_comparison_table(c, rows: list, y: float, W: float) -> float:
         cur = data.get("current", 0)
         prev = data.get("previous", 0)
         delta = data.get("delta_pct", 0.0)
-        c.setFillColor(SLATE_900); c.setFont("Helvetica", 10)
+        c.setFillColor(SLATE_900)
+        c.setFont("Helvetica", 10)
         c.drawString(margin + 4, y - row_h + 3, label)
         c.setFillColor(SLATE_600)
         c.drawRightString(W / 2, y - row_h + 3, f"Actuel : {_fmt_int(cur)}")
         c.drawRightString(W / 2 + 40 * mm, y - row_h + 3, f"Préc. : {_fmt_int(prev)}")
         arrow = "▲" if delta > 0 else ("▼" if delta < 0 else "=")
         color = GREEN if delta > 0 else (RED if delta < 0 else SLATE_600)
-        c.setFillColor(color); c.setFont("Helvetica-Bold", 10)
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", 10)
         c.drawRightString(W - margin - 4, y - row_h + 3, f"{arrow} {abs(delta):.1f} %")
-        c.setStrokeColor(SLATE_100); c.line(margin, y - row_h, W - margin, y - row_h)
+        c.setStrokeColor(SLATE_100)
+        c.line(margin, y - row_h, W - margin, y - row_h)
         y -= row_h
     return y
 
@@ -343,21 +406,26 @@ def _draw_breakdown_list(c, title: str, items: list, y: float, W: float) -> floa
     if not items:
         return y
     margin = 10 * mm
-    c.setFillColor(CI_DARK); c.setFont("Helvetica-Bold", 9)
+    c.setFillColor(CI_DARK)
+    c.setFont("Helvetica-Bold", 9)
     c.drawString(margin, y, title)
     y -= 5 * mm
     max_count = max((it.get("count", 1) for it in items), default=1)
     for it in items[:8]:
         name = str(it.get("name", "—"))[:60]
         cnt = it.get("count", 0)
-        c.setFillColor(SLATE_900); c.setFont("Helvetica", 8)
+        c.setFillColor(SLATE_900)
+        c.setFont("Helvetica", 8)
         c.drawString(margin + 2, y, name)
-        c.setFillColor(CI_ORANGE); c.setFont("Helvetica-Bold", 8)
+        c.setFillColor(CI_ORANGE)
+        c.setFont("Helvetica-Bold", 8)
         c.drawRightString(W - margin - 2, y, _fmt_int(cnt))
         # Barre de progression
         bar_w = (W - 2 * margin - 6 * mm) * (cnt / max_count)
-        c.setFillColor(SLATE_100); c.rect(margin + 2, y - 2, W - 2 * margin - 4 * mm, 1, stroke=0, fill=1)
-        c.setFillColor(CI_ORANGE); c.rect(margin + 2, y - 2, bar_w, 1, stroke=0, fill=1)
+        c.setFillColor(SLATE_100)
+        c.rect(margin + 2, y - 2, W - 2 * margin - 4 * mm, 1, stroke=0, fill=1)
+        c.setFillColor(CI_ORANGE)
+        c.rect(margin + 2, y - 2, bar_w, 1, stroke=0, fill=1)
         y -= 4.5 * mm
     return y
 
@@ -387,28 +455,49 @@ def _draw_footer(c, W: float, meta: dict, agg: dict):
 
     # Footer principal
     footer_h = 15 * mm
-    c.setFillColor(SLATE_100); c.rect(0, 4 * mm, W, footer_h, stroke=0, fill=1)
-    c.setStrokeColor(colors.HexColor("#E2E8F0")); c.setLineWidth(0.4)
+    c.setFillColor(SLATE_100)
+    c.rect(0, 4 * mm, W, footer_h, stroke=0, fill=1)
+    c.setStrokeColor(colors.HexColor("#E2E8F0"))
+    c.setLineWidth(0.4)
     c.line(0, 4 * mm + footer_h, W, 4 * mm + footer_h)
 
     # Gauche : EpiTrace + INHP
-    c.setFillColor(CI_DARK); c.setFont("Helvetica-Bold", 8.5)
-    c.drawString(10 * mm, 4 * mm + footer_h - 5 * mm,
-                 "EpiTrace / Mon Pass Sanitaire — INHP")
-    c.setFillColor(SLATE_600); c.setFont("Helvetica", 7)
-    c.drawString(10 * mm, 4 * mm + footer_h - 8.5 * mm,
-                 "Ministère de la Santé, de l'Hygiène Publique et de la Couverture Maladie Universelle")
-    c.drawString(10 * mm, 4 * mm + footer_h - 11.5 * mm,
-                 "Contact : inhp@veillesanitaire.com · Assistance : 143 · SAMU : 185")
+    c.setFillColor(CI_DARK)
+    c.setFont("Helvetica-Bold", 8.5)
+    c.drawString(10 * mm, 4 * mm + footer_h - 5 * mm, "EpiTrace / Mon Pass Sanitaire — INHP")
+    c.setFillColor(SLATE_600)
+    c.setFont("Helvetica", 7)
+    c.drawString(
+        10 * mm,
+        4 * mm + footer_h - 8.5 * mm,
+        "Ministère de la Santé, de l'Hygiène Publique et de la Couverture Maladie Universelle",
+    )
+    c.drawString(
+        10 * mm,
+        4 * mm + footer_h - 11.5 * mm,
+        "Contact : inhp@veillesanitaire.com · Assistance : 143 · SAMU : 185",
+    )
 
     # Droite : timestamp + confidentialité
-    c.setFillColor(SLATE_600); c.setFont("Helvetica-Oblique", 7)
+    c.setFillColor(SLATE_600)
+    c.setFont("Helvetica-Oblique", 7)
     generated = (meta.get("generated_at") or "")[:19].replace("T", " ")
-    c.drawRightString(W - 10 * mm, 4 * mm + footer_h - 5 * mm,
-                      f"Généré le {generated} · {meta.get('generation_ms', 0)} ms")
-    c.setFillColor(colors.HexColor("#DC2626")); c.setFont("Helvetica-Bold", 6.5)
-    c.drawRightString(W - 10 * mm, 4 * mm + footer_h - 8.5 * mm,
-                      "CONFIDENTIEL — Ne pas rediffuser sans autorisation MSHPCMU")
-    c.setFillColor(SLATE_600); c.setFont("Helvetica-Oblique", 6)
-    c.drawRightString(W - 10 * mm, 4 * mm + footer_h - 11.5 * mm,
-                      "Conservation légale 5 ans · Arrêté ministériel MSHPCMU")
+    c.drawRightString(
+        W - 10 * mm,
+        4 * mm + footer_h - 5 * mm,
+        f"Généré le {generated} · {meta.get('generation_ms', 0)} ms",
+    )
+    c.setFillColor(colors.HexColor("#DC2626"))
+    c.setFont("Helvetica-Bold", 6.5)
+    c.drawRightString(
+        W - 10 * mm,
+        4 * mm + footer_h - 8.5 * mm,
+        "CONFIDENTIEL — Ne pas rediffuser sans autorisation MSHPCMU",
+    )
+    c.setFillColor(SLATE_600)
+    c.setFont("Helvetica-Oblique", 6)
+    c.drawRightString(
+        W - 10 * mm,
+        4 * mm + footer_h - 11.5 * mm,
+        "Conservation légale 5 ans · Arrêté ministériel MSHPCMU",
+    )

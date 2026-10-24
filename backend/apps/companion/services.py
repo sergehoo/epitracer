@@ -9,9 +9,8 @@ directement par une view DRF :
 - déclenchement d'alertes sanitaires à partir d'un check-in ;
 - journalisation des accès aux données sensibles.
 """
-from __future__ import annotations
 
-from typing import Iterable
+from __future__ import annotations
 
 from django.contrib.gis.geos import Point
 from django.utils import timezone
@@ -24,7 +23,6 @@ from .models import (
     PrivacyConsent,
     TravelerLocationPing,
 )
-
 
 # ----------------------------------------------------------------------------
 # Consentements
@@ -54,8 +52,14 @@ def has_consent(traveler, scope: str) -> bool:
 
 
 def record_consent(
-    *, traveler, scope: str, granted: bool, version: str = "v1",
-    text_excerpt: str = "", ip: str | None = None, user_agent: str = "",
+    *,
+    traveler,
+    scope: str,
+    granted: bool,
+    version: str = "v1",
+    text_excerpt: str = "",
+    ip: str | None = None,
+    user_agent: str = "",
     revocation_reason: str = "",
 ) -> PrivacyConsent:
     """Enregistre un consentement (accordé OU retiré).
@@ -84,9 +88,14 @@ def record_consent(
 
 
 def record_location_ping(
-    *, traveler, latitude: float, longitude: float,
-    accuracy_m: float | None = None, altitude_m: float | None = None,
-    speed_mps: float | None = None, heading_deg: float | None = None,
+    *,
+    traveler,
+    latitude: float,
+    longitude: float,
+    accuracy_m: float | None = None,
+    altitude_m: float | None = None,
+    speed_mps: float | None = None,
+    heading_deg: float | None = None,
     event_type: str = LocationEventType.DAILY_CHECKIN,
     source: str = LocationSource.PWA,
     device_info: str = "",
@@ -126,8 +135,13 @@ def record_location_ping(
 
 
 def log_data_access(
-    *, traveler, user, resource: str, reason: str = "",
-    ip: str | None = None, user_agent: str = "",
+    *,
+    traveler,
+    user,
+    resource: str,
+    reason: str = "",
+    ip: str | None = None,
+    user_agent: str = "",
 ) -> DataAccessLog:
     """Enregistre un accès agent à des données sensibles."""
     role_label = ""
@@ -171,8 +185,13 @@ def evaluate_checkin_severity(symptoms: dict) -> tuple[str, list[str]]:
     """
     red_flag = bool(symptoms.get("unexplained_bleeding"))
     fever = bool(symptoms.get("fever"))
-    other_keys = ["intense_fatigue", "muscle_joint_pain", "severe_headache",
-                  "sore_throat_or_abdominal", "diarrhea_nausea_vomiting"]
+    other_keys = [
+        "intense_fatigue",
+        "muscle_joint_pain",
+        "severe_headache",
+        "sore_throat_or_abdominal",
+        "diarrhea_nausea_vomiting",
+    ]
     positives = [k for k in other_keys if symptoms.get(k)]
     n_positives = len(positives) + (1 if fever else 0)
 
@@ -195,7 +214,7 @@ def evaluate_checkin_severity(symptoms: dict) -> tuple[str, list[str]]:
         return "MEDIUM", reasons
 
     if n_positives == 1:
-        return "LOW", [f"Symptôme isolé déclaré"]
+        return "LOW", ["Symptôme isolé déclaré"]
 
     return "INFO", []
 
@@ -206,7 +225,10 @@ ALERT_DEDUP_WINDOW_HOURS = 4
 
 
 def raise_alert_from_checkin(
-    *, traveler, symptoms: dict, location: TravelerLocationPing | None = None,
+    *,
+    traveler,
+    symptoms: dict,
+    location: TravelerLocationPing | None = None,
     needs_assistance: bool = False,
 ) -> object | None:
     """Crée une HealthAlert si nécessaire à partir d'un check-in.
@@ -223,8 +245,10 @@ def raise_alert_from_checkin(
         si la sévérité évaluée est INFO.
     """
     from datetime import timedelta
+
     from django.contrib.contenttypes.models import ContentType
     from django.utils import timezone
+
     from apps.surveillance.models import HealthAlert
 
     if needs_assistance:
@@ -253,8 +277,7 @@ def raise_alert_from_checkin(
     now = timezone.now()
     cutoff = now - timedelta(hours=ALERT_DEDUP_WINDOW_HOURS)
     existing = (
-        HealthAlert.objects
-        .filter(
+        HealthAlert.objects.filter(
             target_ct=trv_ct,
             target_id=str(traveler.pk),
             severity=severity,
@@ -303,6 +326,7 @@ def raise_alert_from_checkin(
     # si Redis/channel_layer indispo, l'alerte est créée en DB de toute façon.
     try:
         from apps.surveillance.services import broadcast_alert
+
         broadcast_alert(alert)
     except Exception:  # noqa: BLE001
         pass

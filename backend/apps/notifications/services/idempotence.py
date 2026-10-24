@@ -11,6 +11,7 @@ PostgreSQL (donc valables entre workers Celery concurrents) :
 Les messages manuels et les alertes médicales urgentes n'utilisent ni l'un ni
 l'autre : ils ne sont jamais bloqués.
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -38,12 +39,16 @@ def claim_reminder(traveler, kind: str, on_date: date | None = None) -> bool:
     try:
         with transaction.atomic():
             ReminderDispatch.objects.create(
-                traveler=traveler, kind=kind, reminder_date=on_date,
+                traveler=traveler,
+                kind=kind,
+                reminder_date=on_date,
             )
         return True
     except IntegrityError:
         ReminderDispatch.all_objects.filter(
-            traveler=traveler, kind=kind, reminder_date=on_date,
+            traveler=traveler,
+            kind=kind,
+            reminder_date=on_date,
         ).update(
             duplicates_avoided=F("duplicates_avoided") + 1,
             last_duplicate_at=timezone.now(),

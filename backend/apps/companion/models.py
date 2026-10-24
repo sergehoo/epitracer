@@ -21,6 +21,7 @@ Aucune collecte n'est faite sans `PrivacyConsent.granted = True` pour le
 scope correspondant. Les retraits de consentement sont versionnés et
 historisés (jamais d'overwrite, jamais de suppression physique).
 """
+
 from __future__ import annotations
 
 from django.contrib.gis.db import models as gis_models
@@ -29,7 +30,6 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.models import BaseModel
-
 
 # ============================================================================
 #                          PRIVACY CONSENT
@@ -67,27 +67,37 @@ class PrivacyConsent(BaseModel):
         verbose_name=_("Voyageur"),
     )
     scope = models.CharField(
-        _("Périmètre"), max_length=32, choices=ConsentScope.choices, db_index=True,
+        _("Périmètre"),
+        max_length=32,
+        choices=ConsentScope.choices,
+        db_index=True,
     )
     granted = models.BooleanField(
-        _("Consentement accordé"), default=False, db_index=True,
+        _("Consentement accordé"),
+        default=False,
+        db_index=True,
         help_text=_("True = l'utilisateur a explicitement accepté ce scope."),
     )
     # Version du texte de politique de confidentialité au moment du
     # consentement. Permet de retrouver exactement à QUOI le voyageur a
     # consenti (utile en cas de litige ou de mise à jour de politique).
     consent_version = models.CharField(
-        _("Version politique"), max_length=20, default="v1",
+        _("Version politique"),
+        max_length=20,
+        default="v1",
         help_text=_("Ex : 'v1.0-2026-05'."),
     )
     consent_text_excerpt = models.TextField(
-        _("Extrait du texte consenti"), blank=True,
+        _("Extrait du texte consenti"),
+        blank=True,
         help_text=_("Snapshot du texte exact présenté à l'utilisateur."),
     )
     # Contexte technique au moment du consentement (audit)
     ip_address = models.GenericIPAddressField(_("Adresse IP"), null=True, blank=True)
     user_agent = models.CharField(_("User-Agent"), max_length=300, blank=True)
-    granted_at = models.DateTimeField(_("Date de consentement"), default=timezone.now, db_index=True)
+    granted_at = models.DateTimeField(
+        _("Date de consentement"), default=timezone.now, db_index=True
+    )
     revoked_at = models.DateTimeField(_("Date de retrait"), null=True, blank=True)
     revocation_reason = models.CharField(_("Motif retrait"), max_length=200, blank=True)
 
@@ -141,7 +151,8 @@ class PushSubscription(BaseModel):
     # Métadonnées non-sensibles
     user_agent = models.CharField(_("User-Agent"), max_length=300, blank=True)
     device_type = models.CharField(
-        _("Type d'appareil"), max_length=10,
+        _("Type d'appareil"),
+        max_length=10,
         choices=PushSubscriptionDevice.choices,
         default=PushSubscriptionDevice.UNKNOWN,
     )
@@ -149,7 +160,8 @@ class PushSubscription(BaseModel):
     is_active = models.BooleanField(_("Actif"), default=True, db_index=True)
     last_used_at = models.DateTimeField(_("Dernière utilisation"), null=True, blank=True)
     failure_count = models.PositiveIntegerField(
-        _("Échecs consécutifs"), default=0,
+        _("Échecs consécutifs"),
+        default=0,
         help_text=_("Désactivé automatiquement après 5 échecs."),
     )
 
@@ -228,11 +240,16 @@ class TravelerLocationPing(BaseModel):
     heading_deg = models.FloatField(_("Direction (°)"), null=True, blank=True)
     # Métadonnées événement
     event_type = models.CharField(
-        _("Événement"), max_length=24, choices=LocationEventType.choices,
-        default=LocationEventType.DAILY_CHECKIN, db_index=True,
+        _("Événement"),
+        max_length=24,
+        choices=LocationEventType.choices,
+        default=LocationEventType.DAILY_CHECKIN,
+        db_index=True,
     )
     source = models.CharField(
-        _("Source"), max_length=16, choices=LocationSource.choices,
+        _("Source"),
+        max_length=16,
+        choices=LocationSource.choices,
         default=LocationSource.PWA,
     )
     captured_at = models.DateTimeField(_("Capturée le"), default=timezone.now, db_index=True)
@@ -270,15 +287,18 @@ class DataRetentionPolicy(BaseModel):
     is_active = models.BooleanField(_("Active"), default=True, db_index=True)
     # Délai (jours) après clôture du suivi pour purger / anonymiser
     followup_retention_days = models.PositiveIntegerField(
-        _("Délai après clôture (jours)"), default=30,
+        _("Délai après clôture (jours)"),
+        default=30,
         help_text=_("Délai entre la fin du suivi 21j et l'anonymisation effective."),
     )
     location_retention_days = models.PositiveIntegerField(
-        _("Conservation des positions (jours)"), default=90,
+        _("Conservation des positions (jours)"),
+        default=90,
         help_text=_("Les pings GPS plus anciens sont purgés indépendamment du suivi."),
     )
     audit_log_retention_years = models.PositiveSmallIntegerField(
-        _("Conservation des logs d'audit (années)"), default=5,
+        _("Conservation des logs d'audit (années)"),
+        default=5,
     )
     description = models.TextField(_("Justification"), blank=True)
 
@@ -300,8 +320,11 @@ class DataPurgeLog(BaseModel):
     traveler_id = models.BigIntegerField(_("ID interne (avant purge)"), null=True, blank=True)
     traveler_public_id = models.CharField(_("Public ID"), max_length=32, blank=True, db_index=True)
     policy = models.ForeignKey(
-        DataRetentionPolicy, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="purges",
+        DataRetentionPolicy,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="purges",
     )
     pings_deleted = models.PositiveIntegerField(default=0)
     subs_disabled = models.PositiveIntegerField(default=0)
@@ -340,20 +363,28 @@ class DataAccessLog(BaseModel):
     )
     accessed_by = models.ForeignKey(
         "accounts.User",
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="data_accesses",
         verbose_name=_("Utilisateur accédant"),
     )
     accessed_by_role = models.CharField(
-        _("Rôle au moment de l'accès"), max_length=40, blank=True,
+        _("Rôle au moment de l'accès"),
+        max_length=40,
+        blank=True,
         help_text=_("Snapshot du rôle (immuable même si le rôle change après)."),
     )
     resource = models.CharField(
-        _("Ressource"), max_length=20, choices=Resource.choices, db_index=True,
+        _("Ressource"),
+        max_length=20,
+        choices=Resource.choices,
+        db_index=True,
     )
     reason = models.CharField(
-        _("Motif"), max_length=200, blank=True,
+        _("Motif"),
+        max_length=200,
+        blank=True,
         help_text=_("Raison opérationnelle (ex: 'Investigation alerte HA-1234')."),
     )
     ip_address = models.GenericIPAddressField(_("Adresse IP"), null=True, blank=True)

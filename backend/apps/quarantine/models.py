@@ -1,4 +1,5 @@
 """Quarantaine et suivi sanitaire (21 jours par défaut, configurable par maladie)."""
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -21,49 +22,72 @@ class QuarantineRecord(BaseModel):
     traveler = models.ForeignKey(
         "travelers.Traveler", on_delete=models.CASCADE, related_name="quarantines"
     )
-    disease = models.ForeignKey("diseases.Disease", on_delete=models.PROTECT, related_name="quarantines")
+    disease = models.ForeignKey(
+        "diseases.Disease", on_delete=models.PROTECT, related_name="quarantines"
+    )
     investigation_ref = models.CharField(max_length=24, blank=True, db_index=True)
     started_on = models.DateField(db_index=True)
     expected_end_on = models.DateField(db_index=True)
     actual_end_on = models.DateField(null=True, blank=True)
     status = models.CharField(
-        max_length=20, choices=QuarantineStatus.choices, default=QuarantineStatus.ACTIVE, db_index=True
+        max_length=20,
+        choices=QuarantineStatus.choices,
+        default=QuarantineStatus.ACTIVE,
+        db_index=True,
     )
     address = models.CharField(max_length=300, blank=True)
     location = gis_models.PointField(srid=4326, null=True, blank=True, geography=True)
     notes = models.TextField(blank=True)
     opened_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="opened_quarantines",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="opened_quarantines",
     )
 
     # ----- Phase 9A : suivi médical complet (apps.medical) ----------------
     assigned_district = models.ForeignKey(
-        "geo.HealthZone", null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="assigned_quarantines",
+        "geo.HealthZone",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assigned_quarantines",
         verbose_name=_("District sanitaire assigné"),
     )
     assigned_team = models.CharField(
-        _("Équipe assignée"), max_length=120, blank=True,
+        _("Équipe assignée"),
+        max_length=120,
+        blank=True,
     )
     assigned_agent = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="quarantines_assigned",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="quarantines_assigned",
         verbose_name=_("Agent assigné"),
     )
     # Cache de la classification active courante (CaseClassification.is_current).
     # Permet d'afficher la classification dans une liste sans JOIN supplémentaire.
     # Synchronisé par signals.py côté apps.medical.
     current_classification = models.CharField(
-        _("Classification courante"), max_length=30, blank=True, db_index=True,
+        _("Classification courante"),
+        max_length=30,
+        blank=True,
+        db_index=True,
     )
     closure_reason = models.CharField(
-        _("Motif de clôture"), max_length=80, blank=True,
+        _("Motif de clôture"),
+        max_length=80,
+        blank=True,
         help_text=_("auto_completed / escalated / manual_close / lost_to_followup."),
     )
     # Anti-spam alerte géoloc (Option 3, RGPD-safe).
     geolocation_alert_raised_at = models.DateTimeField(
-        _("Dernière alerte géoloc levée"), null=True, blank=True,
+        _("Dernière alerte géoloc levée"),
+        null=True,
+        blank=True,
     )
 
     class Meta(BaseModel.Meta):
@@ -102,15 +126,20 @@ class DailyCheckStatus(models.TextChoices):
 class DailyCheck(BaseModel):
     """Check quotidien : auto-déclaratif ou par agent terrain."""
 
-    quarantine = models.ForeignKey(QuarantineRecord, on_delete=models.CASCADE, related_name="daily_checks")
+    quarantine = models.ForeignKey(
+        QuarantineRecord, on_delete=models.CASCADE, related_name="daily_checks"
+    )
     day_index = models.PositiveSmallIntegerField(help_text=_("Jour J0..J21 du suivi."))
     check_date = models.DateField(db_index=True)
     temperature_celsius = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     has_symptoms = models.BooleanField(default=False)
     symptoms_details = models.JSONField(default=dict, blank=True)
     reported_by_user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="daily_checks",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="daily_checks",
     )
     is_self_reported = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
@@ -118,15 +147,21 @@ class DailyCheck(BaseModel):
 
     # ----- Phase 9A : suivi médical complet (apps.medical) ----------------
     agent_responsible = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="daily_checks_managed",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="daily_checks_managed",
         verbose_name=_("Agent responsable"),
     )
     decision = models.CharField(
-        _("Décision du jour"), max_length=200, blank=True,
+        _("Décision du jour"),
+        max_length=200,
+        blank=True,
     )
     status = models.CharField(
-        _("Statut journée"), max_length=24,
+        _("Statut journée"),
+        max_length=24,
         choices=DailyCheckStatus.choices,
         default=DailyCheckStatus.PENDING,
         db_index=True,
@@ -135,10 +170,12 @@ class DailyCheck(BaseModel):
     # Pas un consentement (cf. apps.companion.PrivacyConsent) — juste un
     # snapshot opérationnel pour la timeline.
     location_shared = models.BooleanField(
-        _("Position partagée"), default=False,
+        _("Position partagée"),
+        default=False,
     )
     notification_sent = models.BooleanField(
-        _("Notification envoyée"), default=False,
+        _("Notification envoyée"),
+        default=False,
     )
 
     class Meta(BaseModel.Meta):
@@ -157,7 +194,9 @@ class DailyCheck(BaseModel):
 class FollowUpVisit(BaseModel):
     """Visite d'un agent terrain au domicile / lieu de confinement."""
 
-    quarantine = models.ForeignKey(QuarantineRecord, on_delete=models.CASCADE, related_name="visits")
+    quarantine = models.ForeignKey(
+        QuarantineRecord, on_delete=models.CASCADE, related_name="visits"
+    )
     visit_datetime = models.DateTimeField(db_index=True)
     agent = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="visits_done"

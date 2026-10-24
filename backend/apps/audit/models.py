@@ -1,4 +1,5 @@
 """Modèle d'audit applicatif (en complément de simple_history sur les entités sensibles)."""
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -28,7 +29,11 @@ class AuditAction(models.TextChoices):
 
 class AuditLog(TimestampedModel):
     actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="audit_logs"
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_logs",
     )
     action = models.CharField(max_length=40, choices=AuditAction.choices, db_index=True)
     target_ct = models.ForeignKey(ContentType, null=True, blank=True, on_delete=models.SET_NULL)

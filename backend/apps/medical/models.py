@@ -16,6 +16,7 @@ métier (impossible de perdre un résultat labo qui est encore lié à un cas)
 et `SET_NULL` pour les utilisateurs (un agent peut quitter le service sans
 faire disparaître l'historique).
 """
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -23,7 +24,6 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.models import BaseModel
-
 
 # ---------------------------------------------------------------------------
 # 1) DiseaseFollowupProtocol
@@ -45,59 +45,82 @@ class DiseaseFollowupProtocol(BaseModel):
         verbose_name=_("Maladie"),
     )
     duration_days = models.PositiveSmallIntegerField(
-        _("Durée du suivi (jours)"), default=21,
+        _("Durée du suivi (jours)"),
+        default=21,
     )
     daily_checkin_required = models.BooleanField(
-        _("Check-in quotidien obligatoire"), default=True,
+        _("Check-in quotidien obligatoire"),
+        default=True,
     )
     daily_checkin_recommended = models.BooleanField(
-        _("Check-in quotidien recommandé"), default=False,
+        _("Check-in quotidien recommandé"),
+        default=False,
     )
 
     # Listes de symptômes (codes machine, ex. "fever", "bleeding") — la
     # source de vérité des libellés reste apps.diseases.Symptom mais on
     # garde une copie ici pour limiter les jointures à l'exécution.
     critical_symptoms = models.JSONField(
-        _("Symptômes critiques"), default=list, blank=True,
+        _("Symptômes critiques"),
+        default=list,
+        blank=True,
         help_text=_("Codes machine qui déclenchent une escalade immédiate."),
     )
     monitored_symptoms = models.JSONField(
-        _("Symptômes surveillés"), default=list, blank=True,
+        _("Symptômes surveillés"),
+        default=list,
+        blank=True,
     )
 
     # Règles métier (JSON volontairement libre pour évolutivité). Voir
     # les commentaires inline dans le seed pour la grammaire attendue.
     sample_required_rules = models.JSONField(
-        _("Règles prélèvement"), default=dict, blank=True,
+        _("Règles prélèvement"),
+        default=dict,
+        blank=True,
     )
     lab_analysis_required_rules = models.JSONField(
-        _("Règles analyse labo"), default=dict, blank=True,
+        _("Règles analyse labo"),
+        default=dict,
+        blank=True,
     )
     escalation_rules = models.JSONField(
-        _("Règles d'escalade"), default=dict, blank=True,
+        _("Règles d'escalade"),
+        default=dict,
+        blank=True,
     )
     closure_rules = models.JSONField(
-        _("Règles de clôture"), default=dict, blank=True,
+        _("Règles de clôture"),
+        default=dict,
+        blank=True,
     )
     notification_schedule = models.JSONField(
-        _("Planning de notifications"), default=dict, blank=True,
+        _("Planning de notifications"),
+        default=dict,
+        blank=True,
     )
     field_visit_rules = models.JSONField(
-        _("Règles de visite terrain"), default=dict, blank=True,
+        _("Règles de visite terrain"),
+        default=dict,
+        blank=True,
     )
     # Qualification à l'enregistrement (questionnaire voyageur). Clés et
     # valeurs par défaut : apps.medical.screening.DEFAULT_SCREENING_RULES.
     screening_rules = models.JSONField(
-        _("Règles de qualification à l'arrivée"), default=dict, blank=True,
+        _("Règles de qualification à l'arrivée"),
+        default=dict,
+        blank=True,
     )
 
     # Géoloc — Option 3 (RGPD-safe) : pas de tracking caché, mais
     # alerte si la géoloc consentie n'a pas remonté de ping depuis X h.
     require_geolocation = models.BooleanField(
-        _("Géolocalisation requise"), default=True,
+        _("Géolocalisation requise"),
+        default=True,
     )
     geolocation_alert_after_hours = models.PositiveSmallIntegerField(
-        _("Alerte géoloc après (heures)"), default=24,
+        _("Alerte géoloc après (heures)"),
+        default=24,
     )
 
     is_active = models.BooleanField(_("Actif"), default=True, db_index=True)
@@ -146,7 +169,8 @@ class MedicalSymptomReport(BaseModel):
     )
     followup_day = models.ForeignKey(
         "quarantine.DailyCheck",
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="symptom_reports",
         verbose_name=_("Jour de suivi"),
@@ -154,7 +178,8 @@ class MedicalSymptomReport(BaseModel):
     symptom_code = models.CharField(_("Code symptôme"), max_length=40, db_index=True)
     symptom_label = models.CharField(_("Libellé"), max_length=120)
     severity = models.CharField(
-        _("Sévérité"), max_length=20,
+        _("Sévérité"),
+        max_length=20,
         choices=SymptomSeverity.choices,
         default=SymptomSeverity.MILD,
         db_index=True,
@@ -162,23 +187,28 @@ class MedicalSymptomReport(BaseModel):
     onset_date = models.DateField(_("Date d'apparition"), db_index=True)
     reported_by_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="symptom_reports_recorded",
         verbose_name=_("Saisi par"),
     )
     reported_by_traveler = models.BooleanField(
-        _("Déclaré par le voyageur"), default=False,
+        _("Déclaré par le voyageur"),
+        default=False,
     )
     source = models.CharField(
-        _("Source"), max_length=20,
+        _("Source"),
+        max_length=20,
         choices=SymptomSource.choices,
         default=SymptomSource.CHECKIN,
         db_index=True,
     )
     notes = models.TextField(_("Notes"), blank=True)
     is_critical = models.BooleanField(
-        _("Critique"), default=False, db_index=True,
+        _("Critique"),
+        default=False,
+        db_index=True,
         help_text=_("True si symptom_code ∈ protocol.critical_symptoms."),
     )
 
@@ -235,49 +265,65 @@ class MedicalSample(BaseModel):
     )
     followup_day = models.ForeignKey(
         "quarantine.DailyCheck",
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="samples",
         verbose_name=_("Jour de suivi"),
     )
     sample_code = models.CharField(
-        _("Code prélèvement"), max_length=40, unique=True, db_index=True,
+        _("Code prélèvement"),
+        max_length=40,
+        unique=True,
+        db_index=True,
     )
     sample_type = models.CharField(
-        _("Type"), max_length=20,
+        _("Type"),
+        max_length=20,
         choices=SampleType.choices,
         default=SampleType.BLOOD,
     )
     collected_at = models.DateTimeField(_("Prélevé le"), null=True, blank=True)
     collected_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="samples_collected",
         verbose_name=_("Préleveur"),
     )
     collection_location = models.CharField(
-        _("Lieu de prélèvement"), max_length=200, blank=True,
+        _("Lieu de prélèvement"),
+        max_length=200,
+        blank=True,
     )
     transport_conditions = models.TextField(
-        _("Conditions de transport"), blank=True,
+        _("Conditions de transport"),
+        blank=True,
     )
     # `destination_lab` libre pour démarrer — une FK vers un modèle `Lab`
     # sera ajoutée en 9B/9C une fois les laboratoires modélisés.
     destination_lab = models.CharField(
-        _("Laboratoire destinataire"), max_length=200, blank=True,
+        _("Laboratoire destinataire"),
+        max_length=200,
+        blank=True,
     )
     transport_status = models.CharField(
-        _("Statut transport"), max_length=20,
+        _("Statut transport"),
+        max_length=20,
         choices=SampleTransportStatus.choices,
         default=SampleTransportStatus.REQUESTED,
         db_index=True,
     )
     transport_departed_at = models.DateTimeField(
-        _("Départ transport"), null=True, blank=True,
+        _("Départ transport"),
+        null=True,
+        blank=True,
     )
     received_at = models.DateTimeField(
-        _("Reçu au labo"), null=True, blank=True,
+        _("Reçu au labo"),
+        null=True,
+        blank=True,
     )
     notes = models.TextField(_("Notes"), blank=True)
 
@@ -334,13 +380,15 @@ class LabAnalysis(BaseModel):
     lab_name = models.CharField(_("Laboratoire"), max_length=200)
     test_type = models.CharField(_("Type d'analyse"), max_length=80)
     status = models.CharField(
-        _("Statut"), max_length=24,
+        _("Statut"),
+        max_length=24,
         choices=LabAnalysisStatus.choices,
         default=LabAnalysisStatus.PENDING,
         db_index=True,
     )
     result = models.CharField(
-        _("Résultat"), max_length=20,
+        _("Résultat"),
+        max_length=20,
         choices=LabAnalysisResult.choices,
         default=LabAnalysisResult.EMPTY,
         blank=True,
@@ -351,7 +399,8 @@ class LabAnalysis(BaseModel):
     validated_at = models.DateTimeField(_("Validé le"), null=True, blank=True)
     validated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="lab_results_validated",
         verbose_name=_("Validé par"),
@@ -359,7 +408,8 @@ class LabAnalysis(BaseModel):
     result_file = models.FileField(
         _("Fichier résultat"),
         upload_to="lab/",
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     notes = models.TextField(_("Notes"), blank=True)
 
@@ -408,7 +458,8 @@ class CaseClassification(BaseModel):
         verbose_name=_("Cas de suivi"),
     )
     classification = models.CharField(
-        _("Classification"), max_length=30,
+        _("Classification"),
+        max_length=30,
         choices=CaseClassificationCode.choices,
         db_index=True,
     )
@@ -421,7 +472,9 @@ class CaseClassification(BaseModel):
     )
     classified_at = models.DateTimeField(_("Classé le"), auto_now_add=True)
     is_current = models.BooleanField(
-        _("Classification active"), default=True, db_index=True,
+        _("Classification active"),
+        default=True,
+        db_index=True,
     )
 
     class Meta(BaseModel.Meta):
@@ -485,13 +538,15 @@ class FollowUpAction(BaseModel):
     )
     followup_day = models.ForeignKey(
         "quarantine.DailyCheck",
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="actions",
         verbose_name=_("Jour de suivi"),
     )
     action_type = models.CharField(
-        _("Type d'action"), max_length=40,
+        _("Type d'action"),
+        max_length=40,
         choices=FollowUpActionType.choices,
         db_index=True,
     )
@@ -499,22 +554,28 @@ class FollowUpAction(BaseModel):
     description = models.TextField(_("Description"), blank=True)
     performed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="followup_actions",
         verbose_name=_("Effectué par"),
     )
     performed_at = models.DateTimeField(
-        _("Effectué le"), auto_now_add=True, db_index=True,
+        _("Effectué le"),
+        auto_now_add=True,
+        db_index=True,
     )
     status = models.CharField(
-        _("Statut"), max_length=20,
+        _("Statut"),
+        max_length=20,
         choices=FollowUpActionStatus.choices,
         default=FollowUpActionStatus.COMPLETED,
         db_index=True,
     )
     metadata = models.JSONField(
-        _("Métadonnées"), default=dict, blank=True,
+        _("Métadonnées"),
+        default=dict,
+        blank=True,
     )
 
     class Meta(BaseModel.Meta):
@@ -557,29 +618,47 @@ class HealthScreening(BaseModel):
     """
 
     traveler = models.ForeignKey(
-        "travelers.Traveler", on_delete=models.CASCADE, related_name="health_screenings",
+        "travelers.Traveler",
+        on_delete=models.CASCADE,
+        related_name="health_screenings",
     )
     disease = models.ForeignKey(
-        "diseases.Disease", on_delete=models.PROTECT, related_name="health_screenings",
+        "diseases.Disease",
+        on_delete=models.PROTECT,
+        related_name="health_screenings",
     )
     decision = models.CharField(
-        _("Décision"), max_length=20, choices=ScreeningDecision.choices, db_index=True,
+        _("Décision"),
+        max_length=20,
+        choices=ScreeningDecision.choices,
+        db_index=True,
     )
     reasons = models.JSONField(_("Motifs"), default=list, blank=True)
     answers = models.JSONField(
-        _("Réponses"), default=dict, blank=True,
+        _("Réponses"),
+        default=dict,
+        blank=True,
         help_text=_("Expositions, symptômes et pays à risque retenus pour cette maladie."),
     )
     followup_case = models.ForeignKey(
-        "quarantine.QuarantineRecord", null=True, blank=True, on_delete=models.SET_NULL,
+        "quarantine.QuarantineRecord",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="screenings",
     )
     review_status = models.CharField(
-        _("Revue"), max_length=20, choices=ScreeningReviewStatus.choices,
-        default=ScreeningReviewStatus.NOT_REQUIRED, db_index=True,
+        _("Revue"),
+        max_length=20,
+        choices=ScreeningReviewStatus.choices,
+        default=ScreeningReviewStatus.NOT_REQUIRED,
+        db_index=True,
     )
     reviewed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="+",
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)

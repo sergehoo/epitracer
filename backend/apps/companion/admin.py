@@ -1,8 +1,12 @@
 from django.contrib import admin
 
 from .models import (
-    DataAccessLog, DataPurgeLog, DataRetentionPolicy,
-    PrivacyConsent, PushSubscription, TravelerLocationPing,
+    DataAccessLog,
+    DataPurgeLog,
+    DataRetentionPolicy,
+    PrivacyConsent,
+    PushSubscription,
+    TravelerLocationPing,
 )
 
 
@@ -24,8 +28,15 @@ class PrivacyConsentAdmin(admin.ModelAdmin):
     list_display = ("traveler", "scope", "granted", "consent_version", "granted_at", "revoked_at")
     list_filter = ("scope", "granted", "consent_version")
     search_fields = ("traveler__public_id", "traveler__last_name", "traveler__first_name")
-    readonly_fields = ("granted_at", "revoked_at", "ip_address", "user_agent",
-                       "consent_text_excerpt", "created_at", "updated_at")
+    readonly_fields = (
+        "granted_at",
+        "revoked_at",
+        "ip_address",
+        "user_agent",
+        "consent_text_excerpt",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(PushSubscription)
@@ -33,8 +44,16 @@ class PushSubscriptionAdmin(admin.ModelAdmin):
     list_display = ("traveler", "device_type", "is_active", "failure_count", "last_used_at")
     list_filter = ("is_active", "device_type")
     search_fields = ("traveler__public_id", "endpoint")
-    readonly_fields = ("endpoint", "p256dh", "auth", "user_agent", "last_used_at",
-                       "failure_count", "created_at", "updated_at")
+    readonly_fields = (
+        "endpoint",
+        "p256dh",
+        "auth",
+        "user_agent",
+        "last_used_at",
+        "failure_count",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(TravelerLocationPing)

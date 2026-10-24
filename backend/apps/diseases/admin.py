@@ -16,31 +16,75 @@ class RiskFactorInline(admin.TabularInline):
 @admin.register(Disease)
 class DiseaseAdmin(admin.ModelAdmin):
     list_display = (
-        "name", "code", "severity", "is_active", "is_published", "public_alert_level",
+        "name",
+        "code",
+        "severity",
+        "is_active",
+        "is_published",
+        "public_alert_level",
         "surveillance_days",
     )
     list_filter = (
-        "severity", "is_active", "is_published", "public_alert_level", "requires_quarantine",
+        "severity",
+        "is_active",
+        "is_published",
+        "public_alert_level",
+        "requires_quarantine",
     )
     search_fields = ("name", "code", "short_name")
     inlines = [SymptomInline, RiskFactorInline]
     readonly_fields = ("is_published", "published_at", "published_by")
     actions = ["publish_selected", "unpublish_selected"]
     fieldsets = (
-        (None, {"fields": (
-            "name", "code", "short_name", "icd11_code", "severity", "color", "is_active",
-            "requires_quarantine", "requires_pass",
-        )}),
-        ("Épidémiologie", {"fields": (
-            "incubation_min_days", "incubation_max_days", "surveillance_days", "quarantine_days",
-            "transmission_modes", "risk_countries", "case_definition", "protocols",
-            "notification_rules",
-        )}),
-        ("Portail public", {"fields": (
-            "slug", "description", "transmission_details", "prevention",
-            "traveler_recommendations", "public_alert_level", "public_translations",
-            "is_published", "published_at", "published_by",
-        )}),
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "code",
+                    "short_name",
+                    "icd11_code",
+                    "severity",
+                    "color",
+                    "is_active",
+                    "requires_quarantine",
+                    "requires_pass",
+                )
+            },
+        ),
+        (
+            "Épidémiologie",
+            {
+                "fields": (
+                    "incubation_min_days",
+                    "incubation_max_days",
+                    "surveillance_days",
+                    "quarantine_days",
+                    "transmission_modes",
+                    "risk_countries",
+                    "case_definition",
+                    "protocols",
+                    "notification_rules",
+                )
+            },
+        ),
+        (
+            "Portail public",
+            {
+                "fields": (
+                    "slug",
+                    "description",
+                    "transmission_details",
+                    "prevention",
+                    "traveler_recommendations",
+                    "public_alert_level",
+                    "public_translations",
+                    "is_published",
+                    "published_at",
+                    "published_by",
+                )
+            },
+        ),
     )
 
     @admin.action(description="Publier sur le portail")

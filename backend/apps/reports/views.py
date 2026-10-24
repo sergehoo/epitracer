@@ -14,10 +14,8 @@ Tous les rapports acceptent :
     date_to   = YYYY-MM-DD
 Plus quelques filtres spécifiques par rapport (cf. handler).
 """
-from __future__ import annotations
 
-from datetime import timedelta
-from typing import Optional
+from __future__ import annotations
 
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -37,7 +35,6 @@ from .utils import (
     safe_getattr,
     xlsx_response,
 )
-
 
 # ---------------------------------------------------------------------------
 # Métadonnées des rapports — utilisées par le frontend pour générer les cartes.
@@ -132,10 +129,12 @@ class _BaseReportView(APIView):
         # DRF intercepte ce param via URL_FORMAT_OVERRIDE et tente de matcher
         # un renderer, ce qui provoque un 404 si aucun renderer csv/pdf n'est
         # déclaré sur la view.
-        v = (request.query_params.get("output")
-             or request.query_params.get("fmt")
-             or request.query_params.get("format")
-             or "csv")
+        v = (
+            request.query_params.get("output")
+            or request.query_params.get("fmt")
+            or request.query_params.get("format")
+            or "csv"
+        )
         return v.lower()
 
     def _filename(self, key: str, fmt: str, d_from, d_to) -> str:
@@ -148,7 +147,11 @@ class _BaseReportView(APIView):
         filename = self._filename(key, fmt, d_from, d_to)
         if fmt == "pdf":
             return pdf_response(
-                filename, title=title, subtitle=subtitle, headers=headers, rows=rows,
+                filename,
+                title=title,
+                subtitle=subtitle,
+                headers=headers,
+                rows=rows,
                 summary=summary,
             )
         if fmt == "xlsx":
@@ -165,8 +168,9 @@ class TravelersReportView(_BaseReportView):
 
         d_from, d_to = self._period(request)
         qs = with_itinerary(
-            Traveler.objects.select_related("entry_point")
-            .filter(arrival_date__gte=d_from, arrival_date__lte=d_to)
+            Traveler.objects.select_related("entry_point").filter(
+                arrival_date__gte=d_from, arrival_date__lte=d_to
+            )
         )
 
         entry_point = request.query_params.get("entry_point")
@@ -195,24 +199,29 @@ class TravelersReportView(_BaseReportView):
         ]
         rows = []
         for t in qs:
-            rows.append([
-                t.public_id,
-                t.last_name,
-                t.first_name,
-                t.get_gender_display() if t.gender else "",
-                f"{t.age} {t.get_age_unit_display().lower()}" if t.age else "",
-                t.arrival_date,
-                t.get_transport_mode_display() if t.transport_mode else "",
-                t.flight_or_voyage_number,
-                t.entry_point.name if t.entry_point_id else "",
-                safe_getattr(t, "nationality", "nationality_code", "country_of_origin"),
-                safe_getattr(t, "whatsapp_number", "phone", "phone_number"),
-                safe_getattr(t, "email"),
-                *itinerary_row(t),
-            ])
+            rows.append(
+                [
+                    t.public_id,
+                    t.last_name,
+                    t.first_name,
+                    t.get_gender_display() if t.gender else "",
+                    f"{t.age} {t.get_age_unit_display().lower()}" if t.age else "",
+                    t.arrival_date,
+                    t.get_transport_mode_display() if t.transport_mode else "",
+                    t.flight_or_voyage_number,
+                    t.entry_point.name if t.entry_point_id else "",
+                    safe_getattr(t, "nationality", "nationality_code", "country_of_origin"),
+                    safe_getattr(t, "whatsapp_number", "phone", "phone_number"),
+                    safe_getattr(t, "email"),
+                    *itinerary_row(t),
+                ]
+            )
 
         return self._render(
-            request, "voyageurs", d_from, d_to,
+            request,
+            "voyageurs",
+            d_from,
+            d_to,
             title="Rapport — Voyageurs enregistrés",
             subtitle=f"Période du {d_from.strftime('%d/%m/%Y')} au {d_to.strftime('%d/%m/%Y')}",
             headers=headers,
@@ -229,9 +238,8 @@ class AlertsReportView(_BaseReportView):
         from apps.surveillance.models import HealthAlert
 
         d_from, d_to = self._period(request)
-        qs = (
-            HealthAlert.objects.select_related("disease", "entry_point", "zone")
-            .filter(created_at__date__gte=d_from, created_at__date__lte=d_to)
+        qs = HealthAlert.objects.select_related("disease", "entry_point", "zone").filter(
+            created_at__date__gte=d_from, created_at__date__lte=d_to
         )
 
         severity = request.query_params.get("severity")
@@ -258,21 +266,32 @@ class AlertsReportView(_BaseReportView):
         ]
         rows = []
         for a in qs:
-            rows.append([
-                timezone.localtime(a.created_at),
-                a.title,
-                a.get_severity_display(),
-                a.get_status_display(),
-                a.disease.name if a.disease_id else "",
-                a.entry_point.name if a.entry_point_id else "",
-                safe_getattr(a.zone, "name") if a.zone_id else "",
-                timezone.localtime(a.acknowledged_at) if a.acknowledged_at else None,
-            ])
+            rows.append(
+                [
+                    timezone.localtime(a.created_at),
+                    a.title,
+                    a.get_severity_display(),
+                    a.get_status_display(),
+                    a.disease.name if a.disease_id else "",
+                    a.entry_point.name if a.entry_point_id else "",
+                    safe_getattr(a.zone, "name") if a.zone_id else "",
+                    timezone.localtime(a.acknowledged_at) if a.acknowledged_at else None,
+                ]
+            )
 
         # KPIs synthèse
         summary = [
             ("Total alertes", str(len(rows))),
-            ("Ouvertes", str(sum(1 for r in rows if r[3] == "Ouverte" or r[3] == "Open" or "Ouverte" in str(r[3])))),
+            (
+                "Ouvertes",
+                str(
+                    sum(
+                        1
+                        for r in rows
+                        if r[3] == "Ouverte" or r[3] == "Open" or "Ouverte" in str(r[3])
+                    )
+                ),
+            ),
             ("Acquittées", str(sum(1 for r in rows if r[7] is not None))),
         ]
 
@@ -299,8 +318,9 @@ class FollowupsReportView(_BaseReportView):
 
         d_from, d_to = self._period(request)
         qs = with_itinerary(
-            QuarantineRecord.objects.select_related("traveler", "disease")
-            .filter(started_on__gte=d_from, started_on__lte=d_to),
+            QuarantineRecord.objects.select_related("traveler", "disease").filter(
+                started_on__gte=d_from, started_on__lte=d_to
+            ),
             prefix="traveler__",
         )
 
@@ -334,20 +354,22 @@ class FollowupsReportView(_BaseReportView):
         rows = []
         for q in qs:
             t = q.traveler
-            rows.append([
-                t.public_id if t else "",
-                f"{t.last_name} {t.first_name}" if t else "",
-                q.disease.name if q.disease_id else "",
-                q.get_status_display(),
-                q.started_on,
-                q.expected_end_on,
-                q.actual_end_on,
-                q.checks_total,
-                q.checks_with_symptoms,
-                q.alerts_raised,
-                q.address,
-                *itinerary_row(t),
-            ])
+            rows.append(
+                [
+                    t.public_id if t else "",
+                    f"{t.last_name} {t.first_name}" if t else "",
+                    q.disease.name if q.disease_id else "",
+                    q.get_status_display(),
+                    q.started_on,
+                    q.expected_end_on,
+                    q.actual_end_on,
+                    q.checks_total,
+                    q.checks_with_symptoms,
+                    q.alerts_raised,
+                    q.address,
+                    *itinerary_row(t),
+                ]
+            )
 
         summary = [
             ("Total suivis", str(len(rows))),
@@ -356,7 +378,10 @@ class FollowupsReportView(_BaseReportView):
         ]
 
         return self._render(
-            request, "suivi-21j", d_from, d_to,
+            request,
+            "suivi-21j",
+            d_from,
+            d_to,
             title="Rapport — Suivi 21 jours (quarantaines)",
             subtitle=(
                 f"Quarantaines débutées entre le {d_from.strftime('%d/%m/%Y')} "
@@ -376,10 +401,9 @@ class CheckinsReportView(_BaseReportView):
         from apps.quarantine.models import DailyCheck
 
         d_from, d_to = self._period(request)
-        qs = (
-            DailyCheck.objects.select_related("quarantine", "quarantine__traveler", "quarantine__disease")
-            .filter(check_date__gte=d_from, check_date__lte=d_to)
-        )
+        qs = DailyCheck.objects.select_related(
+            "quarantine", "quarantine__traveler", "quarantine__disease"
+        ).filter(check_date__gte=d_from, check_date__lte=d_to)
 
         alert_raised = request.query_params.get("alert_raised")
         if alert_raised in {"true", "1"}:
@@ -402,16 +426,18 @@ class CheckinsReportView(_BaseReportView):
         rows = []
         for c in qs:
             t = c.quarantine.traveler if c.quarantine_id and c.quarantine.traveler_id else None
-            rows.append([
-                c.check_date,
-                f"J{c.day_index}",
-                t.public_id if t else "",
-                f"{t.last_name} {t.first_name}" if t else "",
-                c.quarantine.disease.name if c.quarantine and c.quarantine.disease_id else "",
-                c.has_symptoms,
-                c.alert_raised,
-                c.is_self_reported,
-            ])
+            rows.append(
+                [
+                    c.check_date,
+                    f"J{c.day_index}",
+                    t.public_id if t else "",
+                    f"{t.last_name} {t.first_name}" if t else "",
+                    c.quarantine.disease.name if c.quarantine and c.quarantine.disease_id else "",
+                    c.has_symptoms,
+                    c.alert_raised,
+                    c.is_self_reported,
+                ]
+            )
 
         summary = [
             ("Total check-ins", str(len(rows))),
@@ -438,19 +464,23 @@ class CheckinsReportView(_BaseReportView):
 # ---------------------------------------------------------------------------
 class OverviewReportView(_BaseReportView):
     def get(self, request):
-        from apps.travelers.models import Traveler
-        from apps.surveillance.models import HealthAlert
-        from apps.quarantine.models import QuarantineRecord, DailyCheck
         from apps.health_pass.models import HealthPass
-        from apps.geo.models import EntryPoint
-        from apps.diseases.models import Disease
+        from apps.quarantine.models import DailyCheck, QuarantineRecord
+        from apps.surveillance.models import HealthAlert
+        from apps.travelers.models import Traveler
 
         d_from, d_to = self._period(request)
 
         # KPIs globaux
-        n_travelers = Traveler.objects.filter(arrival_date__gte=d_from, arrival_date__lte=d_to).count()
-        n_passes = HealthPass.objects.filter(created_at__date__gte=d_from, created_at__date__lte=d_to).count()
-        n_alerts = HealthAlert.objects.filter(created_at__date__gte=d_from, created_at__date__lte=d_to).count()
+        n_travelers = Traveler.objects.filter(
+            arrival_date__gte=d_from, arrival_date__lte=d_to
+        ).count()
+        n_passes = HealthPass.objects.filter(
+            created_at__date__gte=d_from, created_at__date__lte=d_to
+        ).count()
+        n_alerts = HealthAlert.objects.filter(
+            created_at__date__gte=d_from, created_at__date__lte=d_to
+        ).count()
         n_qr_active = QuarantineRecord.objects.filter(status__in=["ACTIVE", "EXTENDED"]).count()
         n_checkins = DailyCheck.objects.filter(check_date__gte=d_from, check_date__lte=d_to).count()
         n_with_symptoms = DailyCheck.objects.filter(
@@ -469,7 +499,8 @@ class OverviewReportView(_BaseReportView):
         # Top 5 maladies par alertes
         top_diseases_rows = list(
             HealthAlert.objects.filter(
-                created_at__date__gte=d_from, created_at__date__lte=d_to,
+                created_at__date__gte=d_from,
+                created_at__date__lte=d_to,
             )
             .values("disease__name")
             .annotate(n=Count("id"))
@@ -486,33 +517,33 @@ class OverviewReportView(_BaseReportView):
 
         # Construction du PDF avec 2 tableaux
         headers_diseases = ["Maladie", "Nb alertes"]
-        rows_diseases = [
-            [r["disease__name"] or "—", r["n"]] for r in top_diseases_rows
-        ] or [["Aucune alerte sur la période", 0]]
+        rows_diseases = [[r["disease__name"] or "—", r["n"]] for r in top_diseases_rows] or [
+            ["Aucune alerte sur la période", 0]
+        ]
 
         headers_ep = ["Point d'entrée", "Nb voyageurs"]
-        rows_ep = [
-            [r["entry_point__name"] or "—", r["n"]] for r in top_ep_rows
-        ] or [["Aucun voyageur sur la période", 0]]
+        rows_ep = [[r["entry_point__name"] or "—", r["n"]] for r in top_ep_rows] or [
+            ["Aucun voyageur sur la période", 0]
+        ]
 
         # On compose un PDF combiné en utilisant nos helpers : 2 tableaux successifs.
         # Le helper pdf_response ne prend qu'un seul tableau ; on construit ici
         # manuellement le document pour pouvoir afficher les 2 sections.
         from io import BytesIO
+
+        from django.http import HttpResponse
         from reportlab.lib import colors as _colors
         from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm as _mm
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.platypus import (
-            SimpleDocTemplate,
             Paragraph,
-            Spacer,
+            SimpleDocTemplate,
             Table,
             TableStyle,
         )
-        from django.http import HttpResponse
 
-        from .utils import CI_GREEN, CI_DARK, CI_LIGHT_GREEN
+        from .utils import CI_DARK, CI_GREEN, CI_LIGHT_GREEN
 
         buf = BytesIO()
         doc = SimpleDocTemplate(
@@ -527,8 +558,21 @@ class OverviewReportView(_BaseReportView):
         )
         styles = getSampleStyleSheet()
         h1 = ParagraphStyle("h1", parent=styles["Heading1"], textColor=CI_DARK, fontSize=20)
-        h2 = ParagraphStyle("h2", parent=styles["Normal"], textColor=_colors.HexColor("#475569"), fontSize=10, spaceAfter=4 * _mm)
-        h3 = ParagraphStyle("h3", parent=styles["Heading2"], textColor=CI_DARK, fontSize=13, spaceBefore=6 * _mm, spaceAfter=2 * _mm)
+        h2 = ParagraphStyle(
+            "h2",
+            parent=styles["Normal"],
+            textColor=_colors.HexColor("#475569"),
+            fontSize=10,
+            spaceAfter=4 * _mm,
+        )
+        h3 = ParagraphStyle(
+            "h3",
+            parent=styles["Heading2"],
+            textColor=CI_DARK,
+            fontSize=13,
+            spaceBefore=6 * _mm,
+            spaceAfter=2 * _mm,
+        )
 
         elements = [
             Paragraph("<b>Synthèse épidémiologique nationale</b>", h1),
@@ -543,16 +587,20 @@ class OverviewReportView(_BaseReportView):
         # Bloc KPIs (2 colonnes)
         kpi_rows = [[Paragraph(f"<b>{lbl}</b>", styles["Normal"]), val] for lbl, val in summary]
         kpi_table = Table(kpi_rows, colWidths=[100 * _mm, None])
-        kpi_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (0, -1), CI_LIGHT_GREEN),
-            ("BOX", (0, 0), (-1, -1), 0.5, _colors.HexColor("#D1D5DB")),
-            ("INNERGRID", (0, 0), (-1, -1), 0.25, _colors.HexColor("#E5E7EB")),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]))
+        kpi_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (0, -1), CI_LIGHT_GREEN),
+                    ("BOX", (0, 0), (-1, -1), 0.5, _colors.HexColor("#D1D5DB")),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, _colors.HexColor("#E5E7EB")),
+                    ("FONTSIZE", (0, 0), (-1, -1), 10),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
         elements.append(kpi_table)
 
         def _section(title: str, hdrs, body):
@@ -561,18 +609,27 @@ class OverviewReportView(_BaseReportView):
             for row in body:
                 data.append([str(c) if c is not None else "—" for c in row])
             tbl = Table(data, colWidths=[None, 40 * _mm])
-            tbl.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), CI_GREEN),
-                ("TEXTCOLOR", (0, 0), (-1, 0), _colors.white),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_colors.white, _colors.HexColor("#F8FAFC")]),
-                ("BOX", (0, 0), (-1, -1), 0.25, _colors.HexColor("#D1D5DB")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.25, _colors.HexColor("#E5E7EB")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 5),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ]))
+            tbl.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), CI_GREEN),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), _colors.white),
+                        ("FONTSIZE", (0, 0), (-1, -1), 9),
+                        (
+                            "ROWBACKGROUNDS",
+                            (0, 1),
+                            (-1, -1),
+                            [_colors.white, _colors.HexColor("#F8FAFC")],
+                        ),
+                        ("BOX", (0, 0), (-1, -1), 0.25, _colors.HexColor("#D1D5DB")),
+                        ("INNERGRID", (0, 0), (-1, -1), 0.25, _colors.HexColor("#E5E7EB")),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                        ("TOPPADDING", (0, 0), (-1, -1), 3),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                    ]
+                )
+            )
             elements.append(tbl)
 
         _section("Top 5 maladies par nombre d'alertes", headers_diseases, rows_diseases)
@@ -583,7 +640,8 @@ class OverviewReportView(_BaseReportView):
             canvas.setFont("Helvetica", 7)
             canvas.setFillColor(_colors.HexColor("#94A3B8"))
             canvas.drawString(
-                15 * _mm, 8 * _mm,
+                15 * _mm,
+                8 * _mm,
                 "EpiTrace — Système national de veille épidémiologique • "
                 "Confidentiel — usage administratif uniquement",
             )

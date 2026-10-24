@@ -7,6 +7,7 @@ Sécurité :
     - Invalidation automatique des anciens codes lors d'une nouvelle génération
     - IP + User-Agent tracés pour audit
 """
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -21,7 +22,8 @@ class EmailOtpCode(BaseModel):
     """Code OTP à 6 chiffres envoyé par email pour la MFA."""
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
         related_name="email_otp_codes",
     )
     code_hash = models.CharField(_("hash du code"), max_length=128, db_index=True)

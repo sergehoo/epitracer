@@ -1,4 +1,5 @@
 """Seed les données de référence : rôles RBAC, maladies, pays à risque, points d'entrée CI."""
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -7,7 +8,7 @@ from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.accounts.models import RoleCode, Role
+from apps.accounts.models import Role, RoleCode
 from apps.diseases.catalog import sync_disease_catalog
 from apps.diseases.models import (
     Disease,
@@ -161,45 +162,59 @@ ENTRY_POINTS = [
         "code": "ABJ-AIRPORT",
         "name": "Aéroport International Félix-Houphouët-Boigny",
         "type": EntryPointType.AIRPORT,
-        "iata_code": "ABJ", "icao_code": "DIAP",
-        "country": "CI", "city": "Abidjan",
-        "lat": 5.2616, "lng": -3.9263,
+        "iata_code": "ABJ",
+        "icao_code": "DIAP",
+        "country": "CI",
+        "city": "Abidjan",
+        "lat": 5.2616,
+        "lng": -3.9263,
     },
     {
         "code": "ABJ-PORT",
         "name": "Port Autonome d'Abidjan",
         "type": EntryPointType.SEAPORT,
-        "country": "CI", "city": "Abidjan",
-        "lat": 5.2789, "lng": -4.0083,
+        "country": "CI",
+        "city": "Abidjan",
+        "lat": 5.2789,
+        "lng": -4.0083,
     },
     {
         "code": "SAN-PORT",
         "name": "Port de San-Pédro",
         "type": EntryPointType.SEAPORT,
-        "country": "CI", "city": "San-Pédro",
-        "lat": 4.7361, "lng": -6.6336,
+        "country": "CI",
+        "city": "San-Pédro",
+        "lat": 4.7361,
+        "lng": -6.6336,
     },
     {
         "code": "PGA-LAND",
         "name": "Frontière de Pôgô (CI/Mali)",
         "type": EntryPointType.LAND,
-        "country": "CI", "city": "Pôgô",
-        "lat": 10.0667, "lng": -5.7167,
+        "country": "CI",
+        "city": "Pôgô",
+        "lat": 10.0667,
+        "lng": -5.7167,
     },
     {
         "code": "NDA-LAND",
         "name": "Frontière de Niablé (CI/Ghana)",
         "type": EntryPointType.LAND,
-        "country": "CI", "city": "Niablé",
-        "lat": 6.2333, "lng": -3.2333,
+        "country": "CI",
+        "city": "Niablé",
+        "lat": 6.2333,
+        "lng": -3.2333,
     },
     {
         "code": "AKJ-AIRPORT",
         "name": "Aéroport de Yamoussoukro",
         "type": EntryPointType.AIRPORT,
-        "iata_code": "ASK", "icao_code": "DIYO",
-        "country": "CI", "city": "Yamoussoukro",
-        "lat": 6.9032, "lng": -5.3656,
+        "iata_code": "ASK",
+        "icao_code": "DIYO",
+        "country": "CI",
+        "city": "Yamoussoukro",
+        "lat": 6.9032,
+        "lng": -5.3656,
     },
 ]
 
@@ -254,11 +269,13 @@ class Command(BaseCommand):
         country_map = {
             code2: find_country(Country, code2, code3) for code2, code3, *_ in REFERENCE_COUNTRIES
         }
-        self.stdout.write(self.style.SUCCESS(
-            f"  {len(country_map)} pays au référentiel "
-            f"({stats['created']} créés, {stats['updated']} complétés, "
-            "niveaux de risque inchangés)."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"  {len(country_map)} pays au référentiel "
+                f"({stats['created']} créés, {stats['updated']} complétés, "
+                "niveaux de risque inchangés)."
+            )
+        )
 
         self.stdout.write(self.style.MIGRATE_HEADING("> Maladies"))
         for d in DISEASES:
@@ -266,10 +283,12 @@ class Command(BaseCommand):
             if obj.code == "EBOLA":
                 self._seed_ebola_metadata(obj)
         catalog = sync_disease_catalog(Disease, Symptom, RiskFactor)
-        self.stdout.write(self.style.SUCCESS(
-            f"  {len(DISEASES)} maladies synchronisées ; catalogue public : "
-            f"{catalog['created']} ajoutées (inactives), {catalog['completed']} brouillons complétés."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"  {len(DISEASES)} maladies synchronisées ; catalogue public : "
+                f"{catalog['created']} ajoutées (inactives), {catalog['completed']} brouillons complétés."
+            )
+        )
 
         self.stdout.write(self.style.MIGRATE_HEADING("> Points d'entrée"))
         for ep in ENTRY_POINTS:
@@ -287,7 +306,9 @@ class Command(BaseCommand):
                     "is_active": True,
                 },
             )
-        self.stdout.write(self.style.SUCCESS(f"  {len(ENTRY_POINTS)} points d'entrée synchronisés."))
+        self.stdout.write(
+            self.style.SUCCESS(f"  {len(ENTRY_POINTS)} points d'entrée synchronisés.")
+        )
 
         self.stdout.write(self.style.MIGRATE_HEADING("> Templates de notification"))
         for t in NOTIFICATION_TEMPLATES:
@@ -295,18 +316,28 @@ class Command(BaseCommand):
                 code=t["code"],
                 defaults={**t, "is_active": True},
             )
-        self.stdout.write(self.style.SUCCESS(f"  {len(NOTIFICATION_TEMPLATES)} templates synchronisés."))
+        self.stdout.write(
+            self.style.SUCCESS(f"  {len(NOTIFICATION_TEMPLATES)} templates synchronisés.")
+        )
 
         # Bootstrap super admin si variables d'env présentes
-        username = settings.env("DJANGO_SUPERUSER_USERNAME", default=None) if hasattr(settings, "env") else None
+        username = (
+            settings.env("DJANGO_SUPERUSER_USERNAME", default=None)
+            if hasattr(settings, "env")
+            else None
+        )
         # On évite de dépendre de env si non dispo (settings.env n'existe pas par défaut)
         import os
+
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")
         email = os.environ.get("DJANGO_SUPERUSER_EMAIL")
         password = os.environ.get("DJANGO_SUPERUSER_PASSWORD")
         if email and password and not User.objects.filter(email=email).exists():
-            u = User.objects.create_superuser(email=email, password=password, username=username or email)
+            u = User.objects.create_superuser(
+                email=email, password=password, username=username or email
+            )
             from apps.accounts.models import RoleAssignment
+
             role = Role.objects.get(code=RoleCode.NATIONAL_ADMIN)
             RoleAssignment.objects.get_or_create(user=u, role=role, is_active=True)
             self.stdout.write(self.style.SUCCESS(f"  Superuser créé : {email}"))
@@ -316,11 +347,13 @@ class Command(BaseCommand):
     def _seed_ebola_metadata(self, disease: Disease) -> None:
         for code, label, weight, red in EBOLA_SYMPTOMS:
             Symptom.objects.update_or_create(
-                disease=disease, code=code,
+                disease=disease,
+                code=code,
                 defaults={"label": label, "weight": weight, "is_red_flag": red},
             )
         for code, label, weight in EBOLA_RISK_FACTORS:
             RiskFactor.objects.update_or_create(
-                disease=disease, code=code,
+                disease=disease,
+                code=code,
                 defaults={"label": label, "weight": weight},
             )

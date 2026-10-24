@@ -1,4 +1,5 @@
 """Tâches Celery du module quarantaine."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -8,7 +9,7 @@ from django.utils import timezone
 
 from apps.surveillance.services import trigger_alert
 
-from .models import DailyCheck, QuarantineRecord, QuarantineStatus
+from .models import QuarantineRecord, QuarantineStatus
 from .services import close_quarantine
 
 

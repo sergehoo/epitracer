@@ -14,6 +14,7 @@ Pour le module Ebola : on dispose à la fois d'un modèle "fort" (apps.ebola)
 qui structure les champs essentiels en colonnes Django (pour reporting/index),
 ET d'un FormSubmission lié (pour la souplesse / évolutions).
 """
+
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
@@ -55,7 +56,9 @@ class DynamicForm(BaseModel):
     description = models.TextField(blank=True)
     version = models.PositiveSmallIntegerField(default=1)
     is_active = models.BooleanField(default=True, db_index=True)
-    is_default = models.BooleanField(default=False, help_text=_("Formulaire principal de la maladie."))
+    is_default = models.BooleanField(
+        default=False, help_text=_("Formulaire principal de la maladie.")
+    )
 
     history = HistoricalRecords()
 
@@ -63,7 +66,9 @@ class DynamicForm(BaseModel):
         verbose_name = _("Formulaire dynamique")
         verbose_name_plural = _("Formulaires dynamiques")
         constraints = [
-            models.UniqueConstraint(fields=["disease", "code", "version"], name="uniq_form_version"),
+            models.UniqueConstraint(
+                fields=["disease", "code", "version"], name="uniq_form_version"
+            ),
         ]
         ordering = ["disease", "code", "-version"]
 
@@ -141,8 +146,12 @@ class FieldCondition(BaseModel):
     field = models.ForeignKey(FormField, on_delete=models.CASCADE, related_name="conditions")
     depends_on = models.ForeignKey(FormField, on_delete=models.CASCADE, related_name="dependents")
     OPERATORS = (
-        ("eq", "="), ("ne", "!="), ("gt", ">"), ("lt", "<"),
-        ("contains", "contains"), ("in", "in"),
+        ("eq", "="),
+        ("ne", "!="),
+        ("gt", ">"),
+        ("lt", "<"),
+        ("contains", "contains"),
+        ("in", "in"),
     )
     operator = models.CharField(max_length=20, choices=OPERATORS)
     expected_value = models.CharField(max_length=255)
@@ -159,10 +168,18 @@ class FieldCondition(BaseModel):
 class FormSubmission(BaseModel):
     form = models.ForeignKey(DynamicForm, on_delete=models.PROTECT, related_name="submissions")
     traveler = models.ForeignKey(
-        "travelers.Traveler", null=True, blank=True, on_delete=models.SET_NULL, related_name="submissions"
+        "travelers.Traveler",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="submissions",
     )
     submitted_by = models.ForeignKey(
-        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="submissions"
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="submissions",
     )
     submitted_at = models.DateTimeField(null=True, blank=True)
     is_complete = models.BooleanField(default=False, db_index=True)

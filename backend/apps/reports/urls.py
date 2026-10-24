@@ -7,16 +7,23 @@ Deux blocs distincts :
 Le signed-download est aussi exposé au niveau top pour ne pas nécessiter
 d'ID (le token contient l'ID).
 """
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .automated_views import (
-    ReportDeliveryLogViewSet, ReportRecipientViewSet, ReportScheduleViewSet,
+    ReportDeliveryLogViewSet,
+    ReportRecipientViewSet,
+    ReportScheduleViewSet,
     WeeklyReportViewSet,
 )
 from .views import (
-    AlertsReportView, CheckinsReportView, FollowupsReportView,
-    OverviewReportView, ReportTypesView, TravelersReportView,
+    AlertsReportView,
+    CheckinsReportView,
+    FollowupsReportView,
+    OverviewReportView,
+    ReportTypesView,
+    TravelersReportView,
 )
 
 # Router DRF pour les 4 ViewSets automatisés
@@ -35,7 +42,6 @@ urlpatterns = [
     path("followups/", FollowupsReportView.as_view(), name="report-followups"),
     path("checkins/", CheckinsReportView.as_view(), name="report-checkins"),
     path("overview/", OverviewReportView.as_view(), name="report-overview"),
-
     # ─── Automatisés — Phase 4 ─────────────────────────────────
     path("", include(router.urls)),
 ]

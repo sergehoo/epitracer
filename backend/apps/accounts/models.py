@@ -17,6 +17,7 @@ Hiérarchie de rôles (RBAC granulaire) :
 Un User peut avoir plusieurs rôles (RoleAssignment), éventuellement avec un
 scope organisationnel (rattachement à une Organization ou un EntryPoint).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -97,12 +98,18 @@ class User(AbstractUser):
 
     # MFA
     mfa_enabled = models.BooleanField(default=False)
-    mfa_enforced = models.BooleanField(default=False, help_text=_("Imposer la MFA à la prochaine connexion."))
+    mfa_enforced = models.BooleanField(
+        default=False, help_text=_("Imposer la MFA à la prochaine connexion.")
+    )
 
     # Statut
-    is_locked = models.BooleanField(default=False, help_text=_("Verrouillé pour raison de sécurité."))
+    is_locked = models.BooleanField(
+        default=False, help_text=_("Verrouillé pour raison de sécurité.")
+    )
     locked_at = models.DateTimeField(null=True, blank=True)
-    locked_until = models.DateTimeField(null=True, blank=True, help_text=_("Verrouillage temporaire automatique."))
+    locked_until = models.DateTimeField(
+        null=True, blank=True, help_text=_("Verrouillage temporaire automatique.")
+    )
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     must_change_password = models.BooleanField(
         default=False,
@@ -201,7 +208,11 @@ class RoleAssignment(TimestampedModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="role_assignments")
     role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="assignments")
     organization = models.ForeignKey(
-        Organization, null=True, blank=True, on_delete=models.SET_NULL, related_name="role_assignments"
+        Organization,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="role_assignments",
     )
     is_active = models.BooleanField(default=True, db_index=True)
     granted_by = models.ForeignKey(

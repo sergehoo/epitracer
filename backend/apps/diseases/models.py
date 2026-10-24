@@ -4,6 +4,7 @@ Une Disease décrit les méta-données épidémiologiques utilisées par tous le
 autres modules : durées de surveillance/incubation, symptômes prédéfinis,
 critères de risque, niveaux de gravité, couleur, statut.
 """
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -44,7 +45,11 @@ class PublicAlertLevel(models.TextChoices):
 
 # Champs de contenu public traduisibles via `public_translations`.
 PUBLIC_TRANSLATABLE_FIELDS = (
-    "name", "description", "transmission_details", "prevention", "traveler_recommendations",
+    "name",
+    "description",
+    "transmission_details",
+    "prevention",
+    "traveler_recommendations",
 )
 
 
@@ -58,13 +63,18 @@ class Disease(BaseModel):
 
     icd11_code = models.CharField(_("code CIM-11"), max_length=40, blank=True)
     severity = models.CharField(
-        _("gravité"), max_length=20, choices=DiseaseSeverity.choices, default=DiseaseSeverity.MODERATE
+        _("gravité"),
+        max_length=20,
+        choices=DiseaseSeverity.choices,
+        default=DiseaseSeverity.MODERATE,
     )
     color = models.CharField(_("couleur (hex)"), max_length=9, default="#dc2626")
 
     incubation_min_days = models.PositiveSmallIntegerField(_("incubation min (jours)"), default=1)
     incubation_max_days = models.PositiveSmallIntegerField(_("incubation max (jours)"), default=14)
-    surveillance_days = models.PositiveSmallIntegerField(_("durée surveillance (jours)"), default=21)
+    surveillance_days = models.PositiveSmallIntegerField(
+        _("durée surveillance (jours)"), default=21
+    )
     quarantine_days = models.PositiveSmallIntegerField(_("durée quarantaine (jours)"), default=21)
 
     transmission_modes = models.JSONField(_("modes de transmission"), default=list, blank=True)
@@ -90,24 +100,34 @@ class Disease(BaseModel):
     slug = models.SlugField(_("slug public"), max_length=60, blank=True, db_index=True)
     transmission_details = models.TextField(_("transmission (texte public)"), blank=True)
     prevention = models.TextField(
-        _("prévention"), blank=True, help_text=_("Un conseil par ligne."),
+        _("prévention"),
+        blank=True,
+        help_text=_("Un conseil par ligne."),
     )
     traveler_recommendations = models.TextField(
-        _("recommandations aux voyageurs"), blank=True,
+        _("recommandations aux voyageurs"),
+        blank=True,
         help_text=_("Une recommandation par ligne."),
     )
     public_alert_level = models.CharField(
-        _("niveau d'alerte public"), max_length=20,
-        choices=PublicAlertLevel.choices, default=PublicAlertLevel.NORMAL,
+        _("niveau d'alerte public"),
+        max_length=20,
+        choices=PublicAlertLevel.choices,
+        default=PublicAlertLevel.NORMAL,
     )
     public_translations = models.JSONField(
-        _("traductions du contenu public"), default=dict, blank=True,
+        _("traductions du contenu public"),
+        default=dict,
+        blank=True,
         help_text=_('Ex : {"en": {"name": "…", "prevention": "…"}}'),
     )
     is_published = models.BooleanField(_("publiée sur le portail"), default=False, db_index=True)
     published_at = models.DateTimeField(_("publiée le"), null=True, blank=True)
     published_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="+",
     )
 
@@ -119,7 +139,9 @@ class Disease(BaseModel):
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
-                fields=["slug"], condition=~Q(slug=""), name="uniq_disease_slug_when_set",
+                fields=["slug"],
+                condition=~Q(slug=""),
+                name="uniq_disease_slug_when_set",
             ),
         ]
 
@@ -136,7 +158,9 @@ class Symptom(BaseModel):
     weight = models.PositiveSmallIntegerField(
         default=1, help_text=_("Poids du symptôme dans le calcul du score de risque.")
     )
-    is_red_flag = models.BooleanField(default=False, help_text=_("Symptôme alarmant (saignement, etc.)"))
+    is_red_flag = models.BooleanField(
+        default=False, help_text=_("Symptôme alarmant (saignement, etc.)")
+    )
     order = models.PositiveSmallIntegerField(default=0)
 
     class Meta(BaseModel.Meta):
@@ -164,7 +188,9 @@ class RiskFactor(BaseModel):
         verbose_name = _("Facteur de risque")
         verbose_name_plural = _("Facteurs de risque")
         constraints = [
-            models.UniqueConstraint(fields=["disease", "code"], name="uniq_risk_factor_per_disease"),
+            models.UniqueConstraint(
+                fields=["disease", "code"], name="uniq_risk_factor_per_disease"
+            ),
         ]
 
     def __str__(self) -> str:

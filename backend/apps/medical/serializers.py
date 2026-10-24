@@ -5,6 +5,7 @@ récupération en clair passe par les endpoints dédiés qui journalisent
 l'accès via DataAccessLog. Aucun champ ne renvoie de token ou de pièce
 d'identité brute.
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -24,11 +25,8 @@ from .models import (
     MedicalSample,
     MedicalSymptomReport,
     SampleType,
-    SampleTransportStatus,
     SymptomSeverity,
-    SymptomSource,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers PII
@@ -79,17 +77,27 @@ class DiseaseFollowupProtocolSerializer(serializers.ModelSerializer):
     class Meta:
         model = DiseaseFollowupProtocol
         fields = [
-            "id", "uuid",
-            "disease", "disease_code", "disease_name",
+            "id",
+            "uuid",
+            "disease",
+            "disease_code",
+            "disease_name",
             "duration_days",
-            "daily_checkin_required", "daily_checkin_recommended",
-            "critical_symptoms", "monitored_symptoms",
-            "sample_required_rules", "lab_analysis_required_rules",
-            "escalation_rules", "closure_rules",
-            "notification_schedule", "field_visit_rules",
-            "require_geolocation", "geolocation_alert_after_hours",
+            "daily_checkin_required",
+            "daily_checkin_recommended",
+            "critical_symptoms",
+            "monitored_symptoms",
+            "sample_required_rules",
+            "lab_analysis_required_rules",
+            "escalation_rules",
+            "closure_rules",
+            "notification_schedule",
+            "field_visit_rules",
+            "require_geolocation",
+            "geolocation_alert_after_hours",
             "is_active",
-            "created_at", "updated_at",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = ["id", "uuid", "created_at", "updated_at"]
 
@@ -102,22 +110,35 @@ class MedicalSymptomReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = MedicalSymptomReport
         fields = [
-            "id", "uuid",
-            "followup_case", "followup_day",
-            "symptom_code", "symptom_label",
-            "severity", "severity_label",
+            "id",
+            "uuid",
+            "followup_case",
+            "followup_day",
+            "symptom_code",
+            "symptom_label",
+            "severity",
+            "severity_label",
             "onset_date",
-            "source", "source_label",
+            "source",
+            "source_label",
             "notes",
             "is_critical",
-            "reported_by_user", "reported_by_name", "reported_by_traveler",
+            "reported_by_user",
+            "reported_by_name",
+            "reported_by_traveler",
             "created_at",
         ]
         read_only_fields = [
-            "id", "uuid", "followup_case",
-            "is_critical", "reported_by_user", "reported_by_name",
-            "reported_by_traveler", "created_at",
-            "severity_label", "source_label",
+            "id",
+            "uuid",
+            "followup_case",
+            "is_critical",
+            "reported_by_user",
+            "reported_by_name",
+            "reported_by_traveler",
+            "created_at",
+            "severity_label",
+            "source_label",
         ]
 
     def get_reported_by_name(self, obj):
@@ -126,37 +147,50 @@ class MedicalSymptomReportSerializer(serializers.ModelSerializer):
 
 class MedicalSampleSerializer(serializers.ModelSerializer):
     transport_status_label = serializers.CharField(
-        source="get_transport_status_display", read_only=True,
+        source="get_transport_status_display",
+        read_only=True,
     )
     sample_type_label = serializers.CharField(
-        source="get_sample_type_display", read_only=True,
+        source="get_sample_type_display",
+        read_only=True,
     )
     collected_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = MedicalSample
         fields = [
-            "id", "uuid",
-            "followup_case", "followup_day",
+            "id",
+            "uuid",
+            "followup_case",
+            "followup_day",
             "sample_code",
-            "sample_type", "sample_type_label",
-            "collected_at", "collected_by", "collected_by_name",
+            "sample_type",
+            "sample_type_label",
+            "collected_at",
+            "collected_by",
+            "collected_by_name",
             "collection_location",
             "transport_conditions",
             "destination_lab",
-            "transport_status", "transport_status_label",
+            "transport_status",
+            "transport_status_label",
             "transport_departed_at",
             "received_at",
             "notes",
-            "created_at", "updated_at",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = [
-            "id", "uuid",
+            "id",
+            "uuid",
             "sample_code",  # auto-généré côté serveur
             "followup_case",
-            "collected_by", "collected_by_name",
-            "created_at", "updated_at",
-            "sample_type_label", "transport_status_label",
+            "collected_by",
+            "collected_by_name",
+            "created_at",
+            "updated_at",
+            "sample_type_label",
+            "transport_status_label",
         ]
 
     def get_collected_by_name(self, obj):
@@ -171,21 +205,35 @@ class LabAnalysisSerializer(serializers.ModelSerializer):
     class Meta:
         model = LabAnalysis
         fields = [
-            "id", "uuid",
-            "sample", "lab_name", "test_type",
-            "status", "status_label",
-            "result", "result_label",
-            "received_at", "analyzed_at",
-            "validated_at", "validated_by", "validated_by_name",
+            "id",
+            "uuid",
+            "sample",
+            "lab_name",
+            "test_type",
+            "status",
+            "status_label",
+            "result",
+            "result_label",
+            "received_at",
+            "analyzed_at",
+            "validated_at",
+            "validated_by",
+            "validated_by_name",
             "result_file",
             "notes",
-            "created_at", "updated_at",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = [
-            "id", "uuid",
-            "validated_at", "validated_by", "validated_by_name",
-            "created_at", "updated_at",
-            "result_label", "status_label",
+            "id",
+            "uuid",
+            "validated_at",
+            "validated_by",
+            "validated_by_name",
+            "created_at",
+            "updated_at",
+            "result_label",
+            "status_label",
         ]
 
     def get_validated_by_name(self, obj):
@@ -194,25 +242,33 @@ class LabAnalysisSerializer(serializers.ModelSerializer):
 
 class CaseClassificationSerializer(serializers.ModelSerializer):
     classification_label = serializers.CharField(
-        source="get_classification_display", read_only=True,
+        source="get_classification_display",
+        read_only=True,
     )
     classified_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = CaseClassification
         fields = [
-            "id", "uuid",
+            "id",
+            "uuid",
             "followup_case",
-            "classification", "classification_label",
+            "classification",
+            "classification_label",
             "reason",
-            "classified_by", "classified_by_name",
+            "classified_by",
+            "classified_by_name",
             "classified_at",
             "is_current",
         ]
         read_only_fields = [
-            "id", "uuid", "followup_case",
-            "classified_by", "classified_by_name",
-            "classified_at", "is_current",
+            "id",
+            "uuid",
+            "followup_case",
+            "classified_by",
+            "classified_by_name",
+            "classified_at",
+            "is_current",
             "classification_label",
         ]
 
@@ -222,7 +278,8 @@ class CaseClassificationSerializer(serializers.ModelSerializer):
 
 class FollowUpActionSerializer(serializers.ModelSerializer):
     action_type_label = serializers.CharField(
-        source="get_action_type_display", read_only=True,
+        source="get_action_type_display",
+        read_only=True,
     )
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     performed_by_name = serializers.SerializerMethodField()
@@ -230,20 +287,31 @@ class FollowUpActionSerializer(serializers.ModelSerializer):
     class Meta:
         model = FollowUpAction
         fields = [
-            "id", "uuid",
-            "followup_case", "followup_day",
-            "action_type", "action_type_label",
-            "title", "description",
-            "status", "status_label",
-            "performed_by", "performed_by_name",
+            "id",
+            "uuid",
+            "followup_case",
+            "followup_day",
+            "action_type",
+            "action_type_label",
+            "title",
+            "description",
+            "status",
+            "status_label",
+            "performed_by",
+            "performed_by_name",
             "performed_at",
             "metadata",
         ]
         read_only_fields = [
-            "id", "uuid",
-            "followup_case", "followup_day",
-            "performed_by", "performed_by_name", "performed_at",
-            "action_type_label", "status_label",
+            "id",
+            "uuid",
+            "followup_case",
+            "followup_day",
+            "performed_by",
+            "performed_by_name",
+            "performed_at",
+            "action_type_label",
+            "status_label",
         ]
 
     def get_performed_by_name(self, obj):
@@ -369,8 +437,7 @@ class FollowupCaseDetailSerializer(serializers.Serializer):
             "status": check.status,
             "has_symptoms": check.has_symptoms,
             "temperature_celsius": (
-                str(check.temperature_celsius)
-                if check.temperature_celsius is not None else None
+                str(check.temperature_celsius) if check.temperature_celsius is not None else None
             ),
             "alert_raised": check.alert_raised,
         }
@@ -381,8 +448,7 @@ class FollowupCaseDetailSerializer(serializers.Serializer):
         except Exception:  # pragma: no cover
             return None
         ping = (
-            TravelerLocationPing.objects
-            .filter(traveler=case.traveler)
+            TravelerLocationPing.objects.filter(traveler=case.traveler)
             .order_by("-captured_at")
             .first()
         )
@@ -400,8 +466,7 @@ class FollowupCaseDetailSerializer(serializers.Serializer):
 
     def get_latest_lab_result(self, case):
         analysis = (
-            LabAnalysis.objects
-            .filter(sample__followup_case=case)
+            LabAnalysis.objects.filter(sample__followup_case=case)
             .exclude(result="")
             .order_by("-created_at")
             .first()
@@ -435,10 +500,13 @@ class FollowupCaseDetailSerializer(serializers.Serializer):
     def get_alerts_count(self, case):
         try:
             from django.contrib.contenttypes.models import ContentType
+
             from apps.surveillance.models import HealthAlert
+
             ct = ContentType.objects.get_for_model(case.__class__)
             return HealthAlert.objects.filter(
-                target_ct=ct, target_id=str(case.pk),
+                target_ct=ct,
+                target_id=str(case.pk),
             ).count()
         except Exception:  # pragma: no cover
             return 0
@@ -474,7 +542,8 @@ class FollowupTimelineDaySerializer(serializers.ModelSerializer):
     symptoms_count = serializers.SerializerMethodField()
     sample_requested_flag = serializers.SerializerMethodField()
     notification_sent_flag = serializers.BooleanField(
-        source="notification_sent", read_only=True,
+        source="notification_sent",
+        read_only=True,
     )
     actions = serializers.SerializerMethodField()
     agent_responsible_name = serializers.SerializerMethodField()
@@ -482,6 +551,7 @@ class FollowupTimelineDaySerializer(serializers.ModelSerializer):
     class Meta:
         # Lazy import — DailyCheck is in apps.quarantine
         from apps.quarantine.models import DailyCheck as _DC
+
         model = _DC
         fields = [
             "id",
@@ -491,7 +561,8 @@ class FollowupTimelineDaySerializer(serializers.ModelSerializer):
             "has_symptoms",
             "temperature_celsius",
             "decision",
-            "agent_responsible", "agent_responsible_name",
+            "agent_responsible",
+            "agent_responsible_name",
             "location_shared",
             "alert_raised",
             "notes",
@@ -557,20 +628,27 @@ _FINAL_STATUS_CHOICES = [
 
 class FollowupCloseSerializer(serializers.Serializer):
     closure_reason = serializers.ChoiceField(
-        choices=_CLOSURE_REASON_CHOICES, required=True,
+        choices=_CLOSURE_REASON_CHOICES,
+        required=True,
     )
     final_status = serializers.ChoiceField(
-        choices=_FINAL_STATUS_CHOICES, required=False, default="completed",
+        choices=_FINAL_STATUS_CHOICES,
+        required=False,
+        default="completed",
     )
     notes = serializers.CharField(allow_blank=True, required=False, default="")
 
 
 class FollowupClassifySerializer(serializers.Serializer):
     classification = serializers.ChoiceField(
-        choices=CaseClassificationCode.choices, required=True,
+        choices=CaseClassificationCode.choices,
+        required=True,
     )
     reason = serializers.CharField(
-        allow_blank=True, required=False, default="", max_length=500,
+        allow_blank=True,
+        required=False,
+        default="",
+        max_length=500,
     )
 
 
@@ -578,7 +656,10 @@ class FollowupAssignAgentSerializer(serializers.Serializer):
     assigned_agent_id = serializers.IntegerField(required=False, allow_null=True)
     assigned_district_id = serializers.IntegerField(required=False, allow_null=True)
     assigned_team = serializers.CharField(
-        allow_blank=True, required=False, default="", max_length=120,
+        allow_blank=True,
+        required=False,
+        default="",
+        max_length=120,
     )
 
 
@@ -601,24 +682,32 @@ class FollowupNotifySerializer(serializers.Serializer):
         channel = attrs.get("channel")
         recipient = (attrs.get("recipient") or "").strip()
         if channel in ("sms", "whatsapp", "email") and not recipient:
-            raise serializers.ValidationError(
-                {"recipient": "Recipient requis pour ce canal."}
-            )
+            raise serializers.ValidationError({"recipient": "Recipient requis pour ce canal."})
         return attrs
 
 
 class FollowupRequestSampleSerializer(serializers.Serializer):
     sample_type = serializers.ChoiceField(
-        choices=SampleType.choices, required=False, default=SampleType.BLOOD,
+        choices=SampleType.choices,
+        required=False,
+        default=SampleType.BLOOD,
     )
     destination_lab = serializers.CharField(
-        allow_blank=True, required=False, default="", max_length=200,
+        allow_blank=True,
+        required=False,
+        default="",
+        max_length=200,
     )
     collection_location = serializers.CharField(
-        allow_blank=True, required=False, default="", max_length=200,
+        allow_blank=True,
+        required=False,
+        default="",
+        max_length=200,
     )
     transport_conditions = serializers.CharField(
-        allow_blank=True, required=False, default="",
+        allow_blank=True,
+        required=False,
+        default="",
     )
     notes = serializers.CharField(allow_blank=True, required=False, default="")
     followup_day_id = serializers.IntegerField(required=False, allow_null=True)
@@ -629,11 +718,13 @@ class FollowupLabAnalysisCreateSerializer(serializers.Serializer):
     lab_name = serializers.CharField(max_length=200)
     test_type = serializers.CharField(max_length=80)
     result = serializers.ChoiceField(
-        choices=LabAnalysisResult.choices, required=False,
+        choices=LabAnalysisResult.choices,
+        required=False,
         default=LabAnalysisResult.EMPTY,
     )
     status = serializers.ChoiceField(
-        choices=LabAnalysisStatus.choices, required=False,
+        choices=LabAnalysisStatus.choices,
+        required=False,
         default=LabAnalysisStatus.RESULT_AVAILABLE,
     )
     notes = serializers.CharField(allow_blank=True, required=False, default="")
@@ -695,7 +786,9 @@ class PublicSymptomReportSerializer(serializers.Serializer):
     symptom_code = serializers.CharField(max_length=40)
     symptom_label = serializers.CharField(max_length=120)
     severity = serializers.ChoiceField(
-        choices=SymptomSeverity.choices, required=False, default=SymptomSeverity.MILD,
+        choices=SymptomSeverity.choices,
+        required=False,
+        default=SymptomSeverity.MILD,
     )
     onset_date = serializers.DateField(required=False, default=date.today)
     notes = serializers.CharField(allow_blank=True, required=False, default="")

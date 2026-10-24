@@ -9,6 +9,7 @@ config/urls.py — endpoint /metrics).
 Convention : préfixe `epitrace_reports_` pour disambiguer parmi les autres
 apps qui exportent aussi vers le même endpoint.
 """
+
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
@@ -101,16 +102,15 @@ def refresh_recipients_gauge() -> None:
         return
     try:
         from .models import AutomatedReportRecipient, PreferredChannel
+
         counts = {
             PreferredChannel.SMS: 0,
             PreferredChannel.EMAIL: 0,
             PreferredChannel.BOTH: 0,
         }
-        rows = (
-            AutomatedReportRecipient.objects
-            .filter(is_active=True, consent_date__isnull=False)
-            .values_list("preferred_channel", flat=True)
-        )
+        rows = AutomatedReportRecipient.objects.filter(
+            is_active=True, consent_date__isnull=False
+        ).values_list("preferred_channel", flat=True)
         for ch in rows:
             counts[ch] = counts.get(ch, 0) + 1
         for ch, cnt in counts.items():

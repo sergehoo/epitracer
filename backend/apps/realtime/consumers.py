@@ -1,7 +1,6 @@
 """Consumers WebSocket pour le dashboard temps réel."""
-from __future__ import annotations
 
-import json
+from __future__ import annotations
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 

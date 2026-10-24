@@ -1,4 +1,5 @@
 """Scoring Ebola — basé strictement sur les sections 5 et 6 du formulaire INHP."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -19,7 +20,7 @@ def _get_disease() -> Disease | None:
     return Disease.objects.filter(code=EBOLA_CODE).first()
 
 
-def compute_ebola_risk_score(investigation: "EbolaInvestigation") -> tuple[int, str]:
+def compute_ebola_risk_score(investigation: EbolaInvestigation) -> tuple[int, str]:
     """Calcule un score de risque Ebola à partir des sections 5 et 6 du formulaire INHP.
 
     SECTION 5 — Évaluation épidémiologique (21 jours)
@@ -87,7 +88,7 @@ def compute_ebola_risk_score(investigation: "EbolaInvestigation") -> tuple[int, 
     return score, level
 
 
-def apply_risk_outcome(investigation: "EbolaInvestigation") -> "EbolaInvestigation":
+def apply_risk_outcome(investigation: EbolaInvestigation) -> EbolaInvestigation:
     """Recalcule le score, met à jour le statut et déclenche les workflows attendus."""
     from apps.quarantine.services import open_quarantine_for_investigation  # cycle protection
 
@@ -101,7 +102,9 @@ def apply_risk_outcome(investigation: "EbolaInvestigation") -> "EbolaInvestigati
     today = timezone.now().date()
     if investigation.surveillance_start is None:
         investigation.surveillance_start = today
-    investigation.surveillance_end = investigation.surveillance_start + timedelta(days=surveillance_days)
+    investigation.surveillance_end = investigation.surveillance_start + timedelta(
+        days=surveillance_days
+    )
 
     if level == "critical":
         investigation.status = "suspect"
@@ -113,9 +116,15 @@ def apply_risk_outcome(investigation: "EbolaInvestigation") -> "EbolaInvestigati
         if investigation.status == "new":
             investigation.status = "cleared"
 
-    investigation.save(update_fields=[
-        "risk_score", "risk_level", "status", "surveillance_start", "surveillance_end",
-    ])
+    investigation.save(
+        update_fields=[
+            "risk_score",
+            "risk_level",
+            "status",
+            "surveillance_start",
+            "surveillance_end",
+        ]
+    )
 
     # IMPORTANT : un QuarantineRecord est ouvert pour TOUS les voyageurs,
     # quel que soit le niveau de risque. C'est notre "dossier de suivi 21j"

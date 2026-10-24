@@ -3,6 +3,7 @@
 Conçus pour rester légers (peu d'index) afin de soutenir de grandes
 volumétries avec partitionnement futur par mois si besoin.
 """
+
 from __future__ import annotations
 
 from django.conf import settings
@@ -39,8 +40,11 @@ class PageVisit(TimestampedModel):
 
     is_bot = models.BooleanField(default=False, db_index=True)
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="page_visits",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="page_visits",
     )
 
     class Meta:

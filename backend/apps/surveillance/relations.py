@@ -11,6 +11,7 @@ pour l'épidémiologie :
 
 Renvoie une structure prête pour une vue tree côté front.
 """
+
 from __future__ import annotations
 
 import re
@@ -24,7 +25,6 @@ from apps.accounts.models import RoleCode
 from apps.core.permissions import HasRole
 from apps.ebola.models import EbolaInvestigation
 from apps.travelers.models import CompanionLink, Traveler, TravelHistoryEntry
-
 
 # =========================================================================
 #                                Helpers
@@ -61,12 +61,14 @@ def _residence_key(t: Traveler) -> tuple[str, str]:
     ]
     key = "|".join(p for p in parts if p)
     label = ", ".join(
-        p for p in [
+        p
+        for p in [
             t.confinement_hotel,
             t.confinement_neighborhood,
             t.confinement_commune,
             t.confinement_city,
-        ] if p
+        ]
+        if p
     )
     return key, label
 
@@ -107,8 +109,12 @@ class TravelerRelationsView(APIView):
 
     permission_classes = [IsAuthenticated, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.OBSERVER,
     ]
 
     def get(self, request):
@@ -120,15 +126,13 @@ class TravelerRelationsView(APIView):
             min_size = 2
         days = request.query_params.get("days")
 
-        qs = (
-            Traveler.objects
-            .select_related("entry_point", "nationality")
-            .order_by("-created_at")
-        )
+        qs = Traveler.objects.select_related("entry_point", "nationality").order_by("-created_at")
         if days:
             try:
                 from datetime import timedelta
+
                 from django.utils import timezone
+
                 qs = qs.filter(created_at__gte=timezone.now() - timedelta(days=int(days)))
             except (TypeError, ValueError):
                 pass
@@ -145,22 +149,34 @@ class TravelerRelationsView(APIView):
 
         travelers = list(qs[:5000])
         if not travelers:
-            return Response({
-                "clusters": [],
-                "stats": {"total_travelers": 0, "by_type": {}},
-            })
+            return Response(
+                {
+                    "clusters": [],
+                    "stats": {"total_travelers": 0, "by_type": {}},
+                }
+            )
 
         ids = [t.id for t in travelers]
 
         # Score / niveau de risque depuis la dernière enquête Ebola
         risk_index: dict[int, dict] = {}
-        for inv in EbolaInvestigation.objects.filter(traveler_id__in=ids).order_by("-created_at").only(
-            "traveler_id", "risk_level", "risk_score", "created_at",
+        for inv in (
+            EbolaInvestigation.objects.filter(traveler_id__in=ids)
+            .order_by("-created_at")
+            .only(
+                "traveler_id",
+                "risk_level",
+                "risk_score",
+                "created_at",
+            )
         ):
-            risk_index.setdefault(inv.traveler_id, {
-                "risk_level": inv.risk_level,
-                "risk_score": inv.risk_score,
-            })
+            risk_index.setdefault(
+                inv.traveler_id,
+                {
+                    "risk_level": inv.risk_level,
+                    "risk_score": inv.risk_score,
+                },
+            )
 
         # ------ 1) Flight clusters ------
         flight_groups: dict[str, list[Traveler]] = defaultdict(list)
@@ -181,8 +197,7 @@ class TravelerRelationsView(APIView):
         # ------ 3) Origin clusters (Section 3 - pays origin/transit/visited) ------
         origin_groups: dict[str, dict] = defaultdict(lambda: {"members": [], "label": ""})
         history_qs = (
-            TravelHistoryEntry.objects
-            .filter(traveler_id__in=ids)
+            TravelHistoryEntry.objects.filter(traveler_id__in=ids)
             .select_related("country")
             .only("traveler_id", "country__code", "country__name", "role")
         )
@@ -198,8 +213,9 @@ class TravelerRelationsView(APIView):
 
         # ------ 4) Companion clusters ------
         companion_links = list(
-            CompanionLink.objects.filter(traveler_id__in=ids)
-            .values("traveler_id", "companion_id", "relationship")
+            CompanionLink.objects.filter(traveler_id__in=ids).values(
+                "traveler_id", "companion_id", "relationship"
+            )
         )
         companion_pairs: list[tuple[int, int]] = [
             (c["traveler_id"], c["companion_id"]) for c in companion_links
@@ -247,7 +263,13 @@ class TravelerRelationsView(APIView):
         id_to_traveler: dict[int, Traveler] = {t.id: t for t in travelers}
         clusters: list[dict] = []
 
-        def make_cluster(cluster_type: str, key: str, label: str, members: list[Traveler], extra: dict | None = None):
+        def make_cluster(
+            cluster_type: str,
+            key: str,
+            label: str,
+            members: list[Traveler],
+            extra: dict | None = None,
+        ):
             seen = set()
             uniq = []
             for m in members:
@@ -258,9 +280,13 @@ class TravelerRelationsView(APIView):
             if len(uniq) < min_size:
                 return None
             if search:
-                hay = " ".join([
-                    m.full_name.lower() + " " + (m.public_id or "").lower() for m in uniq
-                ]) + " " + label.lower()
+                hay = (
+                    " ".join(
+                        [m.full_name.lower() + " " + (m.public_id or "").lower() for m in uniq]
+                    )
+                    + " "
+                    + label.lower()
+                )
                 if search not in hay:
                     return None
             out = {
@@ -307,14 +333,18 @@ class TravelerRelationsView(APIView):
                 pairs = []
                 for (a, b), rel in pair_relationship.items():
                     if a in member_id_set and b in member_id_set:
-                        pairs.append({
-                            "a": pid_index[a],
-                            "b": pid_index[b],
-                            "relationship": rel or "Cas-contact",
-                        })
+                        pairs.append(
+                            {
+                                "a": pid_index[a],
+                                "b": pid_index[b],
+                                "relationship": rel or "Cas-contact",
+                            }
+                        )
                 c = make_cluster(
-                    "companion", str(root),
-                    f"Cas-contact — autour de {head}", members,
+                    "companion",
+                    str(root),
+                    f"Cas-contact — autour de {head}",
+                    members,
                     extra={"pairs": pairs},
                 )
                 if c:
@@ -323,7 +353,8 @@ class TravelerRelationsView(APIView):
         if not type_filter or type_filter == "residence":
             for key, payload in residence_groups.items():
                 c = make_cluster(
-                    "residence", key,
+                    "residence",
+                    key,
                     f"Résidence Abidjan — {payload['label']}",
                     payload["members"],
                 )
@@ -341,20 +372,22 @@ class TravelerRelationsView(APIView):
             agg["clusters"] += 1
             agg["members"] += c["size"]
 
-        return Response({
-            "clusters": clusters[:200],  # cap à 200 clusters pour la perf front
-            "stats": {
-                "total_travelers": len(travelers),
-                "by_type": by_type,
-                "total_clusters": len(clusters),
-                "truncated": truncated,
-                "total_in_db": total_count,
-                "max_per_query": MAX_TRAVELERS,
-            },
-            "filters": {
-                "type": type_filter or None,
-                "search": search or None,
-                "min_size": min_size,
-                "days": int(days) if days and str(days).isdigit() else None,
-            },
-        })
+        return Response(
+            {
+                "clusters": clusters[:200],  # cap à 200 clusters pour la perf front
+                "stats": {
+                    "total_travelers": len(travelers),
+                    "by_type": by_type,
+                    "total_clusters": len(clusters),
+                    "truncated": truncated,
+                    "total_in_db": total_count,
+                    "max_per_query": MAX_TRAVELERS,
+                },
+                "filters": {
+                    "type": type_filter or None,
+                    "search": search or None,
+                    "min_size": min_size,
+                    "days": int(days) if days and str(days).isdigit() else None,
+                },
+            }
+        )

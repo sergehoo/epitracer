@@ -37,11 +37,17 @@ class CountryViewSet(viewsets.ModelViewSet):
     filterset_fields = ["region", "risk_level", "is_monitored"]
 
     def get_queryset(self):
-        return super().get_queryset().prefetch_related(
-            Prefetch(
-                "risk_assessments",
-                queryset=current_assessments().select_related("disease").order_by("disease__code"),
-                to_attr="current_assessments_list",
+        return (
+            super()
+            .get_queryset()
+            .prefetch_related(
+                Prefetch(
+                    "risk_assessments",
+                    queryset=current_assessments()
+                    .select_related("disease")
+                    .order_by("disease__code"),
+                    to_attr="current_assessments_list",
+                )
             )
         )
 
@@ -64,7 +70,9 @@ class CountryViewSet(viewsets.ModelViewSet):
 
 
 class CountryRiskAssessmentViewSet(
-    mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
     viewsets.GenericViewSet,
 ):
     """Niveaux de risque par pays et par maladie.
@@ -75,7 +83,11 @@ class CountryRiskAssessmentViewSet(
     """
 
     queryset = CountryRiskAssessment.objects.select_related(
-        "country", "disease", "decided_by", "superseded_by", "source_alert",
+        "country",
+        "disease",
+        "decided_by",
+        "superseded_by",
+        "source_alert",
     ).order_by("-valid_from", "-created_at")
     serializer_class = CountryRiskAssessmentSerializer
     permission_classes = [IsAuthenticated]
@@ -217,8 +229,7 @@ class HealthZoneViewSet(viewsets.ModelViewSet):
         #     Note : target_id est CharField → on convertit les PK en str
         trav_pks_str = [str(pk) for pk in trav_qs.values_list("pk", flat=True)[:5000]]
         alert_qs = HealthAlert.objects.filter(
-            Q(zone_id__in=zone_ids)
-            | Q(target_ct__model="traveler", target_id__in=trav_pks_str)
+            Q(zone_id__in=zone_ids) | Q(target_ct__model="traveler", target_id__in=trav_pks_str)
         ).distinct()
         n_alerts_total = alert_qs.count()
         OPEN_STATUSES = ["OPEN", "ACK", "INVESTIGATING", "open", "ack", "investigating"]
@@ -237,20 +248,14 @@ class HealthZoneViewSet(viewsets.ModelViewSet):
         ).count()
 
         # ── 6) Check-ins quotidiens sur la période
-        check_qs = DailyCheck.objects.filter(
-            quarantine__in=qr_qs, check_date__gte=since.date()
-        )
+        check_qs = DailyCheck.objects.filter(quarantine__in=qr_qs, check_date__gte=since.date())
         n_checkins = check_qs.count()
         n_checkins_symptomatic = check_qs.filter(has_symptoms=True).count()
 
         # ── 7) Ventilation par sévérité d'alerte
-        by_severity = list(
-            alert_qs.values("severity").annotate(n=Count("id")).order_by("-n")
-        )
+        by_severity = list(alert_qs.values("severity").annotate(n=Count("id")).order_by("-n"))
         # ── 8) Ventilation par status quarantaine
-        by_qr_status = list(
-            qr_qs.values("status").annotate(n=Count("id")).order_by("-n")
-        )
+        by_qr_status = list(qr_qs.values("status").annotate(n=Count("id")).order_by("-n"))
 
         # ── 9) Enfants directs (pour drill-down côté front)
         children = [
@@ -270,42 +275,47 @@ class HealthZoneViewSet(viewsets.ModelViewSet):
         seen_ids = set()
         while cur and cur.id not in seen_ids:
             seen_ids.add(cur.id)
-            breadcrumb.insert(0, {
-                "code": cur.code,
-                "name": cur.name,
-                "level": cur.level,
-            })
+            breadcrumb.insert(
+                0,
+                {
+                    "code": cur.code,
+                    "name": cur.name,
+                    "level": cur.level,
+                },
+            )
             cur = cur.parent
 
-        return Response({
-            "zone": {
-                "code": zone.code,
-                "name": zone.name,
-                "level": zone.level,
-                "level_display": zone.get_level_display(),
-                "risk_level": zone.risk_level,
-                "population": zone.population,
-                "has_geometry": zone.geometry is not None,
-                "n_descendants": len(all_zones) - 1,
-            },
-            "breadcrumb": breadcrumb,
-            "period_days": days,
-            "kpis": {
-                "travelers_total": n_travelers,
-                "travelers_recent": n_travelers_recent,
-                "alerts_total": n_alerts_total,
-                "alerts_open": n_alerts_open,
-                "alerts_critical": n_alerts_critical,
-                "quarantines_total": n_quarantines_total,
-                "quarantines_active": n_quarantines_active,
-                "quarantines_completed": n_quarantines_completed,
-                "checkins": n_checkins,
-                "checkins_symptomatic": n_checkins_symptomatic,
-            },
-            "by_severity": by_severity,
-            "by_quarantine_status": by_qr_status,
-            "children": children,
-        })
+        return Response(
+            {
+                "zone": {
+                    "code": zone.code,
+                    "name": zone.name,
+                    "level": zone.level,
+                    "level_display": zone.get_level_display(),
+                    "risk_level": zone.risk_level,
+                    "population": zone.population,
+                    "has_geometry": zone.geometry is not None,
+                    "n_descendants": len(all_zones) - 1,
+                },
+                "breadcrumb": breadcrumb,
+                "period_days": days,
+                "kpis": {
+                    "travelers_total": n_travelers,
+                    "travelers_recent": n_travelers_recent,
+                    "alerts_total": n_alerts_total,
+                    "alerts_open": n_alerts_open,
+                    "alerts_critical": n_alerts_critical,
+                    "quarantines_total": n_quarantines_total,
+                    "quarantines_active": n_quarantines_active,
+                    "quarantines_completed": n_quarantines_completed,
+                    "checkins": n_checkins,
+                    "checkins_symptomatic": n_checkins_symptomatic,
+                },
+                "by_severity": by_severity,
+                "by_quarantine_status": by_qr_status,
+                "children": children,
+            }
+        )
 
     # ------------------------------------------------------------------
     # GET /geo/zones/geojson/
@@ -330,31 +340,35 @@ class HealthZoneViewSet(viewsets.ModelViewSet):
 
         features = []
         for z in qs:
-            features.append({
-                "type": "Feature",
-                "id": z.code,
-                "geometry": {
-                    "type": "MultiPolygon",
-                    # Convertit la geometry PostGIS en coordonnées GeoJSON
-                    "coordinates": list(z.geometry.coords),
-                },
-                "properties": {
-                    "code": z.code,
-                    "name": z.name,
-                    "level": z.level,
-                    "level_display": z.get_level_display(),
-                    "risk_level": z.risk_level,
-                    "population": z.population,
-                    "parent_name": z.parent.name if z.parent_id else None,
-                    "parent_code": z.parent.code if z.parent_id else None,
-                },
-            })
+            features.append(
+                {
+                    "type": "Feature",
+                    "id": z.code,
+                    "geometry": {
+                        "type": "MultiPolygon",
+                        # Convertit la geometry PostGIS en coordonnées GeoJSON
+                        "coordinates": list(z.geometry.coords),
+                    },
+                    "properties": {
+                        "code": z.code,
+                        "name": z.name,
+                        "level": z.level,
+                        "level_display": z.get_level_display(),
+                        "risk_level": z.risk_level,
+                        "population": z.population,
+                        "parent_name": z.parent.name if z.parent_id else None,
+                        "parent_code": z.parent.code if z.parent_id else None,
+                    },
+                }
+            )
 
-        return Response({
-            "type": "FeatureCollection",
-            "features": features,
-            "count": len(features),
-        })
+        return Response(
+            {
+                "type": "FeatureCollection",
+                "features": features,
+                "count": len(features),
+            }
+        )
 
 
 # ---------------------------------------------------------------------------

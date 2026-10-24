@@ -11,12 +11,18 @@ from .serializers import HealthAlertSerializer
 
 
 class HealthAlertViewSet(viewsets.ModelViewSet):
-    queryset = HealthAlert.objects.select_related("disease", "entry_point", "zone", "triggered_by").all()
+    queryset = HealthAlert.objects.select_related(
+        "disease", "entry_point", "zone", "triggered_by"
+    ).all()
     serializer_class = HealthAlertSerializer
     permission_classes = [IsAuthenticatedAndActive, HasRole]
     required_roles = [
-        RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP,
-        RoleCode.DISTRICT, RoleCode.ENTRY_POINT, RoleCode.OBSERVER,
+        RoleCode.NATIONAL_ADMIN,
+        RoleCode.MINISTRY,
+        RoleCode.INHP,
+        RoleCode.DISTRICT,
+        RoleCode.ENTRY_POINT,
+        RoleCode.OBSERVER,
     ]
     filterset_fields = ["severity", "status", "disease", "entry_point", "zone"]
     search_fields = ["code", "title", "description"]
@@ -25,7 +31,9 @@ class HealthAlertViewSet(viewsets.ModelViewSet):
     # /alertes/<uuid>), pas par leur PK numérique interne. On expose donc
     # l'UUID comme lookup primaire.
     lookup_field = "uuid"
-    lookup_value_regex = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    lookup_value_regex = (
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    )
 
     @action(detail=True, methods=["post"], url_path="acknowledge")
     def acknowledge(self, request, uuid=None):

@@ -7,11 +7,15 @@ Ces tests valident le contrat MSHPCMU/INHP :
 
 Tout changement de comportement nécessite une validation INHP.
 """
+
 import pytest
 
 from apps.notifications.services.router import (
-    NotificationProviderRouter, PhoneValidationError,
-    detect_provider, is_ivoirian_number, normalize_phone_number,
+    NotificationProviderRouter,
+    PhoneValidationError,
+    detect_provider,
+    is_ivoirian_number,
+    normalize_phone_number,
     validate_phone_number,
 )
 
@@ -38,8 +42,9 @@ class TestNormalize:
 
     def test_local_ci_10_digits_starting_zero(self):
         # 0XXXXXXXXX (10 chiffres) → +225XXXXXXXXX (9 chiffres)
-        assert normalize_phone_number("0700000000") == "+22500000000" or \
-               normalize_phone_number("0700000000").startswith("+225")
+        assert normalize_phone_number("0700000000") == "+22500000000" or normalize_phone_number(
+            "0700000000"
+        ).startswith("+225")
 
     def test_international_french(self):
         assert normalize_phone_number("+33600000000") == "+33600000000"

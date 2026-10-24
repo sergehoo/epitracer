@@ -7,6 +7,7 @@ Deux espaces d'URL :
 Les endpoints publics check-in / location réutilisent les vues
 existantes d'apps.companion pour éviter toute duplication.
 """
+
 from __future__ import annotations
 
 from django.urls import path
@@ -26,8 +27,8 @@ from .views import (
     FollowupListView,
     FollowupLocationHistoryView,
     FollowupNotifyView,
-    FollowupSampleUpdateView,
     FollowupSamplesView,
+    FollowupSampleUpdateView,
     FollowupSymptomsView,
     FollowupTimelineView,
     FollowupUnmaskPhoneView,
@@ -39,10 +40,22 @@ from .views import (
 admin_urlpatterns = [
     path("", FollowupListView.as_view(), name="medical-followup-list"),
     path("<str:traveler_id>/", FollowupDetailView.as_view(), name="medical-followup-detail"),
-    path("<str:traveler_id>/timeline/", FollowupTimelineView.as_view(), name="medical-followup-timeline"),
-    path("<str:traveler_id>/actions/", FollowupActionsView.as_view(), name="medical-followup-actions"),
-    path("<str:traveler_id>/symptoms/", FollowupSymptomsView.as_view(), name="medical-followup-symptoms"),
-    path("<str:traveler_id>/samples/", FollowupSamplesView.as_view(), name="medical-followup-samples"),
+    path(
+        "<str:traveler_id>/timeline/",
+        FollowupTimelineView.as_view(),
+        name="medical-followup-timeline",
+    ),
+    path(
+        "<str:traveler_id>/actions/", FollowupActionsView.as_view(), name="medical-followup-actions"
+    ),
+    path(
+        "<str:traveler_id>/symptoms/",
+        FollowupSymptomsView.as_view(),
+        name="medical-followup-symptoms",
+    ),
+    path(
+        "<str:traveler_id>/samples/", FollowupSamplesView.as_view(), name="medical-followup-samples"
+    ),
     path(
         "<str:traveler_id>/samples/<int:sample_id>/",
         FollowupSampleUpdateView.as_view(),
@@ -58,7 +71,11 @@ admin_urlpatterns = [
         FollowupLabValidateView.as_view(),
         name="medical-followup-lab-validate",
     ),
-    path("<str:traveler_id>/classify/", FollowupClassifyView.as_view(), name="medical-followup-classify"),
+    path(
+        "<str:traveler_id>/classify/",
+        FollowupClassifyView.as_view(),
+        name="medical-followup-classify",
+    ),
     path("<str:traveler_id>/notify/", FollowupNotifyView.as_view(), name="medical-followup-notify"),
     path(
         "<str:traveler_id>/assign-agent/",
@@ -66,7 +83,11 @@ admin_urlpatterns = [
         name="medical-followup-assign-agent",
     ),
     path("<str:traveler_id>/close/", FollowupCloseView.as_view(), name="medical-followup-close"),
-    path("<str:traveler_id>/documents/", FollowupDocumentsView.as_view(), name="medical-followup-documents"),
+    path(
+        "<str:traveler_id>/documents/",
+        FollowupDocumentsView.as_view(),
+        name="medical-followup-documents",
+    ),
     path("<str:traveler_id>/audit/", FollowupAuditView.as_view(), name="medical-followup-audit"),
     path(
         "<str:traveler_id>/location-history/",

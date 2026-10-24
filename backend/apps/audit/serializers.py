@@ -10,8 +10,18 @@ class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuditLog
         fields = [
-            "id", "created_at", "actor", "actor_email", "action", "summary",
-            "target_type", "target_id", "payload", "ip_address", "user_agent", "request_id",
+            "id",
+            "created_at",
+            "actor",
+            "actor_email",
+            "action",
+            "summary",
+            "target_type",
+            "target_id",
+            "payload",
+            "ip_address",
+            "user_agent",
+            "request_id",
         ]
 
     def get_target_type(self, obj):

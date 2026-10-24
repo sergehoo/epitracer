@@ -6,6 +6,7 @@ Tous les modèles métier héritent d'au moins :
 - TimestampedModel : created_at / updated_at automatiques
 - SoftDeleteModel  : suppression logique (jamais de DELETE physique sur des données sanitaires)
 """
+
 from __future__ import annotations
 
 import uuid

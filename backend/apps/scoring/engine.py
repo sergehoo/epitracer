@@ -8,9 +8,10 @@ Permet de :
 - découpler le moteur d'évaluation du modèle de données par maladie ;
 - ajouter facilement Mpox, Covid-19, Choléra, etc. sans modifier le cœur.
 """
+
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 ScorerFn = Callable[[object], tuple[int, str]]
 
@@ -21,6 +22,7 @@ def register_scorer(disease_code: str) -> Callable[[ScorerFn], ScorerFn]:
     def wrap(fn: ScorerFn) -> ScorerFn:
         _SCORERS[disease_code.upper()] = fn
         return fn
+
     return wrap
 
 

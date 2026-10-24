@@ -1,4 +1,5 @@
 """Tâches Celery liées aux pass : expiration, nettoyage des logs."""
+
 from __future__ import annotations
 
 from celery import shared_task
