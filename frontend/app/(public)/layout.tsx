@@ -1,6 +1,7 @@
 import { InhpHeader } from '@/components/ui/InhpHeader';
 import { InhpFooter } from '@/components/ui/InhpFooter';
 import { ForceLightTheme } from '@/components/layout/ForceLightTheme';
+import { PublicShell } from '@/components/public/PublicShell';
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,10 +13,14 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       className="light min-h-screen flex flex-col bg-white text-slate-900 overflow-x-hidden"
     >
       <ForceLightTheme />
-      <InhpHeader variant="public" />
-      {/* pt-20 = compense la hauteur du header fixed (h-16 + padding) */}
-      <main className="flex-1 pt-20">{children}</main>
-      <InhpFooter />
+      <PublicShell>
+        <InhpHeader variant="public" />
+        {/* pt = hauteur du header fixe (bande tricolore 4px + barre 64px) */}
+        <main id="contenu" tabIndex={-1} className="flex-1 pt-[4.25rem] focus:outline-none">
+          {children}
+        </main>
+        <InhpFooter />
+      </PublicShell>
     </div>
   );
 }

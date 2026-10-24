@@ -58,15 +58,21 @@ export async function fetchPublicDisease(slug: string): Promise<PublicDiseaseDet
   return getJson<PublicDiseaseDetail>(`diseases/${slug}/`);
 }
 
-export async function fetchPublicNotices(kind?: 'alert' | 'recommendation'): Promise<PublicNotice[]> {
-  return getList<PublicNotice>(`notices/${kind ? `?kind=${kind}` : ''}`);
+export async function fetchPublicNotices(
+  kind?: 'alert' | 'recommendation', lang?: string,
+): Promise<PublicNotice[]> {
+  const params = new URLSearchParams();
+  if (kind) params.set('kind', kind);
+  if (lang) params.set('lang', lang);
+  const qs = params.toString();
+  return getList<PublicNotice>(`notices/${qs ? `?${qs}` : ''}`);
 }
 
 /** Niveau d'alerte public → libellé + classes (couleurs nationales). */
 export const ALERT_LEVEL_STYLE: Record<PublicAlertLevel, { label: string; className: string }> = {
-  normal:   { label: 'Veille',            className: 'bg-emerald-50 text-ciGreen ring-emerald-200' },
+  normal:   { label: 'Veille',            className: 'bg-emerald-50 text-emerald-800 ring-emerald-200' },
   moderate: { label: 'Vigilance',         className: 'bg-amber-50 text-amber-800 ring-amber-200' },
-  high:     { label: 'Alerte',            className: 'bg-orange-50 text-ciOrange ring-orange-200' },
+  high:     { label: 'Alerte',            className: 'bg-orange-50 text-orange-800 ring-orange-200' },
   critical: { label: 'Urgence sanitaire', className: 'bg-red-700 text-white ring-red-800' },
 };
 

@@ -22,6 +22,7 @@ const config: Config = {
       colors: {
         // Palette officielle Côte d'Ivoire INHP — alignée sur le mockup landing
         ciOrange: '#F77F00',     // orange drapeau ivoirien (CTA, accents)
+        ciForest: '#006B4F',     // vert institutionnel GovTech (texte, CTA ; AA sur blanc)
         ciGreen:  '#009B5A',     // vert drapeau ivoirien (success, badges)
         ciDark:   '#064E3B',     // vert sombre (titres, footer, sections sombres)
         ciGold:   '#D4A017',     // gold (highlights)

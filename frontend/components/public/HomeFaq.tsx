@@ -1,66 +1,47 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Plus } from 'lucide-react';
+import { useLocale } from '@/lib/i18n';
 
-const FAQS = [
-  {
-    q: 'Pourquoi me demande-t-on ces informations ?',
-    a: "Ces informations permettent aux équipes sanitaires de mieux vous orienter, de vous donner des conseils adaptés aux maladies sous surveillance et de faciliter votre passage aux points d'entrée.",
-  },
-  {
-    q: 'Quelles maladies sont concernées ?',
-    a: "Uniquement les maladies placées sous surveillance par les autorités sanitaires ivoiriennes. La liste évolue selon la situation épidémiologique et est consultable à tout moment dans la rubrique « Maladies sous surveillance ».",
-  },
-  {
-    q: 'Puis-je être suivi pour plusieurs maladies ?',
-    a: "Oui. Votre fiche est unique : si votre situation le justifie, un accompagnement est ouvert pour chaque maladie concernée, avec la durée prévue par son protocole, sans que vous ayez à vous réenregistrer.",
-  },
-  {
-    q: 'Mes données sont-elles confidentielles ?',
-    a: "Oui. Vos informations sont protégées (signature cryptographique Ed25519, accès strict RBAC) et utilisées uniquement dans le cadre de l'accompagnement sanitaire et de la protection de la santé publique.",
-  },
-  {
-    q: 'Que se passe-t-il si je ne me sens pas bien ?',
-    a: 'Vous pouvez contacter les services sanitaires. Un agent vous orientera calmement vers la conduite à tenir et, si nécessaire, vers le centre de santé approprié.',
-  },
-  {
-    q: 'Est-ce que cela va ralentir mon arrivée ?',
-    a: 'Au contraire, le pré-enregistrement permet souvent de gagner du temps, car votre fiche est déjà prête et le QR code facilite votre orientation.',
-  },
-];
-
+/** FAQ interactive (accordéon accessible) — contenus existants, FR/EN. */
 export function HomeFaq() {
+  const { t } = useLocale();
   const [open, setOpen] = useState<number | null>(0);
+  const baseId = useId();
   return (
-    <section id="faq" className="py-24 bg-slate-50" aria-labelledby="faq-title">
-      <div className="max-w-4xl mx-auto px-6">
-        <div className="text-center mb-12">
-          <h2 id="faq-title" className="font-display text-4xl font-black text-ciDark">Questions fréquentes</h2>
-          <p className="mt-3 text-slate-600">Les réponses aux interrogations les plus courantes des voyageurs.</p>
+    <section id="faq" className="scroll-mt-24 bg-slate-50 py-16 sm:py-24" aria-labelledby="faq-title">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6">
+        <div className="mb-10 text-center">
+          <h2 id="faq-title" className="font-display text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+            {t.faq.title}
+          </h2>
+          <p className="mt-3 text-slate-600">{t.faq.subtitle}</p>
         </div>
-        <div className="space-y-4">
-          {FAQS.map((f, i) => {
+        <div className="space-y-3">
+          {t.faq.items.map((f, i) => {
             const isOpen = open === i;
+            const panelId = `${baseId}-faq-${i}`;
             return (
-              <article key={f.q} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+              <div key={i} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <h3>
                   <button
+                    type="button"
                     onClick={() => setOpen(isOpen ? null : i)}
                     aria-expanded={isOpen}
-                    aria-controls={`faq-${i}`}
-                    className="w-full flex justify-between items-center gap-4 text-left font-black text-ciDark"
+                    aria-controls={panelId}
+                    className="flex w-full items-center justify-between gap-4 rounded-2xl p-5 text-left font-bold text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ciForest"
                   >
                     <span>{f.q}</span>
-                    <span className={`text-ciOrange transition-transform ${isOpen ? 'rotate-45' : ''}`} aria-hidden="true">
+                    <span className={`shrink-0 text-ciForest transition-transform ${isOpen ? 'rotate-45' : ''}`} aria-hidden="true">
                       <Plus className="h-5 w-5" />
                     </span>
                   </button>
                 </h3>
-                {isOpen && (
-                  <p id={`faq-${i}`} className="mt-4 text-slate-600 leading-7 animate-fade-up">{f.a}</p>
-                )}
-              </article>
+                <div id={panelId} role="region" hidden={!isOpen} className="px-5 pb-5 leading-7 text-slate-600">
+                  {f.a}
+                </div>
+              </div>
             );
           })}
         </div>

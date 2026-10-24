@@ -1,27 +1,27 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { adminUrl, publicUrl } from '@/lib/hosts';
+import { useLocale } from '@/lib/i18n';
 
+/** Liens de navigation publics ; les ancres pointent vers les sections de l'accueil. */
 const PUBLIC_NAV = [
-  { href: '#accompagnement', label: 'Accompagnement' },
-  { href: '/maladies', label: 'Maladies sous surveillance' },
-  { href: '#fonctionnement', label: 'Comment ça marche' },
-  { href: '#urgence', label: 'Assistance' },
-  { href: '#faq', label: 'FAQ' },
-];
+  { href: '#services', key: 'services' },
+  { href: '/maladies', key: 'diseases' },
+  { href: '#fonctionnement', key: 'how' },
+  { href: '/assistance', key: 'assistance' },
+  { href: '#faq', key: 'faq' },
+] as const;
 
 /**
  * Résout un lien d'ancre (#section) en fonction de la page courante :
  * - sur "/" → "#section" (scroll local) ;
  * - ailleurs → "/#section" (navigue d'abord à l'accueil puis scrolle).
- *
- * Sans ce résolveur, cliquer "Accompagnement" depuis /voyageur/suivi
- * tente d'aller à /voyageur/suivi#accompagnement qui n'existe pas.
  */
 function resolveAnchorHref(href: string, currentPath: string | null): string {
   if (!href.startsWith('#')) return href;
@@ -37,122 +37,159 @@ const ADMIN_NAV = [
 
 export function InhpHeader({ variant = 'public' }: { variant?: 'public' | 'dashboard' }) {
   const [open, setOpen] = useState(false);
-  const nav = variant === 'public' ? PUBLIC_NAV : ADMIN_NAV;
+  if (variant === 'public') return <PublicHeader open={open} setOpen={setOpen} />;
+  return <AdminHeader open={open} setOpen={setOpen} nav={ADMIN_NAV} />;
+}
 
-  if (variant === 'public') return <PublicHeader open={open} setOpen={setOpen} nav={nav} />;
-  return <AdminHeader open={open} setOpen={setOpen} nav={nav} />;
+/** Bande tricolore orange · blanc · vert (drapeau ivoirien). */
+export function TricolorBand({ className = 'h-1' }: { className?: string }) {
+  return (
+    <div className={`flex ${className}`} aria-hidden="true">
+      <span className="flex-1 bg-ciOrange" />
+      <span className="flex-1 bg-white" />
+      <span className="flex-1 bg-ciGreen" />
+    </div>
+  );
+}
+
+/** Sélecteur de langue FR / EN (portail public). */
+export function LanguageSwitch({ className = '' }: { className?: string }) {
+  const { locale, setLocale, t } = useLocale();
+  return (
+    <div role="group" aria-label={t.nav.language} className={`inline-flex rounded-full border border-slate-200 bg-white p-0.5 ${className}`}>
+      {(['fr', 'en'] as const).map((l) => (
+        <button
+          key={l}
+          type="button"
+          onClick={() => setLocale(l)}
+          aria-pressed={locale === l}
+          lang={l}
+          className={`min-w-[2.5rem] rounded-full px-2.5 py-1 text-xs font-bold uppercase transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ciForest ${
+            locale === l ? 'bg-ciForest text-white' : 'text-slate-600 hover:text-ciForest'
+          }`}
+        >
+          {l}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /* =====================================================================
-   HEADER PUBLIC — marque touristique "Destination Côte d'Ivoire"
-   - Sans logos institutionnels (relayés dans le bandeau OfficialBanner)
-   - Style touristique : soleil + palmier + dégradé orange/vert
+   HEADER PUBLIC — GovTech : bande tricolore, identité institutionnelle,
+   navigation sticky compacte, FR/EN, CTA pass + enregistrement.
    ===================================================================== */
-function PublicHeader({
-  open, setOpen, nav,
-}: { open: boolean; setOpen: (b: boolean) => void; nav: { href: string; label: string }[] }) {
+function PublicHeader({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => void }) {
   const pathname = usePathname();
-  return (
-    <header className="fixed inset-x-0 top-0 z-50 glass border-b border-white/70 dark:border-emerald-950/60">
-      <div className="bg-gradient-to-r from-ciOrange via-ciGold to-ciGreen text-white text-[10px] uppercase tracking-widest">
-        <div className="max-w-7xl mx-auto px-6 py-1 flex items-center justify-between font-bold">
-          <span>République de Côte d'Ivoire</span>
-          <span className="hidden sm:inline italic opacity-90">Union · Discipline · Travail</span>
-        </div>
-      </div>
+  const { t, locale } = useLocale();
+  const [scrolled, setScrolled] = useState(false);
 
-      <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
-        {/* Marque typographique — lettrage script orange + caractères droits verts */}
-        <Link href="/" className="group flex flex-col leading-none select-none">
-          <span
-            className="font-script text-ciOrange leading-[0.85] -mb-1
-                       text-[2.6rem] sm:text-[1.6rem]
-                       drop-shadow-[0_2px_0_rgba(247,127,0,0.18)]
-                       group-hover:scale-[1.02] origin-left transition-transform"
-          >
-            Destination
-          </span>
-          <span
-            className="font-display font-extrabold uppercase tracking-[0.18em]
-                       text-ciGreen text-base sm:text-m"
-          >
-            Côte d'Ivoire
-          </span>
-          <span className="mt-1 text-[10px] sm:text-xs italic text-slate-500 dark:text-slate-400">
-            Akwaba · Bienvenue · Welcome
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  useEffect(() => { setOpen(false); }, [pathname, setOpen]);
+
+  return (
+    <header
+      lang={locale}
+      className={`fixed inset-x-0 top-0 z-50 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85 transition-shadow ${
+        scrolled ? 'shadow-[0_6px_24px_-12px_rgba(15,23,42,0.25)]' : 'border-b border-slate-200/70'
+      }`}
+    >
+      <TricolorBand />
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
+        <Link
+          href="/"
+          className="flex min-w-0 items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ciForest"
+        >
+          <Image src="/armoirie-ci-2.png" alt="" width={36} height={36} className="h-9 w-9 shrink-0 object-contain" priority />
+          <Image src="/logo-min-sante-2.png" alt="" width={36} height={36} className="hidden h-9 w-9 shrink-0 object-contain sm:block" priority />
+          <span className="min-w-0 border-l border-slate-200 pl-2.5 leading-tight">
+            <span className="block truncate font-display text-base font-extrabold text-ciForest">
+              EpiTrace <span className="font-semibold text-slate-500">CI</span>
+            </span>
+            <span className="hidden truncate text-[11px] text-slate-500 sm:block">
+              {t.brand.tagline} · {t.brand.institutions}
+            </span>
           </span>
         </Link>
 
-        <nav
-          aria-label="Navigation principale"
-          className="hidden lg:flex items-center gap-6 text-sm font-bold text-slate-700 dark:text-slate-200"
-        >
-          {nav.map((n) => (
-            <a
-              key={n.href}
-              href={resolveAnchorHref(n.href, pathname)}
-              aria-current={pathname === n.href ? 'page' : undefined}
-              className="hover:text-ciOrange transition relative group whitespace-nowrap"
-            >
-              {n.label}
-              <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-ciOrange to-ciGreen scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
-            </a>
-          ))}
+        <nav aria-label={t.nav.main} className="hidden items-center gap-1 xl:flex">
+          {PUBLIC_NAV.map((n) => {
+            const href = resolveAnchorHref(n.href, pathname);
+            const current = pathname !== '/' && pathname?.startsWith(n.href);
+            return (
+              <a
+                key={n.key}
+                href={href}
+                aria-current={current ? 'page' : undefined}
+                className={`whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold transition hover:bg-emerald-50 hover:text-ciForest focus-visible:outline focus-visible:outline-2 focus-visible:outline-ciForest ${
+                  current ? 'text-ciForest' : 'text-slate-700'
+                }`}
+              >
+                {t.nav[n.key]}
+              </a>
+            );
+          })}
         </nav>
 
-        <div className="hidden lg:flex items-center gap-2">
-          {/* ThemeToggle volontairement absent du header PUBLIC : la landing
-              est en light forcé (identité institutionnelle). Le toggle reste
-              actif dans l'admin (cf. AdminHeader). */}
-          {/* Le scan du QR code est désormais réservé aux agents et accessible
-              uniquement depuis le portail admin (admin.veillesanitaire.com).
-              Aucun bouton de vérification n'est exposé au public. */}
+        <div className="hidden shrink-0 items-center gap-2 xl:flex">
+          <LanguageSwitch />
           <Link
             href="/pass"
-            className="px-4 py-2.5 rounded-full bg-white border border-slate-200 font-bold text-ciDark hover:border-ciOrange transition text-sm"
+            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-bold text-ciForest transition hover:border-ciForest focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ciForest"
           >
-            Voir mon pass
+            {t.nav.pass}
           </Link>
           <Link
             href="/voyageur"
-            className="px-4 py-2.5 rounded-full bg-gradient-to-r from-ciOrange to-orange-600 text-white font-bold shadow-xl shadow-orange-500/25 hover:shadow-orange-500/40 transition text-sm"
+            className="rounded-full bg-ciForest px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ciForest"
           >
-            M'enregistrer
+            {t.nav.register}
           </Link>
-
         </div>
 
-        <button
-          onClick={() => setOpen(!open)}
-          aria-label={open ? 'Fermer le menu' : 'Ouvrir le menu'}
-          aria-expanded={open}
-          aria-controls="public-mobile-menu"
-          className="lg:hidden h-10 w-10 grid place-items-center text-ciDark dark:text-emerald-200"
-        >
-          {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5 xl:hidden">
+          <LanguageSwitch />
+          <button
+            onClick={() => setOpen(!open)}
+            aria-label={open ? t.nav.menuClose : t.nav.menuOpen}
+            aria-expanded={open}
+            aria-controls="public-mobile-menu"
+            className="grid h-10 w-10 place-items-center rounded-full text-ciForest hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ciForest"
+          >
+            {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
+        </div>
       </div>
 
       {open && (
-        <div id="public-mobile-menu" className="lg:hidden px-6 pb-5 space-y-3 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800">
-          {nav.map((n) => (
-            <a
-              key={n.href}
-              href={resolveAnchorHref(n.href, pathname)}
-              onClick={() => setOpen(false)}
-              className="block font-semibold py-2"
-            >
-              {n.label}
-            </a>
-          ))}
-          <Link href="/pass" className="block px-5 py-3 rounded-xl border border-slate-200 font-bold text-ciDark text-center">
-            Voir mon pass
-          </Link>
-          <Link href="/voyageur" className="block px-5 py-3 rounded-xl bg-gradient-to-r from-ciOrange to-orange-600 text-white font-bold text-center">
-            M'enregistrer
-          </Link>
-          <a href={adminUrl('/auth/login')} className="block text-center text-xs text-slate-500 pt-2">
-            Espace agent
+        <div id="public-mobile-menu" className="max-h-[calc(100vh-4.25rem)] overflow-y-auto border-t border-slate-100 bg-white px-4 pb-6 pt-2 xl:hidden">
+          <nav aria-label={t.nav.main} className="flex flex-col">
+            {PUBLIC_NAV.map((n) => (
+              <a
+                key={n.key}
+                href={resolveAnchorHref(n.href, pathname)}
+                onClick={() => setOpen(false)}
+                className="rounded-xl px-3 py-3 text-base font-semibold text-slate-800 hover:bg-emerald-50"
+              >
+                {t.nav[n.key]}
+              </a>
+            ))}
+          </nav>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Link href="/pass" className="rounded-xl border border-slate-300 px-5 py-3 text-center font-bold text-ciForest">
+              {t.nav.pass}
+            </Link>
+            <Link href="/voyageur" className="rounded-xl bg-ciForest px-5 py-3 text-center font-bold text-white">
+              {t.nav.register}
+            </Link>
+          </div>
+          <a href={adminUrl('/auth/login')} className="mt-4 block text-center text-xs text-slate-500 underline-offset-2 hover:underline">
+            {t.nav.agent}
           </a>
         </div>
       )}

@@ -3,11 +3,16 @@ import { Globe2, Megaphone, ShieldCheck } from 'lucide-react';
 import { AlertLevelBadge } from './AlertLevelBadge';
 import type { PublicNotice } from '@/types/portal';
 
-const fmt = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+const LABELS = {
+  fr: { alert: 'Alerte sanitaire', reco: 'Recommandation', sheet: 'Fiche', published: 'Publiée le', date: 'fr-FR' },
+  en: { alert: 'Health alert', reco: 'Advice', sheet: 'Fact sheet', published: 'Published on', date: 'en-GB' },
+};
 
 /** Alerte sanitaire ou recommandation publiée par les autorités. */
-export function NoticeCard({ notice }: { notice: PublicNotice }) {
+export function NoticeCard({ notice, locale = 'fr' }: { notice: PublicNotice; locale?: 'fr' | 'en' }) {
+  const L = LABELS[locale];
+  const fmt = (d: string | null) =>
+    d ? new Date(d).toLocaleDateString(L.date, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   const isAlert = notice.kind === 'alert';
   const Icon = isAlert ? Megaphone : ShieldCheck;
   return (
@@ -17,9 +22,9 @@ export function NoticeCard({ notice }: { notice: PublicNotice }) {
       }`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Icon className={`h-5 w-5 ${isAlert ? 'text-ciOrange' : 'text-ciGreen'}`} aria-hidden="true" />
+        <Icon className={`h-5 w-5 ${isAlert ? 'text-orange-700' : 'text-ciForest'}`} aria-hidden="true" />
         <span className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-          {isAlert ? 'Alerte sanitaire' : 'Recommandation'}
+          {isAlert ? L.alert : L.reco}
         </span>
         {isAlert && <AlertLevelBadge level={notice.alert_level} label={notice.alert_level_label} />}
       </div>
@@ -34,11 +39,11 @@ export function NoticeCard({ notice }: { notice: PublicNotice }) {
           </span>
         )}
         {notice.disease && (
-          <Link href={`/maladies/${notice.disease.slug}`} className="font-bold text-ciOrange hover:underline">
-            Fiche : {notice.disease.name}
+          <Link href={`/maladies/${notice.disease.slug}`} className="font-bold text-ciForest hover:underline">
+            {L.sheet} : {notice.disease.name}
           </Link>
         )}
-        {notice.published_at && <time dateTime={notice.published_at}>Publiée le {fmt(notice.published_at)}</time>}
+        {notice.published_at && <time dateTime={notice.published_at}>{L.published} {fmt(notice.published_at)}</time>}
       </div>
     </article>
   );
