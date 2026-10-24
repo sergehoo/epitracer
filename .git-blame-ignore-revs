@@ -1,0 +1,6 @@
+# Commits purement mécaniques (formatage) ignorés par git blame.
+# Activation locale : git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub prend ce fichier en compte automatiquement.)
+
+# style(backend): formatage Black et correctifs Ruff sûrs
+96208bb98cda16c40afe0261d8bd7833408ca1fc
