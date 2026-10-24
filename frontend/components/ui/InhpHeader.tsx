@@ -14,7 +14,7 @@ import { DestinationBrand } from '@/components/public/DestinationBrand';
 const PUBLIC_NAV = [
   { href: '#services', key: 'services' },
   { href: '/maladies', key: 'diseases' },
-  { href: '#fonctionnement', key: 'how' },
+  { href: '#mesures', key: 'how' },
   { href: '/assistance', key: 'assistance' },
   { href: '#faq', key: 'faq' },
 ] as const;

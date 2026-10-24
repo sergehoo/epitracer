@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Mail, PhoneCall } from 'lucide-react';
 import { adminUrl } from '@/lib/hosts';
 import { useLocale } from '@/lib/i18n';
-import { LANDING_PHOTOS } from '@/lib/landingPhotos';
+import { HEALTH_PHOTOS, LANDING_PHOTOS } from '@/lib/landingPhotos';
 import { DestinationBrand } from '@/components/public/DestinationBrand';
 import { AfriqConsultingCredit } from './AfriqConsultingCredit';
 import { TricolorBand } from './InhpHeader';
@@ -124,7 +124,17 @@ export function InhpFooter() {
               <a href={p.page} target="_blank" rel="noreferrer" className={linkCls}>{p.credit}</a>
             </span>
           ))}{' '}
-          (Unsplash)
+          (Unsplash) ·{' '}
+          {Object.values(HEALTH_PHOTOS).map((p, i) => (
+            <span key={p.page}>
+              {i > 0 && ' · '}
+              <a href={p.page} target="_blank" rel="noreferrer" className={linkCls}>{p.credit}</a>{' '}
+              ({p.licenseUrl
+                ? <a href={p.licenseUrl} target="_blank" rel="noreferrer license" className={linkCls}>{p.license}</a>
+                : p.license || f.publicDomain})
+            </span>
+          ))}{' '}
+          — Wikimedia Commons, {f.cropped}.
         </p>
       </div>
 

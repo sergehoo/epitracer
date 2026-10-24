@@ -1,12 +1,11 @@
 import type { Metadata } from 'next';
 import { HomeFaq } from '@/components/public/HomeFaq';
-import { DiseasesSection } from '@/components/public/landing/DiseasesSection';
+import { HealthHub } from '@/components/public/landing/HealthHub';
 import { Hero } from '@/components/public/landing/Hero';
-import { HowItWorks } from '@/components/public/landing/HowItWorks';
 import { PwaSection } from '@/components/public/landing/PwaSection';
 import { QuickServices } from '@/components/public/landing/QuickServices';
 import { WelcomeCI } from '@/components/public/landing/WelcomeCI';
-import { fetchPublicDiseases, fetchPublicNotices } from '@/lib/portal';
+import { fetchPublicDiseaseDetails, fetchPublicDiseases, fetchPublicNotices } from '@/lib/portal';
 
 // Contenus publiés par les autorités : régénérés toutes les 5 minutes.
 export const revalidate = 300;
@@ -51,6 +50,8 @@ export default async function HomePage() {
     fetchPublicDiseases('?active=true'),
     fetchPublicNotices(),
   ]);
+  // Prévention, symptômes et recommandations : fiches détaillées des maladies actives.
+  const details = await fetchPublicDiseaseDetails(diseases.slice(0, 6).map((d) => d.slug));
   return (
     <>
       <script
@@ -60,8 +61,8 @@ export default async function HomePage() {
       />
       <Hero />
       <QuickServices />
-      <DiseasesSection diseases={diseases} notices={notices} />
-      <HowItWorks />
+      {/* Contenus sanitaires avant les sections touristiques (WelcomeCI) */}
+      <HealthHub diseases={diseases} details={details} notices={notices} />
       <WelcomeCI />
       <PwaSection />
       <HomeFaq />

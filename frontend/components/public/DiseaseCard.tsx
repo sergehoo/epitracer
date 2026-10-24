@@ -13,7 +13,7 @@ const DEFAULT_LABELS = {
 
 /** Carte d'une maladie publiée (accueil, page /maladies). */
 export function DiseaseCard({
-  disease, headingLevel = 3, labels = DEFAULT_LABELS, hideNormalLevel = false, levelLabel,
+  disease, headingLevel = 3, labels = DEFAULT_LABELS, hideNormalLevel = false, levelLabel, updatedLabel,
 }: {
   disease: PublicDisease;
   headingLevel?: 2 | 3;
@@ -21,6 +21,8 @@ export function DiseaseCard({
   /** N'affiche le niveau d'alerte que s'il a été relevé (pas la valeur par défaut). */
   hideNormalLevel?: boolean;
   levelLabel?: string;
+  /** Mention de mise à jour déjà formatée (« Mise à jour le … »). */
+  updatedLabel?: string;
 }) {
   const Heading = headingLevel === 2 ? 'h2' : 'h3';
   const showLevel = !(hideNormalLevel && disease.public_alert_level === 'normal');
@@ -56,6 +58,11 @@ export function DiseaseCard({
           </dd>
         </div>
       </dl>
+      {updatedLabel && (
+        <p className="mt-3 text-xs text-slate-500">
+          <time dateTime={disease.updated_at}>{updatedLabel}</time>
+        </p>
+      )}
       <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-ciForest">
         {labels.open} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden="true" />
       </span>

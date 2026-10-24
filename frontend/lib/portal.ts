@@ -68,9 +68,19 @@ export async function fetchPublicDiseases(query = ''): Promise<PublicDisease[]> 
  * indisponible lève une erreur : Next conserve alors la page déjà en cache
  * au lieu de servir un faux « introuvable ».
  */
-export async function fetchPublicDisease(slug: string): Promise<PublicDiseaseDetail | null> {
+export async function fetchPublicDisease(slug: string, lang?: string): Promise<PublicDiseaseDetail | null> {
   if (!/^[a-z0-9-]+$/.test(slug)) return null;
-  return getJson<PublicDiseaseDetail>(`diseases/${slug}/`);
+  return getJson<PublicDiseaseDetail>(`diseases/${slug}/${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
+}
+
+/**
+ * Fiches détaillées (prévention, symptômes, recommandations) de plusieurs
+ * maladies publiées. Une fiche indisponible est simplement omise : l'accueil
+ * affiche alors son repli neutre.
+ */
+export async function fetchPublicDiseaseDetails(slugs: string[], lang?: string): Promise<PublicDiseaseDetail[]> {
+  const details = await Promise.all(slugs.map((s) => fetchPublicDisease(s, lang).catch(() => null)));
+  return details.filter((d): d is PublicDiseaseDetail => d !== null);
 }
 
 export async function fetchPublicNotices(
