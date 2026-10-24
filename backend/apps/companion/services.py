@@ -32,18 +32,20 @@ from .models import (
 
 
 def get_active_consent(traveler, scope: str) -> PrivacyConsent | None:
-    """Retourne le consentement ACTIF (granted=True ET non révoqué) le plus
-    récent pour ce voyageur+scope, ou None.
+    """Retourne le consentement ACTIF pour ce voyageur+scope, ou None.
 
-    Comme le modèle est append-only, on prend la dernière ligne ordonnée
-    par `granted_at desc` et on vérifie `revoked_at IS NULL` et
-    `granted IS True`.
+    Le modèle est append-only : un retrait est une NOUVELLE ligne. Seule la
+    décision la plus récente fait foi — un accord antérieur à un retrait ne
+    doit plus être considéré comme actif.
     """
-    return (
-        PrivacyConsent.objects.filter(traveler=traveler, scope=scope, granted=True, revoked_at__isnull=True)
-        .order_by("-granted_at")
+    latest = (
+        PrivacyConsent.objects.filter(traveler=traveler, scope=scope)
+        .order_by("-granted_at", "-id")
         .first()
     )
+    if latest is None or not latest.granted or latest.revoked_at is not None:
+        return None
+    return latest
 
 
 def has_consent(traveler, scope: str) -> bool:

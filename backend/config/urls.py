@@ -10,13 +10,21 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from rest_framework.routers import SimpleRouter
+
+from apps.medical.screening_views import HealthScreeningViewSet
 
 # Phase 9B — suivi médical (API DRF)
 from apps.medical.urls import (
     admin_urlpatterns as medical_admin_urls,
+)
+from apps.medical.urls import (
     public_urlpatterns as medical_public_urls,
 )
 from apps.portal.urls import public_urlpatterns as portal_public_urls
+
+screening_router = SimpleRouter()
+screening_router.register("", HealthScreeningViewSet, basename="health-screening")
 
 
 def healthcheck(_request):
@@ -66,6 +74,8 @@ api_v1_patterns = [
     path("public/", include(portal_public_urls)),
     # --- Gestion des contenus publics (annonces) ---
     path("portal/", include("apps.portal.urls")),
+    # --- Qualifications sanitaires à revoir (revue humaine) ---
+    path("admin/screenings/", include(screening_router.urls)),
 
     # --- Companion ADMIN (suivi voyageurs, itinéraire, carte) ---
     path("admin/companion/", include("apps.companion.admin_urls")),

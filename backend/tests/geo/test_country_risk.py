@@ -319,36 +319,6 @@ def test_arrival_from_high_risk_country_raises_an_alert(traveler, niger, ebola_d
     assert alert.metadata["risks"][0]["country_code"] == "NE"
 
 
-@pytest.fixture
-def pass_keys(tmp_path, monkeypatch, settings):
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-    from apps.health_pass import crypto
-
-    priv = Ed25519PrivateKey.generate()
-    (tmp_path / "priv.pem").write_bytes(
-        priv.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
-        )
-    )
-    (tmp_path / "pub.pem").write_bytes(
-        priv.public_key().public_bytes(
-            serialization.Encoding.PEM,
-            serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-    )
-    monkeypatch.setitem(settings.HEALTHPASS, "PRIVATE_KEY_PATH", str(tmp_path / "priv.pem"))
-    monkeypatch.setitem(settings.HEALTHPASS, "PUBLIC_KEY_PATH", str(tmp_path / "pub.pem"))
-    crypto._load_private_key.cache_clear()
-    crypto._load_public_key.cache_clear()
-    yield
-    crypto._load_private_key.cache_clear()
-    crypto._load_public_key.cache_clear()
-
-
 def test_public_form_accepts_new_countries_and_alerts(pass_keys, entry_point, ebola_disease, niger):
     cache.clear()  # quota anti-abus du formulaire public
     record_risk_assessment(

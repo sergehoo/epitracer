@@ -21,9 +21,9 @@ def test_create_ebola_investigation(client, traveler, entry_point, ebola_disease
             "status": "new",
             "notes": "Test enquête",
             "exposure": {
-                "visited_outbreak_country": True,
-                "contact_with_confirmed_case": True,
-                "attended_funerals": False,
+                "visited_ebola_zone": True,
+                "contact_with_case": True,
+                "attended_funeral_or_touched_corpse": False,
             },
         },
         format="json",

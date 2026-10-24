@@ -11,6 +11,7 @@ from .models import (
     CaseClassification,
     DiseaseFollowupProtocol,
     FollowUpAction,
+    HealthScreening,
     LabAnalysis,
     MedicalSample,
     MedicalSymptomReport,
@@ -96,3 +97,14 @@ class FollowUpActionAdmin(admin.ModelAdmin):
         "followup_case__traveler__public_id",
     )
     date_hierarchy = "performed_at"
+
+
+@admin.register(HealthScreening)
+class HealthScreeningAdmin(admin.ModelAdmin):
+    """Consultation des qualifications ; la revue se fait via l'API / le tableau de bord."""
+
+    list_display = ("traveler", "disease", "decision", "review_status", "reviewed_by", "created_at")
+    list_filter = ("decision", "review_status", "disease")
+    search_fields = ("traveler__public_id", "traveler__last_name")
+    raw_id_fields = ("traveler", "followup_case")
+    readonly_fields = ("reviewed_by", "reviewed_at")

@@ -109,7 +109,7 @@ class FollowupsOverviewView(APIView):
             "checked_today": kpis_qs["checked_today"] or 0,
             "missed_48h": kpis_qs["missed_48h"] or 0,
             "open_alerts": HealthAlert.objects.filter(
-                status__in=["OPEN", "ACK", "INVESTIGATING"],
+                status__in=["open", "ack", "investigating", "OPEN", "ACK", "INVESTIGATING"],
             ).count(),
             "with_recent_location": TravelerLocationPing.objects
                 .filter(captured_at__gte=cutoff_7d)

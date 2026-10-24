@@ -26,6 +26,10 @@ from .models import PageVisit, Portal
 from .serializers import VisitTrackSerializer
 from .services import detect_country, extract_ip, looks_like_bot
 
+# Statuts d'alerte « en cours » : valeurs canoniques en minuscules (cf.
+# normalize_alert_case) + anciennes valeurs en majuscules non normalisées.
+OPEN_ALERT_STATUSES = ["open", "ack", "investigating", "OPEN", "ACK", "INVESTIGATING"]
+
 
 # =========================================================================
 #                        DASHBOARD OVERVIEW
@@ -224,7 +228,7 @@ class NationalDashboardView(APIView):
             "passes_issued": HealthPass.objects.count(),
             "passes_active": HealthPass.objects.filter(status="active").count(),
             "alerts_open": HealthAlert.objects.filter(
-                status__in=["OPEN", "ACK", "INVESTIGATING"]
+                status__in=OPEN_ALERT_STATUSES
             ).count(),
             "alerts_critical_24h": HealthAlert.objects.filter(
                 severity__iexact="critical", created_at__gte=last_24h,
@@ -472,7 +476,7 @@ class NationalDashboardView(APIView):
                 "created_at": a.created_at.isoformat(),
             }
             for a in HealthAlert.objects.filter(
-                status__in=["OPEN", "ACK", "INVESTIGATING"],
+                status__in=OPEN_ALERT_STATUSES,
             ).order_by("-created_at")[:10]
         ]
 

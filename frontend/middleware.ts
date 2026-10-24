@@ -28,6 +28,7 @@ const ADMIN_PATHS = [
   '/dashboard',
   '/surveillance',
   '/suivi-voyageurs',
+  '/revues-sanitaires',
   '/checkins',
   '/voyageurs',      // détail voyageur côté admin (itinéraire, etc.)
   '/relations',
@@ -103,6 +104,12 @@ export function middleware(req: NextRequest) {
     // Racine admin → /dashboard
     if (path === '/') {
       url.pathname = '/dashboard';
+      return NextResponse.redirect(url, 308);
+    }
+    // Compatibilité : l'ancienne page admin « Maladies » (/maladies) est
+    // devenue /gestion-maladies ; /maladies désigne désormais les fiches publiques.
+    if (path === '/maladies') {
+      url.pathname = '/gestion-maladies';
       return NextResponse.redirect(url, 308);
     }
     if (isPublicPath(path) && !isAdminPath(path) && path !== '/') {

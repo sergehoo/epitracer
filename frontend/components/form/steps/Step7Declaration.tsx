@@ -90,6 +90,7 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
         exposure: store.exposure,
         screenings: store.screenings || [],
         symptoms: store.symptoms,
+        symptom_codes: store.symptom_codes || [],
         declaration: {
           signed_place: signedPlace,
           declared_at: new Date(declaredAt).toISOString(),

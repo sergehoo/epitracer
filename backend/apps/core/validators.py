@@ -69,7 +69,15 @@ def _sniff_mime_pure_python(head: bytes) -> str | None:
 
 
 def _sniff_mime(head: bytes) -> str | None:
-    """Utilise python-magic si dispo, sinon fallback pur-Python."""
+    """Signatures explicites d'abord (déterministes), puis python-magic si dispo.
+
+    libmagic peut répondre `application/octet-stream` sur un en-tête PNG
+    tronqué à _SNIFF_SIZE octets : nos signatures font foi pour les formats
+    de la liste blanche, libmagic ne sert qu'aux formats non reconnus.
+    """
+    known = _sniff_mime_pure_python(head)
+    if known:
+        return known
     try:
         import magic  # type: ignore
     except Exception:  # pragma: no cover - import-time fallback

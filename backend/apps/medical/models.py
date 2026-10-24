@@ -85,6 +85,11 @@ class DiseaseFollowupProtocol(BaseModel):
     field_visit_rules = models.JSONField(
         _("Règles de visite terrain"), default=dict, blank=True,
     )
+    # Qualification à l'enregistrement (questionnaire voyageur). Clés et
+    # valeurs par défaut : apps.medical.screening.DEFAULT_SCREENING_RULES.
+    screening_rules = models.JSONField(
+        _("Règles de qualification à l'arrivée"), default=dict, blank=True,
+    )
 
     # Géoloc — Option 3 (RGPD-safe) : pas de tracking caché, mais
     # alerte si la géoloc consentie n'a pas remonté de ping depuis X h.
@@ -523,3 +528,67 @@ class FollowUpAction(BaseModel):
 
     def __str__(self) -> str:  # pragma: no cover - cosmetic
         return f"{self.action_type} · {self.title[:48]}"
+
+
+# ---------------------------------------------------------------------------
+# 7) HealthScreening — qualification sanitaire à l'enregistrement
+# ---------------------------------------------------------------------------
+
+
+class ScreeningDecision(models.TextChoices):
+    FOLLOWUP = "followup", _("Suivi ouvert")
+    REVIEW = "review", _("Revue humaine requise")
+    ISOLATED_SYMPTOM = "isolated_symptom", _("Symptôme isolé — sans suite automatique")
+
+
+class ScreeningReviewStatus(models.TextChoices):
+    NOT_REQUIRED = "not_required", _("Non requise")
+    PENDING = "pending", _("À revoir")
+    CONFIRMED = "confirmed", _("Suivi confirmé")
+    DISMISSED = "dismissed", _("Écartée")
+
+
+class HealthScreening(BaseModel):
+    """Résultat du questionnaire d'arrivée pour une maladie, et sa revue humaine.
+
+    Les règles du protocole décident : suivi ouvert (exposition, itinéraire à
+    risque), revue par un agent (symptômes sans exposition) ou simple trace
+    (symptôme isolé). Aucun suivi n'est ouvert sur un symptôme isolé.
+    """
+
+    traveler = models.ForeignKey(
+        "travelers.Traveler", on_delete=models.CASCADE, related_name="health_screenings",
+    )
+    disease = models.ForeignKey(
+        "diseases.Disease", on_delete=models.PROTECT, related_name="health_screenings",
+    )
+    decision = models.CharField(
+        _("Décision"), max_length=20, choices=ScreeningDecision.choices, db_index=True,
+    )
+    reasons = models.JSONField(_("Motifs"), default=list, blank=True)
+    answers = models.JSONField(
+        _("Réponses"), default=dict, blank=True,
+        help_text=_("Expositions, symptômes et pays à risque retenus pour cette maladie."),
+    )
+    followup_case = models.ForeignKey(
+        "quarantine.QuarantineRecord", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="screenings",
+    )
+    review_status = models.CharField(
+        _("Revue"), max_length=20, choices=ScreeningReviewStatus.choices,
+        default=ScreeningReviewStatus.NOT_REQUIRED, db_index=True,
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(_("Note de revue"), blank=True)
+
+    class Meta(BaseModel.Meta):
+        verbose_name = _("Qualification sanitaire")
+        verbose_name_plural = _("Qualifications sanitaires")
+        indexes = [models.Index(fields=["review_status", "-created_at"])]
+
+    def __str__(self) -> str:  # pragma: no cover - cosmetic
+        return f"{self.traveler_id} · {self.disease_id} · {self.decision}"

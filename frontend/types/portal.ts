@@ -48,14 +48,23 @@ export interface ScreeningDisease {
   code: string;
   name: string;
   slug: string;
-  exposures: { code: string; label: string }[];
-  symptoms: { code: string; label: string; is_red_flag: boolean }[];
+  /** Questions « contact avec un malade » : regroupées dans le tronc commun. */
+  contact_exposures: { code: string; label: string }[];
+  /** Questions propres à la maladie : posées selon l'itinéraire (ou toujours). */
+  specific_exposures: { code: string; label: string }[];
+  ask_specific_exposures: 'always' | 'if_risk_itinerary';
+  /** Pays (ISO-2) où la maladie fait l'objet d'une surveillance renforcée. */
+  risk_countries: string[];
   followup_days: number;
   daily_checkin: boolean;
 }
 
 export interface RegistrationConfig {
   ebola_questionnaire: boolean;
+  /** Section symptômes commune → codes du référentiel (jamais reposés par maladie). */
+  common_symptom_fields: Record<string, string[]>;
+  /** Autres symptômes des maladies actives, dédoublonnés. */
+  extra_symptoms: { code: string; label: string }[];
   diseases: ScreeningDisease[];
 }
 
@@ -63,5 +72,4 @@ export interface RegistrationConfig {
 export interface ScreeningAnswer {
   disease: string;
   exposures: string[];
-  symptoms: string[];
 }

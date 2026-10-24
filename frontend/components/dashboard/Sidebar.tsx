@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Activity, Building2, BarChart3, Bell, ChevronLeft, FileText, FormInput, Globe2,
+  Activity, Building2, BarChart3, Bell, ChevronLeft, ClipboardCheck, FileText, FormInput, Globe2,
   HeartPulse, LayoutDashboard, Map, MapPin, MessageSquare, Network, QrCode,
   Megaphone, Settings, ShieldAlert, Siren, Stethoscope, Users, X,
 } from 'lucide-react';
@@ -14,6 +14,7 @@ const NAV = [
   { href: '/dashboard',         label: 'Dashboard',         icon: LayoutDashboard },
   { href: '/surveillance',      label: 'Surveillance',      icon: Activity },
   { href: '/suivi-voyageurs',   label: 'Suivi voyageurs',   icon: HeartPulse },
+  { href: '/revues-sanitaires', label: 'Revues sanitaires', icon: ClipboardCheck },
   { href: '/checkins',          label: 'Check-ins',         icon: Bell },
   { href: '/verifier',          label: 'Vérifier un pass',  icon: QrCode },
   { href: '/relations',         label: 'Relations',         icon: Network },

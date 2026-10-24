@@ -1,15 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRegistrationStore } from '@/lib/store';
-import { api } from '@/lib/api';
+import { useRegistrationConfig } from '@/lib/registrationConfig';
 import { FieldGroup, YesNo } from '@/components/form/Field';
 import {
-  DiseaseScreenings, ScreeningDraft, initialScreeningDraft, toScreeningAnswers, unansweredExposures,
+  DiseaseScreenings, ScreeningDraft, initialScreeningDraft, toScreeningAnswers, unansweredScreening,
 } from '@/components/form/DiseaseScreenings';
 import { exposureSchema } from '@/lib/schema';
 import type { SectionExposure } from '@/types/ebola';
-import type { RegistrationConfig } from '@/types/portal';
 
 const NO_EBOLA_EXPOSURE: SectionExposure = {
   visited_ebola_zone: false,
@@ -33,22 +32,23 @@ type ExposureDraft = {
 };
 
 export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
-  const { exposure, screenings, set, goTo } = useRegistrationStore();
-  // Configuration par maladie. En cas d'API indisponible, on garde le
-  // questionnaire Ebola historique (comportement d'avant).
-  const [config, setConfig] = useState<RegistrationConfig | null>(null);
-  const [screeningDraft, setScreeningDraft] = useState<ScreeningDraft>({});
-  useEffect(() => {
-    api.get<RegistrationConfig>('/public/registration-config/')
-      .then((r) => {
-        setConfig(r.data);
-        setScreeningDraft(initialScreeningDraft(r.data.diseases, screenings));
-      })
-      .catch(() => setConfig({ ebola_questionnaire: true, diseases: [] }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { exposure, screenings, historique, set, goTo } = useRegistrationStore();
+  // Configuration par maladie (repli : questionnaire Ebola historique seul).
+  const config = useRegistrationConfig();
   const showEbola = config?.ebola_questionnaire ?? true;
-  const otherDiseases = config?.diseases ?? [];
+  const otherDiseases = useMemo(() => config?.diseases ?? [], [config]);
+  // Pays de provenance / transit / visités déclarés à l'étape « Historique »
+  const visited = useMemo(
+    () => Array.from(new Set((historique || []).map((h) => h.country_code).filter(Boolean))),
+    [historique],
+  );
+  const [screeningDraft, setScreeningDraft] = useState<ScreeningDraft>(
+    { contactAny: null, contactDiseases: [], specific: {} },
+  );
+  useEffect(() => {
+    if (config) setScreeningDraft(initialScreeningDraft(config.diseases, screenings));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config]);
   // Initialise à null pour FORCER l'utilisateur à répondre (au lieu de
   // false par défaut — qui correspondrait à "non" implicite).
   const [state, setState] = useState<ExposureDraft>(
@@ -72,7 +72,7 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
       ...(showEbola
         ? QUESTIONS.filter((q) => state[q.key] === null || state[q.key] === undefined).map((q) => q.key)
         : []),
-      ...unansweredExposures(otherDiseases, screeningDraft),
+      ...unansweredScreening(otherDiseases, visited, screeningDraft),
     ];
     if (unanswered.length > 0) {
       setShowErrors(true);
@@ -97,7 +97,10 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
     }
     setError(null);
     setShowErrors(false);
-    set({ exposure: ebolaAnswers as SectionExposure, screenings: toScreeningAnswers(screeningDraft) });
+    set({
+      exposure: ebolaAnswers as SectionExposure,
+      screenings: toScreeningAnswers(otherDiseases, visited, screeningDraft),
+    });
     goTo(5);
     onNext();
   };
@@ -157,6 +160,7 @@ export function Step5Exposure({ onNext, onBack }: { onNext: () => void; onBack: 
 
       <DiseaseScreenings
         diseases={otherDiseases}
+        visited={visited}
         draft={screeningDraft}
         onChange={setScreeningDraft}
         showErrors={showErrors}

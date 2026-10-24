@@ -34,11 +34,17 @@ from apps.diseases.models import Disease
 from apps.geo.models import EntryPoint
 from apps.geo.services import alert_on_arrival_from_risk_country, resolve_country
 from apps.health_pass.models import HealthPass
-from apps.health_pass.services import issue_pass_for_ebola_investigation
-from apps.portal.services import apply_screenings
+from apps.health_pass.services import issue_pass_for_registration
+from apps.medical.models import ScreeningDecision
+from apps.medical.screening import apply_screenings
 from apps.travelers.models import Traveler, TravelHistoryEntry
 
-from .models import EbolaDeclaration, EbolaExposureAssessment, EbolaInvestigation, EbolaSymptomReport
+from .models import (
+    EbolaDeclaration,
+    EbolaExposureAssessment,
+    EbolaInvestigation,
+    EbolaSymptomReport,
+)
 from .serializers import (
     EbolaInvestigationSerializer,
     PublicTravelerSubmissionSerializer,
@@ -287,107 +293,153 @@ class PublicTravelerRegisterView(APIView):
                     duration_text=_trim(item.get("duration_text"), 120),
                 )
 
-            # --- Enquête Ebola ---
-            investigation = EbolaInvestigation.objects.create(
-                traveler=traveler,
-                entry_point=entry_point,
-                status="new",
-                notes="Soumis depuis le portail voyageurs public.",
-            )
-
-            # --- Section 5 : exposition ---
-            EbolaExposureAssessment.objects.create(
-                investigation=investigation,
-                visited_ebola_zone=bool(exposure.get("visited_ebola_zone")),
-                visited_ebola_zone_details=(exposure.get("visited_ebola_zone_details") or "").strip(),
-                contact_with_case=bool(exposure.get("contact_with_case")),
-                attended_funeral_or_touched_corpse=bool(
-                    exposure.get("attended_funeral_or_touched_corpse")
-                ),
-                visited_ebola_healthcare_facility=bool(
-                    exposure.get("visited_ebola_healthcare_facility")
-                ),
-            )
-
-            # --- Section 6 : symptômes ---
-            EbolaSymptomReport.objects.create(
-                investigation=investigation,
-                reported_at=timezone.now(),
-                temperature_celsius=_parse_decimal(symptoms.get("temperature_celsius")),
-                fever=bool(symptoms.get("fever")),
-                intense_fatigue=bool(symptoms.get("intense_fatigue")),
-                muscle_joint_pain=bool(symptoms.get("muscle_joint_pain")),
-                severe_headache=bool(symptoms.get("severe_headache")),
-                sore_throat_or_abdominal=bool(symptoms.get("sore_throat_or_abdominal")),
-                diarrhea_nausea_vomiting=bool(symptoms.get("diarrhea_nausea_vomiting")),
-                unexplained_bleeding=bool(symptoms.get("unexplained_bleeding")),
-                other_symptoms=(symptoms.get("other_symptoms") or "").strip(),
-            )
-
-            # --- Section 7 : déclaration (avec signature manuscrite scannée) ---
+            # --- Section 7 : signature, conservée sur le voyageur quelle que soit la maladie ---
             sig_file, sig_hash = _decode_signature(
                 declaration.get("signature_data_url", ""), traveler.public_id,
             )
-            decl_obj = EbolaDeclaration.objects.create(
-                investigation=investigation,
-                declared_at=_parse_datetime(declaration.get("declared_at")) or timezone.now(),
-                declarant_full_name=(declaration.get("declarant_full_name") or traveler.full_name).strip(),
-                signed_place=(declaration.get("signed_place") or "").strip(),
-                truthful_declaration=bool(declaration.get("truthful_declaration")),
-                consent_data_processing=True,
-                consent_health_followup=True,
-                consent_quarantine_if_needed=True,
-                signature_hash=sig_hash,
-            )
             if sig_file is not None:
-                decl_obj.signature.save(sig_file.name, sig_file, save=True)
-                # On répercute aussi côté Traveler pour exports rapides
                 traveler.consent_signature.save(sig_file.name, sig_file, save=False)
                 traveler.save(update_fields=["consent_signature"])
 
-            # --- Scoring + workflow ---
-            apply_risk_outcome(investigation)
+            # --- Fiche INHP Ebola (sections 5 et 6) : seulement si Ebola est sous surveillance ---
+            investigation = None
+            if Disease.objects.filter(code="EBOLA", is_active=True).exists():
+                investigation = _create_ebola_investigation(
+                    traveler, entry_point, exposure, symptoms, declaration, sig_file, sig_hash,
+                )
 
-            # --- Autres maladies sous surveillance : même voyageur, un suivi par maladie ---
-            screenings = data.get("screenings") or []
-            followups = apply_screenings(traveler, screenings)
-            if screenings:
-                decl_obj.extra = {**(decl_obj.extra or {}), "screenings": screenings}
-                decl_obj.save(update_fields=["extra"])
+            # --- Autres maladies : qualification par règles, un suivi par maladie ---
+            qualification = apply_screenings(
+                traveler, data.get("screenings") or [],
+                symptom_codes=data.get("symptom_codes") or [],
+                common_symptoms=symptoms,
+            )
+            followups = [q for q in qualification if q["decision"] == ScreeningDecision.FOLLOWUP]
+            _update_health_status(traveler, investigation, followups)
 
-            # --- Health Pass délivré immédiatement ---
-            hp = issue_pass_for_ebola_investigation(investigation)
+            # --- Pass : dépend de l'enregistrement, jamais d'une maladie ---
+            level, score = _registration_risk(investigation, qualification)
+            hp = issue_pass_for_registration(
+                traveler, risk_level=level, risk_score=score,
+                reference=investigation.case_number if investigation else traveler.public_id,
+            )
 
             audit(
                 request, action="create",
-                summary=f"Auto-enregistrement portail public — {traveler.public_id} → {investigation.case_number}",
-                target=investigation,
-                payload={"score": investigation.risk_score, "level": investigation.risk_level},
+                summary=f"Auto-enregistrement portail public — {traveler.public_id} → {hp.pass_number}",
+                target=investigation or traveler,
+                payload={"level": level, "score": score, "followups": [f["disease_code"] for f in followups]},
             )
 
         # Règle de surveillance : pays de provenance/transit à risque élevé ou critique.
         alert_on_arrival_from_risk_country(traveler)
 
-        return Response({
-            "traveler": {
-                "public_id": traveler.public_id,
-                "uuid": str(traveler.uuid),
-                "full_name": traveler.full_name,
-                "current_health_status": traveler.current_health_status,
-            },
-            "investigation": EbolaInvestigationSerializer(investigation).data,
-            "pass": {
-                "pass_number": hp.pass_number,
-                "uuid": str(hp.uuid),
-                "status": hp.status,
-                "expires_at": hp.expires_at,
-                "qr_url": hp.qr_image.url if hp.qr_image else None,
-                "pdf_url": hp.pdf_file.url if hp.pdf_file else None,
-                "qr_token": _safe_qr_token(hp),
-            },
-            "instructions": _public_instructions(investigation),
-            "followups": followups,
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            _registration_payload(
+                traveler, investigation, hp, level, followups,
+                review_pending=any(q["review_pending"] for q in qualification),
+            ),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+def _registration_payload(
+    traveler, investigation, hp, level, followups, *, review_pending,
+) -> dict:
+    return {
+        "traveler": {
+            "public_id": traveler.public_id,
+            "uuid": str(traveler.uuid),
+            "full_name": traveler.full_name,
+            "current_health_status": traveler.current_health_status,
+        },
+        "investigation": (
+            EbolaInvestigationSerializer(investigation).data if investigation else None
+        ),
+        "pass": {
+            "pass_number": hp.pass_number,
+            "uuid": str(hp.uuid),
+            "status": hp.status,
+            "expires_at": hp.expires_at,
+            "qr_url": hp.qr_image.url if hp.qr_image else None,
+            "pdf_url": hp.pdf_file.url if hp.pdf_file else None,
+            "qr_token": _safe_qr_token(hp),
+        } if hp else None,
+        "instructions": _public_instructions(level, followups),
+        "followups": followups,
+        # Un agent vérifiera certaines réponses : le voyageur est simplement prévenu.
+        "review_pending": review_pending,
+    }
+
+
+def _create_ebola_investigation(traveler, entry_point, exposure, symptoms, declaration, sig_file, sig_hash):
+    """Fiche passager INHP Ebola : enquête, exposition, symptômes, déclaration, score."""
+    investigation = EbolaInvestigation.objects.create(
+        traveler=traveler,
+        entry_point=entry_point,
+        status="new",
+        notes="Soumis depuis le portail voyageurs public.",
+    )
+    EbolaExposureAssessment.objects.create(
+        investigation=investigation,
+        visited_ebola_zone=bool(exposure.get("visited_ebola_zone")),
+        visited_ebola_zone_details=(exposure.get("visited_ebola_zone_details") or "").strip(),
+        contact_with_case=bool(exposure.get("contact_with_case")),
+        attended_funeral_or_touched_corpse=bool(exposure.get("attended_funeral_or_touched_corpse")),
+        visited_ebola_healthcare_facility=bool(exposure.get("visited_ebola_healthcare_facility")),
+    )
+    EbolaSymptomReport.objects.create(
+        investigation=investigation,
+        reported_at=timezone.now(),
+        temperature_celsius=_parse_decimal(symptoms.get("temperature_celsius")),
+        fever=bool(symptoms.get("fever")),
+        intense_fatigue=bool(symptoms.get("intense_fatigue")),
+        muscle_joint_pain=bool(symptoms.get("muscle_joint_pain")),
+        severe_headache=bool(symptoms.get("severe_headache")),
+        sore_throat_or_abdominal=bool(symptoms.get("sore_throat_or_abdominal")),
+        diarrhea_nausea_vomiting=bool(symptoms.get("diarrhea_nausea_vomiting")),
+        unexplained_bleeding=bool(symptoms.get("unexplained_bleeding")),
+        other_symptoms=(symptoms.get("other_symptoms") or "").strip(),
+    )
+    decl_obj = EbolaDeclaration.objects.create(
+        investigation=investigation,
+        declared_at=_parse_datetime(declaration.get("declared_at")) or timezone.now(),
+        declarant_full_name=(declaration.get("declarant_full_name") or traveler.full_name).strip(),
+        signed_place=(declaration.get("signed_place") or "").strip(),
+        truthful_declaration=bool(declaration.get("truthful_declaration")),
+        consent_data_processing=True,
+        consent_health_followup=True,
+        consent_quarantine_if_needed=True,
+        signature_hash=sig_hash,
+    )
+    if sig_file is not None:
+        decl_obj.signature.save(sig_file.name, sig_file, save=True)
+    apply_risk_outcome(investigation)
+    return investigation
+
+
+_RISK_ORDER = ("low", "moderate", "high", "critical")
+
+
+def _registration_risk(investigation, qualification: list[dict]) -> tuple[str, int]:
+    """Niveau affiché sur le pass : score Ebola s'il existe, « modéré » si un suivi est ouvert."""
+    level = investigation.risk_level if investigation else "low"
+    score = investigation.risk_score if investigation else 0
+    if any(q["decision"] == ScreeningDecision.FOLLOWUP for q in qualification):
+        if _RISK_ORDER.index(level) < _RISK_ORDER.index("moderate"):
+            level = "moderate"
+    return level, score
+
+
+def _update_health_status(traveler, investigation, followups: list[dict]) -> None:
+    """Sans fiche Ebola, le statut reflète les suivis ouverts ; on n'abaisse jamais un statut Ebola."""
+    if investigation is None:
+        traveler.current_health_status = "monitoring" if followups else "cleared"
+    elif followups and traveler.current_health_status == "cleared":
+        traveler.current_health_status = "monitoring"
+    else:
+        return
+    traveler.save(update_fields=["current_health_status"])
 
 
 def _safe_qr_token(hp: HealthPass) -> str:
@@ -402,11 +454,11 @@ def _safe_qr_token(hp: HealthPass) -> str:
     return token
 
 
-def _public_instructions(investigation: EbolaInvestigation) -> dict:
-    """Texte d'instruction adapté au niveau de risque."""
-    level = investigation.risk_level
+def _public_instructions(level: str, followups: list[dict] | None = None) -> dict:
+    """Texte d'instruction adapté au niveau de risque et aux suivis ouverts."""
+    durations = [f["duration_days"] for f in followups or [] if f.get("duration_days")]
     base = {
-        "surveillance_days": 21,
+        "surveillance_days": max(durations) if durations else 21,
         "phones": {
             "samu": "185",
             "allo_sante": "143",
@@ -426,14 +478,16 @@ def _public_instructions(investigation: EbolaInvestigation) -> dict:
             "Un agent vous contactera. Restez à l'adresse de confinement indiquée."
         )
     elif level == "moderate":
+        diseases = ", ".join(f["disease_name"] for f in followups or [])
         base["message"] = (
-            "Vous êtes placé sous surveillance sanitaire (21 jours). Mesurez votre température chaque jour "
+            f"Vous êtes placé sous surveillance sanitaire ({base['surveillance_days']} jours"
+            f"{' — ' + diseases if diseases else ''}). Mesurez votre température chaque jour "
             "et signalez tout symptôme via les numéros d'urgence."
         )
     else:
         base["message"] = (
-            "Aucun risque significatif détecté. Surveillance simple de 21 jours. "
-            "Contactez les services de santé en cas d'apparition de symptômes."
+            "Aucun risque significatif détecté. Contactez les services de santé (143) "
+            "en cas d'apparition de symptômes."
         )
     return base
 

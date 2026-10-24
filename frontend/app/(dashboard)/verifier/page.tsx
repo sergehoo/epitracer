@@ -51,6 +51,8 @@ type VerifyResult = {
     risk_level?: string;
     last_update?: string;
   };
+  /** Maladies faisant l'objet d'un suivi actif (un dossier par maladie). */
+  followed_diseases?: string[];
 };
 
 /** Visuel d'un niveau de risque. */
@@ -385,9 +387,15 @@ export default function AdminVerifierPage() {
                             )}
                           </div>
                         )}
+                        {!!result.followed_diseases?.length && (
+                          <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                            Suivi sanitaire :{' '}
+                            <strong>{result.followed_diseases.join(' · ')}</strong>
+                          </div>
+                        )}
                         {result.followup?.active && (
                           <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-                            Suivi 21j en cours · jour{' '}
+                            Suivi en cours · jour{' '}
                             <strong>
                               {result.followup.day}/{result.followup.total_days}
                             </strong>
@@ -404,7 +412,7 @@ export default function AdminVerifierPage() {
                   <Row label="Identifiant voyageur" value={result.payload.tid} />
                   <Row label="Pass numéro" value={result.payload.pid} />
                   <Row label="Nom" value={result.payload.name} />
-                  <Row label="Maladie" value={result.payload.dis} />
+                  <Row label="Maladie" value={result.payload.dis || 'Pass voyageur (toutes maladies)'} />
                   <Row label="Point d'entrée" value={result.payload.ep} />
                   <Row label="Émetteur" value={result.payload.iss} />
                   <Row label="Expire le" value={result.payload.exp} />

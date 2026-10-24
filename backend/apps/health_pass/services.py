@@ -35,7 +35,7 @@ from .models import HealthPass, HealthPassStatus, PassBlacklistEntry, PassVerifi
 def issue_pass(
     *,
     traveler: Traveler,
-    disease: Disease,
+    disease: Disease | None = None,
     risk_level: str = "low",
     risk_score: int = 0,
     investigation_ref: str = "",
@@ -88,7 +88,37 @@ def issue_pass(
     return hp
 
 
+RISK_ORDER = ("low", "moderate", "high", "critical")
+
+
+def issue_pass_for_registration(
+    traveler: Traveler, *, risk_level: str = "low", risk_score: int = 0, reference: str = "",
+) -> HealthPass:
+    """Pass voyageur : délivré à l'enregistrement, indépendamment des maladies actives.
+
+    Le format signé du QR est inchangé (`dis` vaut None) : les pass déjà
+    émis restent vérifiables à l'identique.
+    """
+    return issue_pass(
+        traveler=traveler,
+        disease=None,
+        risk_level=risk_level if risk_level in RISK_ORDER else "low",
+        risk_score=risk_score,
+        investigation_ref=reference or traveler.public_id,
+    )
+
+
+def followed_diseases_label(traveler: Traveler) -> str:
+    """Maladies faisant l'objet d'un suivi actif pour ce voyageur (pass, PDF, vérification)."""
+    names = list(
+        traveler.quarantines.filter(status__in=["ACTIVE", "EXTENDED", "active", "extended"])
+        .select_related("disease").order_by("started_on").values_list("disease__name", flat=True)
+    )
+    return " · ".join(dict.fromkeys(names))
+
+
 def issue_pass_for_ebola_investigation(investigation: EbolaInvestigation) -> HealthPass:
+    """Historique (données de démonstration) : pass rattaché à une enquête Ebola."""
     disease = Disease.objects.filter(code="EBOLA").first()
     return issue_pass(
         traveler=investigation.traveler,
@@ -180,7 +210,8 @@ def render_pass_pdf(hp: HealthPass, token: str) -> bytes:
     line("N° de pass", hp.pass_number, y, accent=True); y -= 11 * mm
     line("Voyageur", f"{hp.traveler.last_name.upper()} {hp.traveler.first_name}", y); y -= 9 * mm
     line("ID voyageur", hp.traveler.public_id, y); y -= 9 * mm
-    line("Maladie suivie", hp.disease.name if hp.disease else "—", y); y -= 9 * mm
+    followed = followed_diseases_label(hp.traveler) or (hp.disease.name if hp.disease else "")
+    line("Suivi sanitaire", followed or "Information et prévention", y); y -= 9 * mm
 
     # Bandeau "Suivi sanitaire actif" (remplace l'ancien bandeau de risque).
     # On retire l'affichage du niveau de risque + score sur le PDF pour ne
@@ -830,6 +861,10 @@ def _build_pass_enrichment(hp) -> dict:
             }
     except Exception:
         pass
+    # Suivis sanitaires actifs (un par maladie, même voyageur)
+    label = followed_diseases_label(hp.traveler)
+    if label:
+        out["followed_diseases"] = label.split(" · ")
     # Statut du voyageur (Ebola investigation par exemple)
     try:
         from apps.ebola.models import EbolaInvestigation

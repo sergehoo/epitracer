@@ -174,6 +174,10 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
     screenings = serializers.ListField(
         child=ScreeningAnswerSerializer(), required=False, default=list, max_length=30,
     )
+    # Symptômes cochés hors tronc commun (« autres symptômes », codes du référentiel)
+    symptom_codes = serializers.ListField(
+        child=serializers.CharField(max_length=60), required=False, default=list, max_length=60,
+    )
 
     def validate_voyage(self, voyage: dict) -> dict:
         """Date de départ prévue (optionnelle) : format ISO et jamais avant l'arrivée."""

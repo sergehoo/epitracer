@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRegistrationStore } from '@/lib/store';
+import { useRegistrationConfig } from '@/lib/registrationConfig';
 import { FieldGroup, YesNo } from '@/components/form/Field';
 import type { SectionSymptoms } from '@/types/ebola';
 
@@ -22,7 +23,12 @@ type SymptomsDraft = {
 };
 
 export function Step6Symptoms({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
-  const { symptoms, set, goTo } = useRegistrationStore();
+  const { symptoms, symptom_codes, set, goTo } = useRegistrationStore();
+  // Symptômes propres aux autres maladies actives, sans répéter le tronc commun.
+  const extraSymptoms = useRegistrationConfig()?.extra_symptoms ?? [];
+  const [extraCodes, setExtraCodes] = useState<string[]>(symptom_codes ?? []);
+  const toggleExtra = (code: string) =>
+    setExtraCodes((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]));
   // Initialise à null pour FORCER l'utilisateur à répondre à chaque symptôme
   const [state, setState] = useState<SymptomsDraft>(
     (symptoms as SymptomsDraft) ?? {
@@ -58,7 +64,10 @@ export function Step6Symptoms({ onNext, onBack }: { onNext: () => void; onBack: 
     }
     setError(null);
     setShowErrors(false);
-    set({ symptoms: state as SectionSymptoms });
+    set({
+      symptoms: state as SectionSymptoms,
+      symptom_codes: extraCodes.filter((c) => extraSymptoms.some((s) => s.code === c)),
+    });
     goTo(6);
     onNext();
   };
@@ -124,6 +133,22 @@ export function Step6Symptoms({ onNext, onBack }: { onNext: () => void; onBack: 
           placeholder="37.0"
         />
       </FieldGroup>
+
+      {extraSymptoms.length > 0 && (
+        <fieldset className="card p-4 sm:p-5">
+          <legend className="px-1 text-sm font-semibold">
+            Autres signes surveillés (48 dernières heures) — cochez ceux que vous avez ressentis
+          </legend>
+          <div className="mt-2 grid sm:grid-cols-2 gap-2">
+            {extraSymptoms.map((s) => (
+              <label key={s.code} className="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={extraCodes.includes(s.code)} onChange={() => toggleExtra(s.code)} />
+                {s.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
 
       <FieldGroup label="Autres symptômes (optionnel)">
         <textarea

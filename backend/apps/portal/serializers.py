@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from apps.diseases.models import Disease, PublicAlertLevel, TransmissionMode
 from apps.geo.models import Country
+from apps.medical.screening import is_contact_exposure, risk_country_codes, screening_rules
 from apps.quarantine.services import followup_duration_days
 
 from .models import PublicNotice
@@ -161,25 +162,45 @@ class PublicDiseaseDetailSerializer(PublicDiseaseListSerializer):
 
 
 class ScreeningDiseaseSerializer(serializers.ModelSerializer):
-    """Configuration du questionnaire voyageur pour une maladie sous surveillance."""
+    """Questionnaire voyageur d'une maladie sous surveillance active.
 
-    exposures = serializers.SerializerMethodField()
-    symptoms = serializers.SerializerMethodField()
+    `contact_exposures` sont posées dans le tronc commun (une seule question
+    « contact avec un malade »), `specific_exposures` seulement si l'itinéraire
+    passe par `risk_countries` (ou toujours, selon le protocole).
+    """
+
+    contact_exposures = serializers.SerializerMethodField()
+    specific_exposures = serializers.SerializerMethodField()
+    ask_specific_exposures = serializers.SerializerMethodField()
+    risk_countries = serializers.SerializerMethodField()
     followup_days = serializers.SerializerMethodField()
     daily_checkin = serializers.SerializerMethodField()
 
     class Meta:
         model = Disease
-        fields = ["code", "name", "slug", "exposures", "symptoms", "followup_days", "daily_checkin"]
-
-    def get_exposures(self, obj):
-        return [{"code": rf.code, "label": rf.label} for rf in obj.risk_factors.all()]
-
-    def get_symptoms(self, obj):
-        return [
-            {"code": s.code, "label": s.label, "is_red_flag": s.is_red_flag}
-            for s in sorted(obj.symptoms.all(), key=lambda s: (s.order, s.label))
+        fields = [
+            "code", "name", "slug", "contact_exposures", "specific_exposures",
+            "ask_specific_exposures", "risk_countries", "followup_days", "daily_checkin",
         ]
+
+    def _exposures(self, obj, contact: bool):
+        return [
+            {"code": rf.code, "label": rf.label}
+            for rf in obj.risk_factors.all()
+            if is_contact_exposure(rf.code) == contact
+        ]
+
+    def get_contact_exposures(self, obj):
+        return self._exposures(obj, contact=True)
+
+    def get_specific_exposures(self, obj):
+        return self._exposures(obj, contact=False)
+
+    def get_ask_specific_exposures(self, obj):
+        return screening_rules(obj)["ask_specific_exposures"]
+
+    def get_risk_countries(self, obj):
+        return risk_country_codes(obj)
 
     def get_followup_days(self, obj):
         return followup_duration_days(obj)

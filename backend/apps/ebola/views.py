@@ -56,6 +56,17 @@ class EbolaInvestigationViewSet(viewsets.ModelViewSet):
             target=investigation,
         )
 
+    def create(self, request, *args, **kwargs):
+        """Renvoie l'enquête complète (n° de dossier, score), pas le seul payload d'écriture."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        investigation = serializer.instance
+        investigation.refresh_from_db()
+        context = self.get_serializer_context()
+        data = EbolaInvestigationSerializer(investigation, context=context).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
     @extend_schema(request=EbolaExposureSerializer, responses=EbolaExposureSerializer)
     @action(detail=True, methods=["put", "patch"], url_path="exposure")
     def update_exposure(self, request, case_number=None):

@@ -128,12 +128,17 @@ export interface RegistrationResponse {
     full_name: string;
     current_health_status: string;
   };
+  /** Fiche INHP Ebola — absente si Ebola n'est pas sous surveillance active. */
   investigation: {
     case_number: string;
     risk_score: number;
     risk_level: RiskLevel;
     status: string;
-  };
+  } | null;
+  /** Un suivi par maladie concernée (même voyageur). */
+  followups?: { disease_code: string; disease_name: string; duration_days: number | null }[];
+  /** Certaines réponses seront revues par un agent de santé. */
+  review_pending?: boolean;
   pass: {
     pass_number: string;
     uuid: string;

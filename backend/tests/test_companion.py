@@ -150,8 +150,8 @@ def test_raise_alert_critical_creates_healthalert(traveler):
         traveler=traveler, symptoms={"unexplained_bleeding": True},
     )
     assert alert is not None
-    assert alert.severity == "CRITICAL"
-    assert alert.status == "OPEN"
+    assert alert.severity == "critical"
+    assert alert.status == "open"
 
 
 def test_raise_alert_no_symptom_returns_none(traveler):
@@ -164,7 +164,7 @@ def test_raise_alert_assistance_request(traveler):
         traveler=traveler, symptoms={}, needs_assistance=True,
     )
     assert alert is not None
-    assert alert.severity == "HIGH"
+    assert alert.severity == "high"
 
 
 # ============================================================================
@@ -221,7 +221,7 @@ def test_checkin_with_critical_symptom_raises_alert(api, traveler, quarantine):
     )
     assert resp.status_code == 201
     assert resp.data["alert_created"] is True
-    assert resp.data["alert_severity"] == "CRITICAL"
+    assert resp.data["alert_severity"] == "critical"
 
 
 def test_checkin_assistance_request_creates_high_alert(api, traveler, quarantine):

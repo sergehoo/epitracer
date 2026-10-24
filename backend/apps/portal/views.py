@@ -15,6 +15,12 @@ from rest_framework.views import APIView
 from apps.accounts.models import RoleCode
 from apps.core.permissions import HasRole, IsAuthenticatedAndActive
 from apps.diseases.models import Disease, PublicAlertLevel
+from apps.medical.screening import (
+    COMMON_SYMPTOM_CODES,
+    COMMON_SYMPTOM_FIELDS,
+    EBOLA_CODE,
+    screening_diseases,
+)
 
 from .models import NoticeKind, PublicNotice
 from .serializers import (
@@ -24,7 +30,7 @@ from .serializers import (
     PublicNoticeSerializer,
     ScreeningDiseaseSerializer,
 )
-from .services import EBOLA_CODE, archive_notice, publish_notice, screening_diseases
+from .services import archive_notice, publish_notice
 
 PUBLISHER_ROLES = [RoleCode.NATIONAL_ADMIN, RoleCode.MINISTRY, RoleCode.INHP]
 
@@ -111,22 +117,30 @@ class PublicNoticeListView(APIView):
 
 
 class RegistrationConfigView(APIView):
-    """GET /public/registration-config/ — questionnaire par maladie sous surveillance active."""
+    """GET /public/registration-config/ — questionnaire : tronc commun + questions par maladie.
+
+    Ne contient que des libellés de questions (aucun contenu de fiche en
+    brouillon) pour les maladies sous surveillance active.
+    """
 
     permission_classes = [AllowAny]
     authentication_classes: list = []
 
     def get(self, request):
-        diseases = list(screening_diseases())
-        return Response(
-            {
-                "ebola_questionnaire": any(d.code == EBOLA_CODE for d in diseases),
-                "diseases": ScreeningDiseaseSerializer(
-                    [d for d in diseases if d.code != EBOLA_CODE],
-                    many=True,
-                ).data,
-            }
-        )
+        diseases = [d for d in screening_diseases() if d.code != EBOLA_CODE]
+        ebola_active = screening_diseases().filter(code=EBOLA_CODE).exists()
+        # Symptômes supplémentaires : union dédoublonnée, hors tronc commun.
+        extra: dict[str, str] = {}
+        for d in diseases:
+            for s in sorted(d.symptoms.all(), key=lambda s: (s.order, s.label)):
+                if s.code not in COMMON_SYMPTOM_CODES and s.code not in extra:
+                    extra[s.code] = s.label
+        return Response({
+            "ebola_questionnaire": ebola_active,
+            "common_symptom_fields": COMMON_SYMPTOM_FIELDS,
+            "extra_symptoms": [{"code": c, "label": label} for c, label in extra.items()],
+            "diseases": ScreeningDiseaseSerializer(diseases, many=True).data,
+        })
 
 
 # -------------------------------------------------------------------- admin

@@ -29,6 +29,8 @@ interface RegistrationDraft {
   /** Questionnaires des autres maladies sous surveillance active. */
   screenings?: ScreeningAnswer[];
   symptoms?: SectionSymptoms;
+  /** Autres symptômes surveillés (codes du référentiel), hors tronc commun. */
+  symptom_codes?: string[];
   declaration?: SectionDeclaration;
   set: (patch: Partial<RegistrationDraft>) => void;
   reset: () => void;
@@ -51,6 +53,7 @@ export const useRegistrationStore = create<RegistrationDraft>()(
           exposure: undefined,
           screenings: undefined,
           symptoms: undefined,
+          symptom_codes: undefined,
           declaration: undefined,
         }),
       goTo: (s) => set({ step: s }),

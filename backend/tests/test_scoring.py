@@ -24,43 +24,44 @@ def test_high_risk_with_exposure_and_symptoms(traveler, entry_point, ebola_disea
     inv = _make_investigation(traveler, entry_point)
     EbolaExposureAssessment.objects.create(
         investigation=inv,
-        visited_outbreak_country=True,        # +25
-        contact_with_confirmed_case=True,     # +35
-        attended_funerals=True,               # +20
+        visited_ebola_zone=True,                    # +25
+        contact_with_case=True,                     # +35
+        attended_funeral_or_touched_corpse=True,    # +20
     )
     EbolaSymptomReport.objects.create(
         investigation=inv, reported_at=timezone.now(),
-        temperature_celsius=39.0,             # +15
-        fever=True, severe_headache=True, vomiting=True,  # systémiques (3) +15
+        temperature_celsius=39.0,                   # fièvre élevée +10
+        fever=True,                                 # +10
+        severe_headache=True,                       # +3
+        diarrhea_nausea_vomiting=True,              # +5
     )
     score, level = compute_ebola_risk_score(inv)
-    assert score >= 80
+    assert score == 100  # 108 plafonné à 100
     assert level == "critical"
 
 
-def test_red_flag_bleeding_triggers_critical(traveler, entry_point, ebola_disease):
+def test_red_flag_bleeding_triggers_high(traveler, entry_point, ebola_disease):
     inv = _make_investigation(traveler, entry_point)
-    EbolaExposureAssessment.objects.create(
-        investigation=inv, visited_outbreak_country=True,
-    )
+    EbolaExposureAssessment.objects.create(investigation=inv, visited_ebola_zone=True)  # +25
     EbolaSymptomReport.objects.create(
         investigation=inv, reported_at=timezone.now(),
-        unexplained_bleeding=True,            # +30
+        unexplained_bleeding=True,                  # +30
     )
     score, level = compute_ebola_risk_score(inv)
-    assert score >= 55
-    assert level in {"high", "critical"}
+    assert score == 55
+    assert level == "high"
 
 
 def test_apply_risk_outcome_sets_workflow(traveler, entry_point, ebola_disease):
     inv = _make_investigation(traveler, entry_point)
     EbolaExposureAssessment.objects.create(
-        investigation=inv,
-        visited_outbreak_country=True, contact_with_confirmed_case=True,
+        investigation=inv, visited_ebola_zone=True, contact_with_case=True,  # 60 → critique
     )
     apply_risk_outcome(inv)
     inv.refresh_from_db()
-    assert inv.risk_score > 0
+    traveler.refresh_from_db()
+    assert (inv.risk_score, inv.risk_level, inv.status) == (60, "critical", "suspect")
     assert inv.surveillance_start is not None
     assert inv.surveillance_end is not None
-    assert inv.status in {"surveillance", "quarantine", "suspect"}
+    assert traveler.current_health_status == "suspect"
+    assert traveler.quarantines.filter(disease=ebola_disease).count() == 1
