@@ -22,14 +22,14 @@ from apps.travelers.models import Traveler
 from .filters import SENT_STATUSES, WAITING_STATUSES, NotificationFilter
 from .models import (
     Channel, Notification, NotificationAuditAction, NotificationAuditLog,
-    NotificationStatus, NotificationTemplate, Provider, ReminderDispatch,
+    NotificationStatus, NotificationTemplate, Provider, ReminderDispatch, SmsSecurityEvent,
 )
 from .permissions import (
-    CanRetryNotification, CanSendNotification, CanViewNotifications,
+    CanRetryNotification, CanSendNotification, CanViewNotifications, recipient_allowed,
 )
 from .serializers import (
     NotificationSerializer, NotificationTemplateSerializer,
-    ProviderAvailabilitySerializer, SendNotificationSerializer,
+    ProviderAvailabilitySerializer, SendNotificationSerializer, SmsSecurityEventSerializer,
     provider_state_rows,
 )
 from .services import availability
@@ -37,7 +37,8 @@ from .services.audit import Actions, log_action
 from .services.dispatcher import (
     send_manual_message, send_template_message,
 )
-from .services.errors import friendly_error
+from .services.errors import ErrorCode, friendly_error
+from .services.security import SecurityEventKind, log_security_event
 from .services.router import (
     NotificationProviderRouter, PhoneValidationError,
 )
@@ -52,6 +53,25 @@ logger = logging.getLogger("epidemitracker.notifications.views")
 class SendNotificationThrottle(UserRateThrottle):
     scope = "notifications_send"
     rate = "30/hour"
+
+
+def _recipient_refusal(request, recipient: str, traveler) -> Response:
+    """403 + journal : destinataire hors des coordonnées du voyageur ciblé."""
+    from apps.core.ratelimit import client_ip
+
+    log_security_event(
+        SecurityEventKind.RECIPIENT_REJECTED, source="notifications.send",
+        ip=client_ip(request), phone=recipient, traveler=traveler, user=request.user,
+        details={"has_traveler": traveler is not None},
+        dedupe=f"recipient:{request.user.pk}:{recipient}",
+    )
+    return Response(
+        {"detail": (
+            "Destinataire non autorisé : sélectionnez un voyageur et l'une de ses "
+            "coordonnées enregistrées (envoi libre réservé aux administrateurs)."
+        )},
+        status=status.HTTP_403_FORBIDDEN,
+    )
 
 
 # Fournisseurs SMS suivis par le bandeau de disponibilité.
@@ -171,6 +191,27 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             },
         })
 
+    @action(
+        detail=False, methods=["get"], url_path="security-events",
+        permission_classes=[CanRetryNotification],
+    )
+    def security_events(self, request):
+        """GET /api/v1/notifications/security-events/ — journal anti SMS pumping.
+
+        Réservé aux rôles d'administration. Filtres : kind, severity, since (date).
+        """
+        qs = SmsSecurityEvent.objects.select_related("traveler", "user").order_by("-created_at")
+        for field in ("kind", "severity"):
+            if request.query_params.get(field):
+                qs = qs.filter(**{field: request.query_params[field]})
+        if request.query_params.get("since"):
+            qs = qs.filter(created_at__date__gte=request.query_params["since"])
+        page = self.paginate_queryset(qs)
+        data = SmsSecurityEventSerializer(page if page is not None else qs[:200], many=True).data
+        if page is not None:
+            return self.get_paginated_response(data)
+        return Response({"results": data})
+
     @action(detail=False, methods=["get"], url_path="providers")
     def providers(self, request):
         """GET /api/v1/notifications/providers/ — disponibilité des fournisseurs SMS."""
@@ -229,6 +270,9 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             traveler = Traveler.objects.filter(pk=data["traveler"]).first()
             if not traveler:
                 return Response({"detail": "Voyageur introuvable."}, status=404)
+        if not recipient_allowed(request.user, traveler, channel, recipient):
+            return _recipient_refusal(request, recipient, traveler)
+        if traveler is not None:
             if not recipient:
                 if channel == "email":
                     # Pour l'email : utiliser l'adresse mail déclarée par le voyageur
@@ -263,9 +307,26 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         # se fait vers MobileDevice — pas de validation format à ce niveau.
         if channel in ("sms", "whatsapp"):
             try:
-                NotificationProviderRouter.detect(recipient, channel=channel)
+                routing = NotificationProviderRouter.detect(recipient, channel=channel)
             except PhoneValidationError as exc:
                 return Response({"detail": str(exc)}, status=400)
+            # Un même agent ne martèle pas un même numéro (compte compromis).
+            from apps.core import ratelimit
+
+            identity = f"{request.user.pk}:{routing.normalized}"
+            limited = ratelimit.hit("agent_send_recipient", identity)
+            if not limited.allowed:
+                log_security_event(
+                    SecurityEventKind.RATE_LIMITED, source="notifications.send",
+                    ip=ratelimit.client_ip(request), phone=routing.normalized,
+                    traveler=traveler, user=request.user,
+                    details={"rule": "agent_send_recipient", "limit": limited.limit},
+                    dedupe=f"agent_send:{request.user.pk}:{routing.normalized}",
+                )
+                return Response(
+                    {"detail": "Trop de messages vers ce destinataire. Réessayez plus tard."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
 
         if data.get("template_code"):
             result = send_template_message(
@@ -300,7 +361,8 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 detail = friendly_error(notif.error_code, notif.error_message)
             else:
                 detail = result.error
-            return Response({"detail": detail}, status=400)
+            quota = result.error_code in (ErrorCode.SMS_QUOTA_EXCEEDED, ErrorCode.URGENT_CAP)
+            return Response({"detail": detail}, status=429 if quota else 400)
 
         return Response(
             NotificationSerializer(notif, context={"request": request}).data, status=201,

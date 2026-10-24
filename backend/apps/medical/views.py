@@ -729,6 +729,9 @@ class FollowupClassifyView(APIView):
 
 class FollowupNotifyView(APIView):
     permission_classes = [IsAuthenticated, CanSendFollowupNotification]
+    # Même plafond par agent que l'envoi manuel (notifications_send, 30/h).
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "notifications_send"
 
     @extend_schema(request=FollowupNotifySerializer, responses={200: dict})
     def post(self, request, traveler_id):
@@ -740,6 +743,23 @@ class FollowupNotifyView(APIView):
         v = ser.validated_data
 
         channel = v["channel"]
+        from apps.notifications.permissions import recipient_allowed
+
+        if not recipient_allowed(request.user, traveler, channel, v.get("recipient") or ""):
+            from apps.core.ratelimit import client_ip
+            from apps.notifications.services.security import SecurityEventKind, log_security_event
+
+            log_security_event(
+                SecurityEventKind.RECIPIENT_REJECTED, source="medical.followup_notify",
+                ip=client_ip(request), phone=v.get("recipient") or "", traveler=traveler,
+                user=request.user, dedupe=f"recipient:{request.user.pk}:{v.get('recipient')}",
+            )
+            return Response(
+                {"detail": (
+                    "Destinataire non autorisé : utilisez une coordonnée enregistrée du voyageur."
+                )},
+                status=drf_status.HTTP_403_FORBIDDEN,
+            )
         result = send_manual_message(
             traveler=traveler,
             recipient=v.get("recipient") or traveler.phone_mobile or traveler.email or "",

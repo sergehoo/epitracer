@@ -7,6 +7,16 @@ from apps.geo.models import Country, EntryPoint, EntryPointType
 from apps.travelers.models import Traveler
 
 
+@pytest.fixture(autouse=True)
+def _isolated_cache():
+    """Chaque test démarre avec un cache vide (quotas anti-abus, caches de vues)."""
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
+
+
 @pytest.fixture
 def ebola_disease(db) -> Disease:
     return Disease.objects.create(

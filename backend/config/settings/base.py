@@ -713,6 +713,81 @@ NOTIFICATIONS = {
 }
 
 # ---------------------------------------------------------------------------
+# Garde anti SMS pumping (apps.notifications.services.sms_guard)
+# ---------------------------------------------------------------------------
+# Tous les SMS passent par le dispatcher, qui réserve atomiquement (Redis,
+# repli base de données) les compteurs ci-dessous AVANT de créer l'envoi.
+# Volumes exprimés en SMS facturés (segments de 153/160 caractères).
+SMS_GUARD = {
+    "ENABLED": env.bool("SMS_GUARD_ENABLED", default=True),
+    # Par numéro E.164 et par priorité : (heure, jour).
+    "PER_NUMBER": {
+        "otp": (env.int("SMS_OTP_PER_NUMBER_HOUR", default=3),
+                env.int("SMS_OTP_PER_NUMBER_DAY", default=6)),
+        "standard": (env.int("SMS_PER_NUMBER_HOUR", default=6),
+                     env.int("SMS_PER_NUMBER_DAY", default=12)),
+        # Urgences médicales : plafond dédié, jamais illimité.
+        "urgent": (env.int("SMS_URGENT_PER_NUMBER_HOUR", default=10),
+                   env.int("SMS_URGENT_PER_NUMBER_DAY", default=30)),
+    },
+    "PER_TRAVELER_DAY": env.int("SMS_PER_TRAVELER_DAY", default=15),
+    # Plafond journalier par fournisseur (segments) → coupe-circuit fournisseur.
+    "PER_PROVIDER_DAY": {
+        "orange_ci": env.int("SMS_ORANGE_CI_DAY", default=20000),
+        "twilio": env.int("SMS_TWILIO_DAY", default=1000),
+    },
+    # Budget global (segments) → coupe-circuit sur tous les fournisseurs SMS.
+    "BUDGET_DAILY": env.int("SMS_BUDGET_DAILY", default=20000),
+    "BUDGET_MONTHLY": env.int("SMS_BUDGET_MONTHLY", default=300000),
+    # Enveloppe dédiée aux urgences médicales (hors budget standard).
+    "URGENT_DAILY": env.int("SMS_URGENT_DAILY", default=1000),
+    # Alerte administrateur à ce pourcentage du budget (0-1).
+    "ALERT_RATIO": env.float("SMS_BUDGET_ALERT_RATIO", default=0.8),
+    # Pic anormal : SMS internationaux par heure vers un même préfixe
+    # (6 premiers caractères E.164) et au total.
+    "SPIKE_INTL_PREFIX_HOUR": env.int("SMS_SPIKE_INTL_PREFIX_HOUR", default=30),
+    "SPIKE_INTL_TOTAL_HOUR": env.int("SMS_SPIKE_INTL_TOTAL_HOUR", default=200),
+    # Indicatifs internationaux autorisés (ex: "33,1,44"). Vide = tous.
+    "ALLOWED_CALLING_CODES": env.list("SMS_ALLOWED_CALLING_CODES", default=[]),
+}
+
+# Limites applicatives des parcours publics (fenêtres fixes Redis).
+PUBLIC_RATE_LIMITS = {
+    # (limite, fenêtre en secondes)
+    "otp_request_ip": (env.int("RL_OTP_IP", default=5), 600),
+    "otp_request_phone": (env.int("RL_OTP_PHONE", default=3), 600),
+    "otp_request_endpoint": (env.int("RL_OTP_ENDPOINT", default=300), 600),
+    "otp_cooldown": (1, env.int("RL_OTP_COOLDOWN_SECONDS", default=60)),
+    "registration_ip": (env.int("RL_REGISTRATION_IP_HOUR", default=60), 3600),
+    "registration_phone": (env.int("RL_REGISTRATION_PHONE_DAY", default=5), 86400),
+    "registration_endpoint": (env.int("RL_REGISTRATION_ENDPOINT_HOUR", default=3000), 3600),
+    "agent_send_recipient": (env.int("RL_AGENT_SEND_RECIPIENT_HOUR", default=5), 3600),
+}
+
+# ---------------------------------------------------------------------------
+# Cloudflare Turnstile — vérification serveur des actions publiques coûteuses
+# ---------------------------------------------------------------------------
+# Désactivé tant que TURNSTILE_SECRET_KEY est vide (le frontend n'affiche le
+# widget que si NEXT_PUBLIC_TURNSTILE_SITE_KEY est défini). Une fois activé,
+# l'échec de vérification bloque l'action (fail closed par défaut).
+TURNSTILE = {
+    "SECRET_KEY": env("TURNSTILE_SECRET_KEY", default=""),
+    "VERIFY_URL": env(
+        "TURNSTILE_VERIFY_URL",
+        default="https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    ),
+    "PROTECTED_ACTIONS": env.list(
+        "TURNSTILE_PROTECTED_ACTIONS", default=["public_registration", "otp_request"],
+    ),
+    "ALLOWED_HOSTNAMES": env.list("TURNSTILE_ALLOWED_HOSTNAMES", default=[]),
+    "FAIL_OPEN": env.bool("TURNSTILE_FAIL_OPEN", default=False),
+    "TIMEOUT": env.int("TURNSTILE_TIMEOUT", default=5),
+    # Un jeton validé peut être re-présenté par la MÊME IP (retry réseau du
+    # formulaire) dans cette limite ; au-delà ou depuis une autre IP = rejeu.
+    "MAX_REUSE_SAME_IP": env.int("TURNSTILE_MAX_REUSE_SAME_IP", default=3),
+}
+
+# ---------------------------------------------------------------------------
 # Telegram Bot API — canal notifications direct (voyageur ↔ bot INHP)
 # ---------------------------------------------------------------------------
 # Configuration :

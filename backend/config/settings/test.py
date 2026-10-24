@@ -13,6 +13,10 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = ()  # noqa: F405
 # Email en mémoire
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
+# Cache local au processus : les compteurs anti-abus (throttling) ne se
+# partagent plus entre tests ni entre exécutions via Redis.
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
 # Channels in-memory pour les tests
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 

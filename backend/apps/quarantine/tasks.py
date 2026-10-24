@@ -6,7 +6,6 @@ from datetime import timedelta
 from celery import shared_task
 from django.utils import timezone
 
-from apps.notifications.tasks import send_notification
 from apps.surveillance.services import trigger_alert
 
 from .models import DailyCheck, QuarantineRecord, QuarantineStatus
@@ -15,24 +14,16 @@ from .services import close_quarantine
 
 @shared_task(name="quarantine.send_daily_reminders")
 def send_daily_reminders():
-    """Envoie chaque matin une notification aux voyageurs sous quarantaine active."""
-    active = QuarantineRecord.objects.filter(status=QuarantineStatus.ACTIVE)
-    sent = 0
-    for qr in active.iterator(chunk_size=500):
-        traveler = qr.traveler
-        if not (traveler.phone_mobile or traveler.email):
-            continue
-        send_notification.delay(
-            channel="sms" if traveler.phone_mobile else "email",
-            recipient=traveler.phone_mobile or traveler.email,
-            template_code="quarantine_daily_reminder",
-            context={
-                "traveler_id": traveler.public_id,
-                "day": (timezone.now().date() - qr.started_on).days,
-            },
-        )
-        sent += 1
-    return {"reminders_sent": sent}
+    """Alias historique → `companion.send_daily_checkin_reminders`.
+
+    L'ancienne version envoyait un SMS par dossier de quarantaine, sans
+    consentement ni idempotence (doublon avec le rappel companion si une
+    ancienne PeriodicTask pointe encore ici). La délégation garantit un seul
+    rappel par voyageur et par jour, sous la garde anti SMS pumping.
+    """
+    from apps.companion.tasks import send_daily_checkin_reminders
+
+    return send_daily_checkin_reminders.run()
 
 
 @shared_task(name="quarantine.detect_missed_checks")

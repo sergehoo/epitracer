@@ -19,15 +19,22 @@ import logging
 import secrets
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db import transaction
-from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.core import ratelimit, turnstile
+from apps.core.ratelimit import client_ip
+from apps.notifications.models import MessageType
+from apps.notifications.services.dispatcher import enqueue_notification
+from apps.notifications.services.router import PhoneValidationError, normalize_phone_number
+from apps.notifications.services.security import SecurityEventKind, log_security_event
 from apps.travelers.models import Traveler
 
 logger = logging.getLogger(__name__)
@@ -54,24 +61,67 @@ def _generate_otp() -> str:
 
 
 def _find_traveler(passport_number: str | None, phone: str | None) -> Traveler | None:
+    """Voyageur par n° de pièce d'identité, sinon par téléphone (E.164)."""
     qs = Traveler.objects.all()
     if passport_number:
-        match = qs.filter(passport_number__iexact=passport_number.strip()).first()
+        match = qs.filter(id_document_number__iexact=passport_number.strip()).first()
         if match:
             return match
     if phone:
-        normalized = phone.replace(" ", "").replace("-", "")
-        # Possible variantes : avec ou sans indicatif
-        return qs.filter(phone_e164__iexact=normalized).first()
+        try:
+            normalized = normalize_phone_number(phone)
+        except PhoneValidationError:
+            return None
+        raw = phone.replace(" ", "").replace("-", "")
+        return qs.filter(phone_mobile__in={normalized, raw}).first()
     return None
 
 
-class VoyageurRequestOtpView(APIView):
-    """Génère un code OTP, l'envoie par SMS au voyageur identifié.
+def _traveler_phone(traveler: Traveler | None) -> str:
+    """Numéro E.164 enregistré du voyageur (seul destinataire possible)."""
+    if traveler is None or not traveler.phone_mobile:
+        return ""
+    try:
+        return normalize_phone_number(traveler.phone_mobile)
+    except PhoneValidationError:
+        return ""
 
-    task #213 : protégé par ScopedRateThrottle ``mobile_otp_request`` (3/min/IP)
-    + cooldown applicatif par phone (max 5/heure) — empêche le spam SMS même
-    si l'attaquant change d'IP.
+
+NEUTRAL_MESSAGE = "Si vous êtes enregistré, un code SMS vient d'être envoyé."
+
+
+def _neutral(supplied_phone: str = "") -> Response:
+    """Réponse identique dans tous les cas (anti-énumération, anti-sondage) :
+    seul le numéro fourni par le client est renvoyé, masqué."""
+    try:
+        shown = normalize_phone_number(supplied_phone) if supplied_phone else ""
+    except PhoneValidationError:
+        shown = supplied_phone
+    return Response(
+        {"ok": True, "phone_masked": _mask_phone(shown), "message": NEUTRAL_MESSAGE},
+        status=status.HTTP_200_OK,
+    )
+
+
+def _too_many(result) -> Response:
+    resp = Response(
+        {"detail": "Trop de demandes de code. Réessayez plus tard."},
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+    )
+    resp["Retry-After"] = str(result.retry_after)
+    return resp
+
+
+class VoyageurRequestOtpView(APIView):
+    """Génère un code OTP et l'envoie par SMS au numéro ENREGISTRÉ du voyageur.
+
+    Protections anti SMS pumping (le SMS n'est jamais envoyé à un numéro
+    fourni dans la requête, uniquement à celui de la fiche voyageur) :
+      - ScopedRateThrottle ``mobile_otp_request`` (3/min/IP) ;
+      - Turnstile vérifié côté serveur (action ``otp_request``) si activé ;
+      - fenêtres Redis atomiques par IP, par numéro et par endpoint ;
+      - un seul code par voyageur et par minute (rejeu de requête) ;
+      - quotas OTP par numéro, budget et coupe-circuit dans le dispatcher.
     """
 
     permission_classes = [permissions.AllowAny]
@@ -89,80 +139,72 @@ class VoyageurRequestOtpView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        captcha = turnstile.check_request(request, "otp_request")
+        if not captcha.ok:
+            return Response(
+                {"detail": turnstile.failure_message(captcha)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ip = client_ip(request)
+        for rule, identity in (("otp_request_ip", ip), ("otp_request_endpoint", "all")):
+            result = ratelimit.hit(rule, identity)
+            if not result.allowed:
+                log_security_event(
+                    SecurityEventKind.RATE_LIMITED, source="otp_request", ip=ip,
+                    details={"rule": rule, "count": result.count, "limit": result.limit},
+                    dedupe=f"otp:{rule}:{identity}",
+                )
+                return _too_many(result)
+
         traveler = _find_traveler(passport, phone)
-        if not traveler or not traveler.phone_e164:
-            # Réponse neutre pour éviter l'énumération
-            return Response(
-                {
-                    "ok": True,
-                    "phone_masked": _mask_phone(phone or ""),
-                    "message": "Si vous êtes enregistré, un code SMS vient d'être envoyé.",
-                },
-                status=status.HTTP_200_OK,
-            )
+        to = _traveler_phone(traveler)
+        if not to:
+            return _neutral(phone)
 
-        # task #213 — cooldown applicatif par phone : max 5/heure même si
-        # l'attaquant tourne d'IP. Stocké en cache Redis (sliding window).
-        from django.core.cache import cache
-
-        phone_quota_key = f"voyageur_otp_quota:{traveler.phone_e164}"
-        phone_count = cache.get(phone_quota_key, 0)
-        if phone_count >= 5:
-            logger.warning(
-                "Voyageur OTP quota hit for phone=%s ip=%s",
-                _mask_phone(traveler.phone_e164),
-                request.META.get("REMOTE_ADDR", "?"),
+        # Par numéro (l'attaquant peut tourner d'IP) puis délai entre 2 codes.
+        result = ratelimit.hit("otp_request_phone", to)
+        if not result.allowed:
+            log_security_event(
+                SecurityEventKind.RATE_LIMITED, source="otp_request", ip=ip, phone=to,
+                traveler=traveler, details={"rule": "otp_request_phone", "limit": result.limit},
+                dedupe=f"otp:phone:{to}",
             )
-            return Response(
-                {
-                    "ok": True,  # neutralité anti-énumération
-                    "phone_masked": _mask_phone(traveler.phone_e164),
-                    "message": "Si vous êtes enregistré, un code SMS vient d'être envoyé.",
-                },
-                status=status.HTTP_200_OK,
-            )
-        cache.set(phone_quota_key, phone_count + 1, timeout=3600)
+            return _neutral(phone)
+        _limit, cooldown = settings.PUBLIC_RATE_LIMITS["otp_cooldown"]
+        if not cache.add(f"voyageur_otp_cooldown:{traveler.pk}", 1, timeout=cooldown):
+            return _neutral(phone)
 
         code = _generate_otp()
-        otp_hash = _hash_otp(code)
-        cache_key = f"voyageur_otp:{traveler.pk}"
-
-        # Stocker le hash + nb tentatives en cache (Redis)
         cache.set(
-            cache_key,
-            {"hash": otp_hash, "attempts": 0, "phone": traveler.phone_e164},
+            f"voyageur_otp:{traveler.pk}",
+            {"hash": _hash_otp(code), "attempts": 0, "phone": to},
             timeout=int(OTP_TTL.total_seconds()),
         )
 
-        # Envoyer via le router SMS existant (Orange CI / Twilio)
-        try:
-            from apps.notifications.services import send_sms
-
-            send_sms(
-                to=traveler.phone_e164,
-                body=(
-                    f"Mon Pass Sanitaire INHP\n"
-                    f"Votre code de connexion : {code}\n"
-                    f"Valable 10 minutes. Ne le partagez avec personne."
-                ),
-                category="otp",
+        # Envoi via le dispatcher : routage Orange CI / Twilio strict, quotas
+        # OTP par numéro, budget et coupe-circuit, historique.
+        res = enqueue_notification(
+            channel="sms",
+            recipient=to,
+            traveler=traveler,
+            body=(
+                "Mon Pass Sanitaire INHP\n"
+                f"Votre code de connexion : {code}\n"
+                "Valable 10 minutes. Ne le partagez avec personne."
+            ),
+            message_type=MessageType.OTP,
+            metadata={"kind": "otp", "ip": ip},
+        )
+        if not res.ok:
+            logger.warning(
+                "Voyageur OTP non envoyé traveler=%s phone=%s code=%s",
+                traveler.pk, _mask_phone(to), res.error_code or res.error,
             )
-        except Exception as exc:  # noqa
-            logger.warning("Voyageur OTP SMS send failed: %s", exc)
+            return _neutral(phone)
 
-        logger.info(
-            "Voyageur OTP issued for traveler=%s phone=%s",
-            traveler.pk,
-            _mask_phone(traveler.phone_e164),
-        )
-
-        return Response(
-            {
-                "ok": True,
-                "phone_masked": _mask_phone(traveler.phone_e164),
-                "message": "Code envoyé par SMS",
-            }
-        )
+        logger.info("Voyageur OTP issued for traveler=%s phone=%s", traveler.pk, _mask_phone(to))
+        return _neutral(phone)
 
 
 class VoyageurVerifyOtpView(APIView):
@@ -173,6 +215,7 @@ class VoyageurVerifyOtpView(APIView):
     SimpleJWT existante, mais sans droits admin.
 
     task #213 : rate-limité comme un login (``mobile_login`` = 10/min/IP).
+    Un code déjà utilisé est refusé (rejeu journalisé).
     """
 
     permission_classes = [permissions.AllowAny]
@@ -198,11 +241,16 @@ class VoyageurVerifyOtpView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        from django.core.cache import cache
-
         cache_key = f"voyageur_otp:{traveler.pk}"
+        used_key = f"voyageur_otp_used:{traveler.pk}:{_hash_otp(code)}"
         data = cache.get(cache_key)
         if not data:
+            if cache.get(used_key):
+                log_security_event(
+                    SecurityEventKind.OTP_REPLAY, source="otp_verify", ip=client_ip(request),
+                    phone=_traveler_phone(traveler), traveler=traveler,
+                    dedupe=f"otp_replay:{traveler.pk}",
+                )
             return Response(
                 {"detail": "Code expiré ou inexistant. Demandez un nouveau code."},
                 status=status.HTTP_410_GONE,
@@ -224,8 +272,9 @@ class VoyageurVerifyOtpView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # OTP valide → on consomme
+        # OTP valide → consommé une seule fois (le rejeu sera détecté).
         cache.delete(cache_key)
+        cache.set(used_key, 1, timeout=int(OTP_TTL.total_seconds()))
 
         # Crée (ou récupère) le User shadow lié au Traveler
         shadow_user = self._ensure_shadow_user(traveler)
@@ -242,8 +291,8 @@ class VoyageurVerifyOtpView(APIView):
                     "id": traveler.pk,
                     "public_id": traveler.public_id,
                     "full_name": f"{traveler.first_name} {traveler.last_name}".strip(),
-                    "phone_masked": _mask_phone(traveler.phone_e164),
-                    "passport_number": traveler.passport_number,
+                    "phone_masked": _mask_phone(_traveler_phone(traveler)),
+                    "passport_number": traveler.id_document_number,
                 },
             }
         )

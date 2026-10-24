@@ -58,7 +58,7 @@ export interface NotificationStats {
 export interface ProviderStatus {
   provider: string;
   provider_label: string;
-  state: 'available' | 'quota_exhausted' | 'unavailable';
+  state: 'available' | 'quota_exhausted' | 'unavailable' | 'budget_exceeded';
   state_label: string;
   is_suspended: boolean;
   reason_label: string;
@@ -112,5 +112,6 @@ export const NOTIF_TYPE: Record<string, string> = {
   admin_notice: 'Avis administrateur',
   location_request: 'Demande de position',
   ebola_prevention: 'Prévention Ebola',
+  otp: 'Code de connexion (OTP)',
   other: 'Autre',
 };

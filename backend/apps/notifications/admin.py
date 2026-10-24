@@ -4,7 +4,7 @@ from django.utils.html import format_html
 
 from .models import (
     Notification, NotificationAuditLog, NotificationProviderConfig,
-    NotificationStatus, NotificationTemplate,
+    NotificationStatus, NotificationTemplate, SmsSecurityEvent,
 )
 from .services.audit import Actions, log_action
 
@@ -154,6 +154,22 @@ class NotificationProviderConfigAdmin(admin.ModelAdmin):
     list_display = ("provider", "channel", "is_enabled", "priority", "country_code", "sender_name")
     list_filter = ("provider", "channel", "is_enabled", "country_code")
     list_editable = ("is_enabled", "priority")
+
+
+@admin.register(SmsSecurityEvent)
+class SmsSecurityEventAdmin(admin.ModelAdmin):
+    """Journal anti SMS pumping — lecture seule (append-only)."""
+
+    list_display = ("created_at", "severity", "kind", "source", "phone_masked", "ip_address")
+    list_filter = ("severity", "kind", "source")
+    search_fields = ("phone_masked", "phone_hash", "ip_address")
+    readonly_fields = [f.name for f in SmsSecurityEvent._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(NotificationAuditLog)

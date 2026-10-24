@@ -8,6 +8,7 @@ import { useRegistrationStore } from '@/lib/store';
 import { declarationSchema } from '@/lib/schema';
 import { FieldGroup, FieldRow } from '@/components/form/Field';
 import { SignaturePad } from '@/components/form/SignaturePad';
+import { TURNSTILE_SITE_KEY, TurnstileWidget } from '@/components/form/TurnstileWidget';
 import { api, apiPostWithRetry, extractApiError } from '@/lib/api';
 import type { RegistrationResponse } from '@/types/ebola';
 
@@ -28,6 +29,9 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Jeton anti-robot (Cloudflare Turnstile), exigé seulement s'il est configuré.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   useEffect(() => {
     if (!declarantName && store.identite) {
@@ -70,6 +74,10 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
       setError('Sections précédentes incomplètes. Reprenez depuis le début.');
       return;
     }
+    if (TURNSTILE_SITE_KEY && !captchaToken) {
+      setError('Merci de valider la vérification anti-robot avant de soumettre.');
+      return;
+    }
 
     setSubmitting(true);
     setAttempt(0);
@@ -109,6 +117,7 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
           retries: 2,
           timeoutMs: 90_000,
           onAttempt: (n) => setAttempt(n),
+          headers: captchaToken ? { 'X-Turnstile-Token': captchaToken } : undefined,
         },
       );
 
@@ -152,6 +161,8 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
           : msg,
       );
       toast.error(isNetwork ? 'Connexion réseau instable.' : msg);
+      // Jeton à usage unique : on en redemande un pour la prochaine tentative.
+      if (!isNetwork) setCaptchaReset((n) => n + 1);
     } finally {
       setSubmitting(false);
       setAttempt(0);
@@ -239,11 +250,18 @@ export function Step7Declaration({ onBack }: { onBack: () => void }) {
         </div>
       </div>
 
+      <TurnstileWidget action="public_registration" onToken={setCaptchaToken} resetKey={captchaReset} />
+
       {error && <p className="field-error">{error}</p>}
 
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className="btn-ghost" disabled={submitting}>← Précédent</button>
-        <button type="button" onClick={submit} disabled={submitting} className="btn-primary">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={submitting || (Boolean(TURNSTILE_SITE_KEY) && !captchaToken)}
+          className="btn-primary"
+        >
           {submitting
             ? (attempt > 1 ? `Reprise réseau (essai ${attempt}/3)…` : 'Soumission…')
             : (<><Send className="h-4 w-4" /> Soumettre ma fiche</>)}

@@ -102,6 +102,7 @@ export async function apiPostWithRetry<T = unknown>(
     retries?: number;
     timeoutMs?: number;
     onAttempt?: (n: number) => void;
+    headers?: Record<string, string>;
   } = {},
 ): Promise<{ data: T }> {
   const retries = options.retries ?? 2;          // 1 essai + 2 retries
@@ -111,7 +112,7 @@ export async function apiPostWithRetry<T = unknown>(
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       options.onAttempt?.(attempt + 1);
-      const r = await api.post<T>(url, data, { timeout: timeoutMs });
+      const r = await api.post<T>(url, data, { timeout: timeoutMs, headers: options.headers });
       return { data: r.data };
     } catch (err) {
       lastError = err;

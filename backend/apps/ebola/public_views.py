@@ -112,6 +112,62 @@ def _decode_signature(data_url: str, public_id: str) -> tuple[ContentFile | None
     return ContentFile(raw, name=f"signature_{public_id}.{ext}"), digest
 
 
+def _rate_limited(request, rule: str, identity: str, *, phone: str = "") -> Response | None:
+    from apps.core import ratelimit
+    from apps.notifications.services.security import SecurityEventKind, log_security_event
+
+    result = ratelimit.hit(rule, identity)
+    if result.allowed:
+        return None
+    ip = ratelimit.client_ip(request)
+    log_security_event(
+        SecurityEventKind.RATE_LIMITED, source="public_registration", ip=ip, phone=phone,
+        details={"rule": rule, "count": result.count, "limit": result.limit},
+        dedupe=f"registration:{rule}:{identity}",
+    )
+    resp = Response(
+        {"detail": (
+            "Trop d'inscriptions depuis cette connexion ou pour ce numéro. Réessayez plus tard."
+        )},
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+    )
+    resp["Retry-After"] = str(result.retry_after)
+    return resp
+
+
+def _registration_guard(request) -> Response | None:
+    """Anti inscriptions massives (vecteur de SMS pumping : chaque fiche suivie
+    reçoit des rappels SMS) : Turnstile, puis limites par IP, globale et par
+    numéro de téléphone déclaré."""
+    from apps.core import ratelimit, turnstile
+
+    captcha = turnstile.check_request(request, "public_registration")
+    if not captcha.ok:
+        return Response(
+            {"detail": turnstile.failure_message(captcha)}, status=status.HTTP_400_BAD_REQUEST,
+        )
+    return (
+        _rate_limited(request, "registration_ip", ratelimit.client_ip(request))
+        or _rate_limited(request, "registration_endpoint", "all")
+        or _registration_phone_limit(request)
+    )
+
+
+def _registration_phone_limit(request) -> Response | None:
+    """Limite le nombre de fiches par numéro de téléphone et par jour."""
+    from apps.notifications.services.router import PhoneValidationError, normalize_phone_number
+
+    identite = request.data.get("identite") if hasattr(request.data, "get") else None
+    raw = (identite or {}).get("phone_mobile") if isinstance(identite, dict) else ""
+    if not raw:
+        return None
+    try:
+        phone = normalize_phone_number(str(raw))
+    except PhoneValidationError:
+        return None
+    return _rate_limited(request, "registration_phone", phone, phone=phone)
+
+
 class PublicTravelerRegisterView(APIView):
     """Enregistrement public d'une fiche passager Ebola."""
 
@@ -130,6 +186,9 @@ class PublicTravelerRegisterView(APIView):
                     "Crée le voyageur, ouvre une enquête Ebola, calcule le score, génère le pass.",
     )
     def post(self, request):
+        blocked = _registration_guard(request)
+        if blocked is not None:
+            return blocked
         ser = PublicTravelerSubmissionSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         data = ser.validated_data

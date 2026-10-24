@@ -62,6 +62,7 @@ class MessageType(models.TextChoices):
     ADMIN_NOTICE = "admin_notice", _("Notice administrateur")
     LOCATION_REQUEST = "location_request", _("Demande de position")
     EBOLA_PREVENTION = "ebola_prevention", _("Prévention Ebola")
+    OTP = "otp", _("Code de connexion (OTP)")
     OTHER = "other", _("Autre")
 
 
@@ -265,6 +266,9 @@ class ProviderState(models.TextChoices):
     AVAILABLE = "available", _("Disponible")
     QUOTA_EXHAUSTED = "quota_exhausted", _("Crédit épuisé")
     UNAVAILABLE = "unavailable", _("Fournisseur indisponible")
+    # Coupe-circuit EpiTrace : budget SMS (journalier, mensuel ou plafond
+    # fournisseur) atteint. Reprise sur décision d'un administrateur.
+    BUDGET_EXCEEDED = "budget_exceeded", _("Budget SMS atteint")
 
 
 class ProviderAvailability(BaseModel):
@@ -345,6 +349,51 @@ class ReminderDispatch(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.kind} · traveler#{self.traveler_id} · {self.reminder_date}"
+
+
+# ---------------------------------------------------------------------------
+# Journal des événements suspects (SMS pumping, abus des parcours publics)
+# ---------------------------------------------------------------------------
+class SecurityEventSeverity(models.TextChoices):
+    INFO = "info", _("Information")
+    WARNING = "warning", _("Avertissement")
+    CRITICAL = "critical", _("Critique")
+
+
+class SmsSecurityEvent(BaseModel):
+    """Événement suspect autour des envois SMS (append-only).
+
+    Le numéro n'est jamais stocké en clair : empreinte + forme masquée.
+    """
+
+    kind = models.CharField(max_length=40, db_index=True)
+    severity = models.CharField(
+        max_length=10, choices=SecurityEventSeverity.choices,
+        default=SecurityEventSeverity.WARNING, db_index=True,
+    )
+    source = models.CharField(max_length=60, blank=True, help_text=_("Endpoint, tâche ou règle."))
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    phone_hash = models.CharField(max_length=20, blank=True, db_index=True)
+    phone_masked = models.CharField(max_length=24, blank=True)
+    traveler = models.ForeignKey(
+        "travelers.Traveler", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="sms_security_events",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="sms_security_events",
+    )
+    details = models.JSONField(default=dict, blank=True)
+
+    class Meta(BaseModel.Meta):
+        verbose_name = _("Événement de sécurité SMS")
+        verbose_name_plural = _("Événements de sécurité SMS")
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["kind", "-created_at"], name="sms_secevt_kind_idx")]
+
+    def __str__(self) -> str:
+        target = self.phone_masked or self.ip_address or "-"
+        return f"[{self.severity}] {self.kind} · {self.source} · {target}"
 
 
 # ---------------------------------------------------------------------------

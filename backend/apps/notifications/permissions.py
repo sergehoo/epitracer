@@ -56,3 +56,46 @@ class CanRetryNotification(BasePermission):
         if not (u and u.is_authenticated and u.is_active):
             return False
         return bool(_user_role_codes(u) & ADMIN_ROLES)
+
+
+def _phone_key(value: str) -> str:
+    """Forme de comparaison d'un numéro : indicatif + numéro national sans 0.
+
+    « 0708090911 », « +2250708090911 » et « +225708090911 » désignent la même
+    ligne ivoirienne (formats saisis différents) → même clé.
+    """
+    digits = "".join(ch for ch in (value or "") if ch.isdigit())
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if len(digits) == 10 and digits.startswith("0"):
+        digits = "225" + digits
+    if digits.startswith("225"):
+        digits = "225" + digits[3:].lstrip("0")
+    return digits if len(digits) >= 8 else ""
+
+
+def is_admin_sender(user) -> bool:
+    return bool(user and (user.is_superuser or _user_role_codes(user) & ADMIN_ROLES))
+
+
+def recipient_allowed(user, traveler, channel: str, recipient: str) -> bool:
+    """Anti SMS pumping par compte compromis : hors rôles d'administration,
+    un agent ne peut écrire qu'aux coordonnées enregistrées du voyageur ciblé
+    (jamais à un numéro arbitraire)."""
+    if is_admin_sender(user):
+        return True
+    if traveler is None:
+        return False
+    recipient = (recipient or "").strip()
+    if not recipient:
+        return True  # le serveur choisira lui-même la coordonnée du voyageur
+    if channel == "email":
+        return recipient.lower() == (getattr(traveler, "email", "") or "").strip().lower()
+    if channel in ("push", "telegram"):
+        return recipient == (getattr(traveler, "public_id", "") or "")
+    target = _phone_key(recipient)
+    own = {
+        _phone_key(getattr(traveler, attr, "") or "")
+        for attr in ("phone_mobile", "whatsapp_phone", "emergency_phone_ci")
+    }
+    return bool(target) and target in own - {""}

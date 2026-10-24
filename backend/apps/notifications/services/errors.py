@@ -26,6 +26,12 @@ class ErrorCode:
     NO_DEVICE = "no_device"
     TEMPLATE_VARIABLES = "template_variables"
     EXPIRED_ON_HOLD = "expired_on_hold"
+    # Garde anti SMS pumping (services.sms_guard)
+    SMS_QUOTA_EXCEEDED = "sms_quota_exceeded"
+    BUDGET_EXCEEDED = "sms_budget_exceeded"
+    URGENT_CAP = "urgent_cap_reached"
+    COUNTRY_BLOCKED = "country_not_allowed"
+    RECIPIENT_NOT_ALLOWED = "recipient_not_allowed"
     UNKNOWN = "unknown"
 
 
@@ -42,6 +48,11 @@ NON_RETRYABLE = frozenset({
     ErrorCode.NO_DEVICE,
     ErrorCode.TEMPLATE_VARIABLES,
     ErrorCode.EXPIRED_ON_HOLD,
+    ErrorCode.SMS_QUOTA_EXCEEDED,
+    ErrorCode.BUDGET_EXCEEDED,
+    ErrorCode.URGENT_CAP,
+    ErrorCode.COUNTRY_BLOCKED,
+    ErrorCode.RECIPIENT_NOT_ALLOWED,
 })
 
 ERROR_LABELS: dict[str, str] = {
@@ -49,9 +60,16 @@ ERROR_LABELS: dict[str, str] = {
         "Crédit SMS du fournisseur épuisé : envoi impossible avant réapprovisionnement."
     ),
     ErrorCode.PROVIDER_SUSPENDED: (
-        "Fournisseur suspendu (crédit épuisé ou indisponible). Envoi reporté "
-        "jusqu'à la reprise par un administrateur."
+        "Fournisseur suspendu (crédit épuisé, budget atteint ou indisponible). Envoi "
+        "reporté jusqu'à la reprise par un administrateur."
     ),
+    ErrorCode.BUDGET_EXCEEDED: (
+        "Budget SMS atteint : envois suspendus jusqu'à décision d'un administrateur."
+    ),
+    ErrorCode.SMS_QUOTA_EXCEEDED: "Limite d'envoi SMS atteinte pour ce destinataire.",
+    ErrorCode.URGENT_CAP: "Plafond journalier des SMS urgents atteint.",
+    ErrorCode.COUNTRY_BLOCKED: "Envoi SMS non autorisé vers ce pays.",
+    ErrorCode.RECIPIENT_NOT_ALLOWED: "Destinataire non autorisé pour ce compte.",
     ErrorCode.PROVIDER_POLICY: "Envoi refusé par le fournisseur (règle de son contrat).",
     ErrorCode.PROVIDER_AUTH: "Connexion au fournisseur refusée : identifiants à vérifier.",
     ErrorCode.PROVIDER_CONFIG: "Fournisseur mal configuré : contacter l'administrateur.",
@@ -99,7 +117,10 @@ def _has(low: str, *needles: str) -> bool:
 # identifiant de politique Orange)). La première qui correspond l'emporte.
 _RULES = (
     (ErrorCode.QUOTA_EXHAUSTED, lambda low, status, pol: (
-        pol == "POL0001" or _has(low, "consumed all available units", "buy a new bundle")
+        pol == "POL0001"
+        or _has(low, "consumed all available units", "buy a new bundle")
+        # Twilio : solde du compte insuffisant.
+        or _has(low, "insufficient funds", "balance is too low", "insufficient balance")
     )),
     (ErrorCode.NATIONAL_POLICY, lambda low, status, pol: "politique nationale" in low),
     (ErrorCode.TEMPLATE_VARIABLES, lambda low, status, pol: (

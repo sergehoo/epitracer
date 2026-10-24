@@ -22,6 +22,7 @@ from apps.notifications.models import (
     NotificationTemplate, Provider,
 )
 from apps.notifications.services.audit import Actions, log_action
+from apps.notifications.services.errors import ErrorCode
 from apps.notifications.services.router import (
     NotificationProviderRouter, PhoneValidationError,
 )
@@ -38,6 +39,8 @@ class SendResult:
     error: str = ""
     # True si l'envoi a été ignoré car déjà enregistré (clé d'idempotence).
     duplicate: bool = False
+    # Catégorie normalisée du refus (cf. services.errors.ErrorCode).
+    error_code: str = ""
 
 
 # Variable de template restée non substituée (ex : « ID : {traveler_id}. »).
@@ -195,14 +198,26 @@ def enqueue_notification(
         except Exception as exc:  # noqa: BLE001
             return SendResult(ok=False, error=f"Erreur de routage : {exc}")
 
-        # 2) Application forced_provider — interdit de contourner CI→OrangeCI
+        # 2) Application forced_provider — routage SMS strict : Orange CI pour
+        # les +225 uniquement, Twilio pour l'international uniquement.
         final_provider = decision.provider
         if force_provider and force_provider != final_provider:
+            refusal = ""
             if decision.is_ivoirian and force_provider != Provider.ORANGE_CI:
-                return SendResult(
-                    ok=False,
-                    error="Numéro ivoirien : envoi Twilio refusé (politique nationale).",
+                refusal = "Numéro ivoirien : envoi Twilio refusé (politique nationale)."
+            elif channel == Channel.SMS and force_provider == Provider.ORANGE_CI:
+                refusal = (
+                    "Orange CI est réservé aux numéros ivoiriens (+225) (politique nationale)."
                 )
+            if refusal:
+                from .security import SecurityEventKind, log_security_event
+
+                log_security_event(
+                    SecurityEventKind.ROUTING_BLOCKED, source="dispatcher",
+                    phone=decision.normalized, user=sent_by,
+                    details={"forced": force_provider, "routed": decision.provider},
+                )
+                return SendResult(ok=False, error=refusal, error_code=ErrorCode.NATIONAL_POLICY)
             final_provider = force_provider
     else:
         # Email / Push / Telegram : pas de validation MSISDN. On construit un
@@ -275,7 +290,20 @@ def enqueue_notification(
         if existing is not None:
             return _duplicate_result(existing, dedup_key)
 
-    # 5) Création de l'objet Notification
+    # 5) Garde anti SMS pumping : quotas, budget, coupe-circuit (SMS uniquement).
+    guard = None
+    if channel == Channel.SMS:
+        from .sms_guard import check_and_reserve
+
+        guard = check_and_reserve(
+            phone=decision.normalized, provider=final_provider, body=final_body,
+            message_type=message_type, metadata=metadata, traveler=traveler,
+            source=(metadata or {}).get("kind", "") or message_type,
+        )
+        if not guard.allowed:
+            return SendResult(ok=False, error=guard.message, error_code=guard.error_code)
+
+    # 6) Création de l'objet Notification
     create_kwargs = dict(
         channel=channel,
         template=template,
@@ -306,6 +334,8 @@ def enqueue_notification(
         with transaction.atomic():
             notif = Notification.objects.create(**create_kwargs)
     except IntegrityError:
+        if guard is not None:
+            guard.release()
         existing = (
             Notification.all_objects.filter(dedup_key=dedup_key).first() if dedup_key else None
         )
@@ -315,7 +345,7 @@ def enqueue_notification(
 
     log_action(notification=notif, action=Actions.CREATE, actor=sent_by, request=request)
 
-    # 6) Enqueue Celery (best-effort : si Celery KO, on essaye en sync)
+    # 7) Enqueue Celery (best-effort : si Celery KO, on essaye en sync)
     try:
         from apps.notifications.tasks import send_notification_task
         send_notification_task.delay(notif.id)

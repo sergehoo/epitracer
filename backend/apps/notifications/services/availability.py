@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 
 from django.db import transaction
 from django.db.models import F
@@ -72,11 +73,10 @@ def suspend_provider(
     Idempotent et sûr en concurrence : plusieurs workers qui reçoivent le même
     403 en parallèle ne déclenchent qu'une seule transition (et une alerte).
     """
-    state = (
-        ProviderState.QUOTA_EXHAUSTED
-        if reason_code == ErrorCode.QUOTA_EXHAUSTED
-        else ProviderState.UNAVAILABLE
-    )
+    state = {
+        ErrorCode.QUOTA_EXHAUSTED: ProviderState.QUOTA_EXHAUSTED,
+        ErrorCode.BUDGET_EXCEEDED: ProviderState.BUDGET_EXCEEDED,
+    }.get(reason_code, ProviderState.UNAVAILABLE)
     now = timezone.now()
     with transaction.atomic():
         row, _ = ProviderAvailability.objects.get_or_create(provider=provider)
@@ -107,52 +107,39 @@ def record_blocked_attempt(provider: str) -> None:
     )
 
 
-def _admin_recipients() -> list[str]:
-    from django.contrib.auth import get_user_model
-
-    from apps.accounts.models import RoleCode
-
-    user_model = get_user_model()
-    qs = user_model.objects.filter(is_active=True).filter(
-        role_assignments__is_active=True,
-        role_assignments__role__code=RoleCode.NATIONAL_ADMIN,
-    ).exclude(email="")
-    return sorted(set(qs.values_list("email", flat=True)))
-
-
 def _alert_admins(provider: str, reason_code: str) -> int:
     """Alerte email des administrateurs nationaux (une fois par incident)."""
-    from .dispatcher import enqueue_notification
+    from .security import alert_admins
 
     label = Provider(provider).label if provider in Provider.values else provider
     if reason_code == ErrorCode.QUOTA_EXHAUSTED:
+        title = "crédit épuisé"
         cause = "Le crédit SMS est épuisé (réponse fournisseur 403 / POL0001)."
+    elif reason_code == ErrorCode.BUDGET_EXCEEDED:
+        title = "budget SMS atteint"
+        cause = (
+            "Le budget SMS configuré (journalier, mensuel ou plafond fournisseur) est "
+            "atteint : coupe-circuit EpiTrace déclenché pour éviter une consommation "
+            "anormale (SMS pumping possible). Vérifier le journal des événements de "
+            "sécurité avant de reprendre."
+        )
     else:
+        title = "suspendu"
         cause = "Le fournisseur refuse les envois."
     body = (
         f"Alerte EpiTrace — fournisseur {label} suspendu.\n\n"
         f"{cause}\n"
         "Les envois automatiques vers ce fournisseur sont mis en attente : aucune "
         "nouvelle tentative et aucune bascule vers un autre fournisseur pour les "
-        "numéros ivoiriens (+225).\n\n"
-        "Après réapprovisionnement, reprendre les envois depuis la page "
-        "Notifications du tableau de bord (bouton « Reprendre les envois »)."
+        "numéros ivoiriens (+225). Les alertes médicales urgentes restent tentées "
+        "dans leur enveloppe dédiée.\n\n"
+        "Après vérification (ou réapprovisionnement), reprendre les envois depuis la "
+        "page Notifications du tableau de bord (bouton « Reprendre les envois »)."
     )
-    sent = 0
-    for email in _admin_recipients():
-        try:
-            res = enqueue_notification(
-                channel="email",
-                recipient=email,
-                subject=f"[EpiTrace] {label} suspendu — crédit épuisé",
-                body=body,
-                message_type=MessageType.ADMIN_NOTICE,
-                metadata={"kind": "provider_suspended", "provider": provider},
-            )
-            sent += int(bool(res.ok))
-        except Exception:  # noqa: BLE001 — l'alerte ne doit jamais casser l'envoi
-            logger.exception("Alerte admin fournisseur %s non envoyée à %s", provider, email)
-    return sent
+    return alert_admins(
+        f"[EpiTrace] {label} — {title}", body,
+        kind="provider_suspended",
+    )
 
 
 def hold_notification(notif: Notification, *, error_code: str, detail: str = "") -> None:
@@ -176,7 +163,10 @@ class ResumeResult:
 
 
 def _is_expired_reminder(notif: Notification, today) -> bool:
-    """Un rappel daté (« Jour 20/21 ») ne doit pas partir un autre jour."""
+    """Un rappel daté (« Jour 20/21 ») ne doit pas partir un autre jour, ni un
+    code OTP (valable 10 minutes) après coup."""
+    if notif.message_type == MessageType.OTP:
+        return notif.created_at < timezone.now() - timedelta(minutes=10)
     if not notif.dedup_key:
         return False
     reminder_date = (notif.metadata or {}).get("reminder_date")

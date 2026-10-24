@@ -51,6 +51,11 @@ const STATUS_FILTERS = [
 const CHANNEL_FILTERS = ['', 'sms', 'whatsapp', 'email', 'push', 'telegram'];
 const PROVIDER_FILTERS = ['', 'orange_ci', 'twilio', 'meta_whatsapp', 'smtp', 'fcm', 'telegram_bot'];
 const PAGE_SIZES = [25, 50, 100];
+const PROVIDER_STATE_TITLE: Record<string, string> = {
+  quota_exhausted: 'crédit épuisé',
+  budget_exceeded: 'budget SMS atteint (coupe-circuit)',
+  unavailable: 'fournisseur indisponible',
+};
 
 function toParams(f: Filters): Record<string, string> {
   const p: Record<string, string> = {};
@@ -418,7 +423,7 @@ function ProviderBanner({ providers, onResumed }: { providers: ProviderStatus[];
             <PauseCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
             <div className="min-w-0">
               <p className="font-bold">
-                {p.provider_label} — {p.state === 'quota_exhausted' ? 'crédit épuisé' : 'fournisseur indisponible'}
+                {p.provider_label} — {PROVIDER_STATE_TITLE[p.state] || 'fournisseur indisponible'}
               </p>
               <p className="mt-0.5 text-sm">
                 Envois suspendus depuis le {formatDateTime(p.suspended_at)}.{' '}

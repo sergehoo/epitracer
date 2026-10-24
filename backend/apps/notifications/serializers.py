@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
 from .models import (
-    Channel, Notification, NotificationAuditLog, NotificationProviderConfig,
-    NotificationTemplate, Provider, ProviderAvailability, ProviderState,
+    Channel, MessageType, Notification, NotificationAuditLog, NotificationProviderConfig,
+    NotificationTemplate, Provider, ProviderAvailability, ProviderState, SmsSecurityEvent,
 )
 from .services.errors import friendly_error
 
@@ -111,6 +111,14 @@ class NotificationSerializer(serializers.ModelSerializer):
             )
         return self.context["_technical_allowed"]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.message_type == MessageType.OTP:
+            # Un code de connexion ne s'affiche jamais dans l'historique.
+            data["body"] = "Code de connexion à usage unique (masqué)."
+            data["context"] = {}
+        return data
+
     def get_traveler_name(self, obj) -> str | None:
         if not obj.traveler_id or obj.traveler is None:
             return None
@@ -167,6 +175,20 @@ class ProviderAvailabilitySerializer(serializers.Serializer):
         if not obj.technical_detail or not can_see_technical_errors(self.context.get("request")):
             return None
         return obj.technical_detail
+
+
+class SmsSecurityEventSerializer(serializers.ModelSerializer):
+    traveler_public_id = serializers.CharField(
+        source="traveler.public_id", read_only=True, default=None,
+    )
+    user_email = serializers.CharField(source="user.email", read_only=True, default=None)
+
+    class Meta:
+        model = SmsSecurityEvent
+        fields = [
+            "id", "uuid", "kind", "severity", "source", "ip_address", "phone_masked",
+            "traveler_public_id", "user_email", "details", "created_at",
+        ]
 
 
 def provider_state_rows(providers: list[str]) -> list[ProviderAvailability]:

@@ -51,10 +51,10 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
     # urgents (pas de crédit consommé, pas de compteur d'essais gonflé).
     if availability.is_suspended(notif.provider) and not availability.is_urgent(notif):
         availability.record_blocked_attempt(notif.provider)
-        detail = "Envoi suspendu : fournisseur indisponible (crédit épuisé)."
-        availability.hold_notification(
-            notif, error_code=ErrorCode.PROVIDER_SUSPENDED, detail=detail,
-        )
+        state = availability.get_state(notif.provider)
+        reason = getattr(state, "reason_code", "") or ErrorCode.PROVIDER_SUSPENDED
+        detail = f"Envoi suspendu : fournisseur {notif.provider} indisponible ({reason})."
+        availability.hold_notification(notif, error_code=reason, detail=detail)
         return False, "", detail
 
     notif.retry_count += 1
@@ -67,6 +67,15 @@ def _execute_send(notif: Notification) -> Tuple[bool, str, str]:
             # un autre fournisseur, même si Orange CI est indisponible.
             ok, msg_id, err = False, "", (
                 "Numéro ivoirien : envoi hors Orange CI refusé (politique nationale)."
+            )
+            error_code = ErrorCode.NATIONAL_POLICY
+        elif (
+            notif.channel == Channel.SMS and not is_ci_number
+            and notif.provider == Provider.ORANGE_CI
+        ):
+            # Orange CI est réservé aux +225 : jamais de numéro étranger.
+            ok, msg_id, err = False, "", (
+                "Orange CI est réservé aux numéros ivoiriens (+225) (politique nationale)."
             )
             error_code = ErrorCode.NATIONAL_POLICY
         elif notif.channel == Channel.SMS:
