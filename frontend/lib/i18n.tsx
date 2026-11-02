@@ -234,12 +234,10 @@ const fr = {
     legal: 'Informations légales',
     privacy: 'Politique de confidentialité',
     myData: 'Mes données personnelles',
+    photoCredits: 'Crédits photos',
     contact: 'Contact',
     rights: 'Tous droits réservés.',
     security: 'Données protégées · Signature cryptographique Ed25519',
-    photos: 'Photos',
-    cropped: 'recadrées',
-    publicDomain: 'domaine public',
   },
 };
 
@@ -464,12 +462,10 @@ const en: Dict = {
     legal: 'Legal information',
     privacy: 'Privacy policy',
     myData: 'My personal data',
+    photoCredits: 'Photo credits',
     contact: 'Contact',
     rights: 'All rights reserved.',
     security: 'Data protected · Ed25519 cryptographic signature',
-    photos: 'Photos',
-    cropped: 'cropped',
-    publicDomain: 'public domain',
   },
 };
 

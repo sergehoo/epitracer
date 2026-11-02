@@ -1,6 +1,6 @@
 /**
  * Photographies de la page d'accueil — prises en Côte d'Ivoire, licence Unsplash
- * (usage gratuit, attribution affichée en pied de page par courtoisie).
+ * (usage gratuit, attribution affichée par courtoisie sur /voyageur/credits-photos).
  * Lieu vérifié dans les métadonnées de chaque photo.
  *
  * Fichiers LOCAUX (public/images/landing) importés statiquement : optimisés au
@@ -42,7 +42,8 @@ export const panoramaPhoto = LANDING_PHOTOS[1];
  * Photographies des sections sanitaires — Wikimedia Commons, licences libres
  * vérifiées (API Commons) le 24/10/2026. Recadrées pour qu'aucun visage
  * n'apparaisse, redimensionnées et débarrassées de leurs métadonnées EXIF.
- * Crédit et licence affichés en pied de page (obligatoires pour CC BY / BY-SA).
+ * Crédit et licence affichés sur /voyageur/credits-photos, lié depuis le pied
+ * de page (obligatoires pour CC BY / BY-SA : ne pas retirer cette page).
  */
 const CC_BY_SA_4 = { license: 'CC BY-SA 4.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/' };
 const CC_BY_2 = { license: 'CC BY 2.0', licenseUrl: 'https://creativecommons.org/licenses/by/2.0/' };
