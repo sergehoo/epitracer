@@ -21,7 +21,11 @@ class EpidemiTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     @classmethod
     def get_token(cls, user):
+        from .authentication import SESSION_VERSION_CLAIM, session_version
+
         token = super().get_token(user)
+        # Version de session : tout changement de mot de passe révoque ce jeton.
+        token[SESSION_VERSION_CLAIM] = session_version(user)
         token["email"] = user.email
         token["roles"] = user.role_codes()
         token["mfa"] = user.mfa_enabled
@@ -285,13 +289,28 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 class ChangePasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)
-    new_password = serializers.CharField(write_only=True, validators=[validate_password])
+    new_password = serializers.CharField(write_only=True)
 
     def validate_current_password(self, value):
         user = self.context["request"].user
         if not user.check_password(value):
             raise serializers.ValidationError("Mot de passe actuel incorrect.")
         return value
+
+    def validate(self, attrs):
+        """Politique Django appliquée avec l'utilisateur (similarité e-mail/nom),
+        et refus de reconduire le mot de passe actuel (temporaire compris)."""
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        if attrs["new_password"] == attrs["current_password"]:
+            raise serializers.ValidationError(
+                {"new_password": "Le nouveau mot de passe doit être différent de l'actuel."}
+            )
+        try:
+            validate_password(attrs["new_password"], user=self.context["request"].user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"new_password": list(exc.messages)}) from exc
+        return attrs
 
 
 # ---------------------------------------------------------------------------
