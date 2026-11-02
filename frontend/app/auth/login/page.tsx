@@ -24,6 +24,7 @@ import {
   AlertTriangle, Lock, Eye, EyeOff, CheckCircle2,
 } from 'lucide-react';
 import { api, setTokens, extractApiError } from '@/lib/api';
+import { FORCED_CHANGE_PATH, routeAfterLogin } from '@/lib/authFlow';
 
 type Step = 'credentials' | 'mfa';
 
@@ -67,13 +68,13 @@ export default function LoginPage() {
       // Login OK : stocke les tokens
       setTokens(data.access, data.refresh);
 
-      if (data.must_change_password) {
-        toast.success('Connexion réussie — veuillez changer votre mot de passe.');
-        router.replace('/auth/change-password?forced=1');
-        return;
-      }
-      toast.success('Connexion réussie');
-      router.replace('/dashboard');
+      const target = routeAfterLogin(data);
+      toast.success(
+        target === FORCED_CHANGE_PATH
+          ? 'Connexion réussie — veuillez changer votre mot de passe.'
+          : 'Connexion réussie',
+      );
+      router.replace(target);
     } catch (e: any) {
       const details: any = e?.response?.data?.error?.details || e?.response?.data;
 

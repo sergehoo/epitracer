@@ -30,9 +30,9 @@ def _get_user_from_jwt(raw_token: str):
 
         UntypedToken(raw_token)  # valide signature + expiration
         # Le payload contient user_id
-        from rest_framework_simplejwt.authentication import JWTAuthentication
-        validated = JWTAuthentication().get_validated_token(raw_token)
-        user = JWTAuthentication().get_user(validated)
+        from apps.accounts.authentication import EpiJWTAuthentication
+        validated = EpiJWTAuthentication().get_validated_token(raw_token)
+        user = EpiJWTAuthentication().get_user(validated)  # refuse les jetons révoqués
         return user
     except Exception as exc:  # noqa: BLE001
         logger.debug("WS JWT auth failed: %s", exc)

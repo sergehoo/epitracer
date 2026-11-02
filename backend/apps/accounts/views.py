@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -116,16 +117,46 @@ class MeView(APIView):
         return Response(UserSerializer(request.user).data)
 
 
+def _revoke_refresh_tokens(user) -> None:
+    """Révoque toutes les sessions (refresh tokens) encore valides de l'utilisateur."""
+    from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+
+    for token in OutstandingToken.objects.filter(user=user, blacklistedtoken__isnull=True):
+        BlacklistedToken.objects.get_or_create(token=token)
+
+
 class ChangePasswordView(APIView):
+    """Changement de mot de passe de l'utilisateur connecté (volontaire ou imposé).
+
+    L'obligation `must_change_password` n'est levée qu'après vérification du mot
+    de passe actuel et validation du nouveau, dans la même écriture que celui-ci
+    (transaction : tout ou rien). Les sessions existantes sont révoquées et une
+    session neuve est renvoyée : accès direct au dashboard, MFA déjà passée au login.
+    """
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(request=ChangePasswordSerializer, responses=OpenApiResponse(description="OK"))
     def post(self, request):
         s = ChangePasswordSerializer(data=request.data, context={"request": request})
         s.is_valid(raise_exception=True)
-        request.user.set_password(s.validated_data["new_password"])
-        request.user.save(update_fields=["password"])
-        return Response({"detail": "Mot de passe modifié."})
+        user = request.user
+        with transaction.atomic():
+            user.set_password(s.validated_data["new_password"])
+            user.must_change_password = False
+            user.last_password_change = timezone.now()
+            user.save(update_fields=[
+                "password", "must_change_password", "last_password_change", "updated_at",
+            ])
+            _revoke_refresh_tokens(user)
+            refresh = EpidemiTokenObtainPairSerializer.get_token(user)
+        return Response({
+            "detail": "Mot de passe modifié.",
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserSerializer(user).data,
+            "must_change_password": False,
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -218,8 +249,15 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         u = self.get_object()
         new_pwd = secrets.token_urlsafe(12)
-        u.set_password(new_pwd)
-        u.save(update_fields=["password"])
+        with transaction.atomic():
+            u.set_password(new_pwd)
+            # Mot de passe temporaire : changement imposé à la prochaine connexion.
+            u.must_change_password = True
+            u.last_password_change = timezone.now()
+            u.save(update_fields=[
+                "password", "must_change_password", "last_password_change", "updated_at",
+            ])
+            _revoke_refresh_tokens(u)
 
         # Génère + envoie l'email tokenisé (best-effort, ne bloque pas la réponse)
         try:
@@ -454,6 +492,7 @@ class PasswordResetConfirmView(APIView):
                     except Exception:
                         pass
             user.save(update_fields=updated)
+            _revoke_refresh_tokens(user)
             log.info("Reset password OK pour user=%s (fields=%s)", user.pk, updated)
             return Response({"ok": True, "detail": "Mot de passe réinitialisé."})
 

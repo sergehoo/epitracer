@@ -6,7 +6,8 @@ import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Topbar } from '@/components/dashboard/Topbar';
 import { BottomNav } from '@/components/dashboard/BottomNav';
 import { AdminFooter } from '@/components/dashboard/AdminFooter';
-import { getAccess } from '@/lib/api';
+import { api, getAccess } from '@/lib/api';
+import { LOGIN_PATH, dashboardRedirect, type AccountState } from '@/lib/authFlow';
 import { useRealtimeAlerts } from '@/lib/useRealtimeAlerts';
 import { useEdgeSwipe } from '@/lib/useEdgeSwipe';
 
@@ -29,10 +30,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     enabled: true,
   });
 
+  // Garde : session présente, puis état réel du compte (pas les claims du JWT).
+  // Changement de mot de passe encore imposé → page de changement.
   useEffect(() => {
-    const t = getAccess();
-    if (!t) { router.replace('/auth/login'); return; }
-    setReady(true);
+    if (!getAccess()) { router.replace(LOGIN_PATH); return; }
+    let cancelled = false;
+    api.get<AccountState>('/auth/me/')
+      .then(({ data }) => {
+        if (cancelled) return;
+        const target = dashboardRedirect(data);
+        if (target) router.replace(target);
+        else setReady(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Session expirée (refresh refusé) → login ; panne réseau → on n'enferme pas.
+        if (!getAccess()) router.replace(LOGIN_PATH);
+        else setReady(true);
+      });
+    return () => { cancelled = true; };
   }, [router]);
 
   // Ferme automatiquement le drawer mobile au changement de page

@@ -254,7 +254,8 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = env.int(
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # JWT + version de session + changement de mot de passe imposé.
+        "apps.accounts.authentication.EpiJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (

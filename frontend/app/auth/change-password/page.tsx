@@ -8,14 +8,18 @@
  *   must_change_password=true côté serveur (ex: 1ère connexion).
  */
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   KeyRound, Eye, EyeOff, AlertTriangle, CheckCircle2, ShieldCheck, LogOut,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { api, clearTokens, extractApiError } from '@/lib/api';
+import { api, clearTokens, extractApiError, getAccess, setTokens } from '@/lib/api';
+import {
+  HOME_PATH, LOGIN_PATH, forcedChangeRedirect, routeAfterPasswordChange,
+  type AccountState, type PasswordChangeResponse,
+} from '@/lib/authFlow';
 
 export default function ChangePasswordPage() {
   return (
@@ -39,20 +43,42 @@ function ChangePasswordInner() {
 
   const strength = passwordStrength(next);
 
+  // Mode imposé : l'état serveur fait foi. Obligation déjà levée (retour
+  // arrière, F5 après changement) → dashboard ; sans session → login.
+  useEffect(() => {
+    if (!forced) return;
+    if (!getAccess()) { router.replace(LOGIN_PATH); return; }
+    let cancelled = false;
+    api.get<AccountState>('/auth/me/')
+      .then(({ data }) => {
+        const target = forcedChangeRedirect(data);
+        if (!cancelled && target) router.replace(target);
+      })
+      .catch(() => { if (!cancelled && !getAccess()) router.replace(LOGIN_PATH); });
+    return () => { cancelled = true; };
+  }, [forced, router]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (next !== confirm) { toast.error('Les deux mots de passe ne correspondent pas.'); return; }
     if (next.length < 8) { toast.error('Minimum 8 caractères.'); return; }
     setBusy(true);
     try {
-      await api.post('/auth/change-password/', {
+      const { data } = await api.post<PasswordChangeResponse>('/auth/change-password/', {
         current_password: current,
         new_password: next,
       });
-      toast.success('Mot de passe modifié — utilisez-le à la prochaine connexion.');
-      // On déconnecte par sécurité (autres sessions invalidées côté serveur idéalement)
-      clearTokens();
-      router.replace('/auth/login');
+      // Le serveur a levé l'obligation, révoqué les anciennes sessions et
+      // renvoyé une session neuve : on la prend et on va au dashboard.
+      const target = routeAfterPasswordChange(data);
+      if (target === HOME_PATH && data.access && data.refresh) {
+        setTokens(data.access, data.refresh);
+        toast.success('Mot de passe modifié.');
+      } else {
+        clearTokens();
+        toast.success('Mot de passe modifié — reconnectez-vous avec le nouveau mot de passe.');
+      }
+      router.replace(target);
     } catch (e) {
       toast.error(extractApiError(e));
     } finally {
