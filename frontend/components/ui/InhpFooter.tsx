@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Mail, PhoneCall } from 'lucide-react';
 import { adminUrl } from '@/lib/hosts';
 import { useLocale } from '@/lib/i18n';
-import { HEALTH_PHOTOS, LANDING_PHOTOS } from '@/lib/landingPhotos';
 import { DestinationBrand } from '@/components/public/DestinationBrand';
 import { AfriqConsultingCredit } from './AfriqConsultingCredit';
 import { TricolorBand } from './InhpHeader';
@@ -106,6 +105,7 @@ export function InhpFooter() {
             <ul className="mt-3 space-y-2 text-sm">
               <li><Link href="/voyageur/confidentialite" className={linkCls}>{f.privacy}</Link></li>
               <li><Link href="/voyageur/mes-donnees" className={linkCls}>{f.myData}</Link></li>
+              <li><Link href="/voyageur/credits-photos" className={linkCls}>{f.photoCredits}</Link></li>
             </ul>
           </nav>
         </div>
@@ -116,26 +116,6 @@ export function InhpFooter() {
           <span>© {new Date().getFullYear()} {t.brand.country} — MSHPCMU · INHP. {f.rights}</span>
           <span>{f.security}</span>
         </div>
-        <p className="mx-auto max-w-7xl px-4 pb-5 text-[11px] text-emerald-100/90 sm:px-6">
-          {f.photos} :{' '}
-          {LANDING_PHOTOS.map((p, i) => (
-            <span key={p.key}>
-              {i > 0 && ' · '}
-              <a href={p.page} target="_blank" rel="noreferrer" className={linkCls}>{p.credit}</a>
-            </span>
-          ))}{' '}
-          (Unsplash) ·{' '}
-          {Object.values(HEALTH_PHOTOS).map((p, i) => (
-            <span key={p.page}>
-              {i > 0 && ' · '}
-              <a href={p.page} target="_blank" rel="noreferrer" className={linkCls}>{p.credit}</a>{' '}
-              ({p.licenseUrl
-                ? <a href={p.licenseUrl} target="_blank" rel="noreferrer license" className={linkCls}>{p.license}</a>
-                : p.license || f.publicDomain})
-            </span>
-          ))}{' '}
-          — Wikimedia Commons, {f.cropped}.
-        </p>
       </div>
 
       <div className="border-t border-white/10 bg-black/20">
