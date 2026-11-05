@@ -54,7 +54,8 @@ dependencies:
   path_provider: ^2.1.5
   flutter_pdfview: ^1.3.4
   url_launcher: ^6.3.1
-  share_plus: ^13.1.0
+  # ^12 (même API Share.share) : la 13 exige win32 ^6, incompatible avec file_picker 8.
+  share_plus: ^12.0.2
 
   # ── Form runner Phase 8B ─────────────────────────────────────────
   signature: ^5.4.0   # pad de signature manuscrite pour DynamicForm
