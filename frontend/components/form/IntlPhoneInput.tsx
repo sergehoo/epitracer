@@ -3,7 +3,8 @@
 /**
  * Champ téléphone international léger (pas de dépendance externe).
  *
- * - Liste de dial codes courants (Afrique de l'Ouest + grands pôles).
+ * - Tous les pays et territoires dotés d'un indicatif (lib/datasets.ts) :
+ *   pays fréquents en tête, puis la liste complète de A à Z.
  * - Sortie au format E.164-ish : `+XXXYYYYYYYY` (préfixe + numéro national
  *   sans espaces) — accepté par le regex DRF côté backend.
  * - Pré-sélection sur Côte d'Ivoire par défaut.
@@ -13,6 +14,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { COUNTRIES, COUNTRY_DIAL_CODES, DIAL_CODE_COUNTRY } from '@/lib/datasets';
 
 interface DialCode {
   iso: string;
@@ -21,77 +23,51 @@ interface DialCode {
   flag: string;   // emoji drapeau
 }
 
-// Liste alignée sur frontend/lib/datasets.ts COUNTRIES.
-const DIAL_CODES: DialCode[] = [
-  { iso: 'CI', name: "Côte d'Ivoire",        dial: '225', flag: '🇨🇮' },
-  { iso: 'GH', name: 'Ghana',                dial: '233', flag: '🇬🇭' },
-  { iso: 'NG', name: 'Nigeria',              dial: '234', flag: '🇳🇬' },
-  { iso: 'CD', name: 'R.D. Congo',           dial: '243', flag: '🇨🇩' },
-  { iso: 'CG', name: 'Rép. du Congo',        dial: '242', flag: '🇨🇬' },
-  { iso: 'UG', name: 'Ouganda',              dial: '256', flag: '🇺🇬' },
-  { iso: 'GN', name: 'Guinée',               dial: '224', flag: '🇬🇳' },
-  { iso: 'SL', name: 'Sierra Leone',         dial: '232', flag: '🇸🇱' },
-  { iso: 'LR', name: 'Liberia',              dial: '231', flag: '🇱🇷' },
-  { iso: 'ML', name: 'Mali',                 dial: '223', flag: '🇲🇱' },
-  { iso: 'BF', name: 'Burkina Faso',         dial: '226', flag: '🇧🇫' },
-  { iso: 'SN', name: 'Sénégal',              dial: '221', flag: '🇸🇳' },
-  { iso: 'TG', name: 'Togo',                 dial: '228', flag: '🇹🇬' },
-  { iso: 'BJ', name: 'Bénin',                dial: '229', flag: '🇧🇯' },
-  { iso: 'NE', name: 'Niger',                dial: '227', flag: '🇳🇪' },
-  { iso: 'GW', name: 'Guinée-Bissau',        dial: '245', flag: '🇬🇼' },
-  { iso: 'GM', name: 'Gambie',               dial: '220', flag: '🇬🇲' },
-  { iso: 'CV', name: 'Cap-Vert',             dial: '238', flag: '🇨🇻' },
-  { iso: 'MR', name: 'Mauritanie',           dial: '222', flag: '🇲🇷' },
-  { iso: 'CM', name: 'Cameroun',             dial: '237', flag: '🇨🇲' },
-  { iso: 'GA', name: 'Gabon',                dial: '241', flag: '🇬🇦' },
-  { iso: 'CF', name: 'Centrafrique',         dial: '236', flag: '🇨🇫' },
-  { iso: 'KE', name: 'Kenya',                dial: '254', flag: '🇰🇪' },
-  { iso: 'ZA', name: 'Afrique du Sud',       dial: '27',  flag: '🇿🇦' },
-  { iso: 'EG', name: 'Égypte',               dial: '20',  flag: '🇪🇬' },
-  { iso: 'MA', name: 'Maroc',                dial: '212', flag: '🇲🇦' },
-  { iso: 'TN', name: 'Tunisie',              dial: '216', flag: '🇹🇳' },
-  { iso: 'FR', name: 'France',               dial: '33',  flag: '🇫🇷' },
-  { iso: 'BE', name: 'Belgique',             dial: '32',  flag: '🇧🇪' },
-  { iso: 'DE', name: 'Allemagne',            dial: '49',  flag: '🇩🇪' },
-  { iso: 'CH', name: 'Suisse',               dial: '41',  flag: '🇨🇭' },
-  { iso: 'GB', name: 'Royaume-Uni',          dial: '44',  flag: '🇬🇧' },
-  { iso: 'ES', name: 'Espagne',              dial: '34',  flag: '🇪🇸' },
-  { iso: 'IT', name: 'Italie',               dial: '39',  flag: '🇮🇹' },
-  { iso: 'PT', name: 'Portugal',             dial: '351', flag: '🇵🇹' },
-  { iso: 'US', name: 'États-Unis',           dial: '1',   flag: '🇺🇸' },
-  { iso: 'CA', name: 'Canada',               dial: '1',   flag: '🇨🇦' },
-  { iso: 'BR', name: 'Brésil',               dial: '55',  flag: '🇧🇷' },
-  { iso: 'CN', name: 'Chine',                dial: '86',  flag: '🇨🇳' },
-  { iso: 'IN', name: 'Inde',                 dial: '91',  flag: '🇮🇳' },
-  { iso: 'TR', name: 'Turquie',              dial: '90',  flag: '🇹🇷' },
-  { iso: 'AE', name: 'Émirats arabes unis',  dial: '971', flag: '🇦🇪' },
-  { iso: 'SA', name: 'Arabie saoudite',      dial: '966', flag: '🇸🇦' },
-  { iso: 'LB', name: 'Liban',                dial: '961', flag: '🇱🇧' },
+// Pays fréquents (sous-région, diaspora, grandes liaisons aériennes), proposés en tête.
+const FREQUENT_ISO = [
+  'CI', 'GH', 'NG', 'CD', 'CG', 'UG', 'GN', 'SL', 'LR', 'ML', 'BF', 'SN', 'TG', 'BJ', 'NE',
+  'GW', 'GM', 'CV', 'MR', 'CM', 'GA', 'CF', 'KE', 'ZA', 'EG', 'MA', 'TN', 'FR', 'BE', 'DE',
+  'CH', 'GB', 'ES', 'IT', 'PT', 'US', 'CA', 'BR', 'CN', 'IN', 'TR', 'AE', 'SA', 'LB',
 ];
+
+// Drapeau emoji dérivé du code ISO (lettres régionales Unicode).
+const flagOf = (iso: string) => String.fromCodePoint(...[...iso].map((ch) => 0x1f1a5 + ch.charCodeAt(0)));
+
+const BY_ISO = new Map<string, DialCode>(
+  COUNTRIES.filter((c) => COUNTRY_DIAL_CODES[c.code]).map((c) => [
+    c.code,
+    { iso: c.code, name: c.name, dial: COUNTRY_DIAL_CODES[c.code], flag: flagOf(c.code) },
+  ]),
+);
+const FREQUENT = FREQUENT_ISO.map((iso) => BY_ISO.get(iso)!);
+const ALL_SORTED = [...BY_ISO.values()].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 
 const DEFAULT_ISO = 'CI';
 
 /**
  * Sépare une valeur globale ("+22507112233") en (iso, national).
- * Si le prefix ne correspond à aucun code connu → on garde la liste par défaut.
+ * Un indicatif partagé (+1, +7, +44…) garde le pays déjà choisi, sinon le pays
+ * principal de l'indicatif. Préfixe inconnu → pays par défaut.
  */
-function splitValue(value: string): { iso: string; national: string } {
+function splitValue(value: string, currentIso?: string): { iso: string; national: string } {
+  const current = currentIso ? BY_ISO.get(currentIso) : undefined;
   if (!value || !value.startsWith('+')) {
-    return { iso: DEFAULT_ISO, national: (value || '').replace(/\D/g, '') };
+    return { iso: current?.iso || DEFAULT_ISO, national: (value || '').replace(/\D/g, '') };
   }
   const digits = value.slice(1).replace(/\D/g, '');
-  // Match longest prefix first (e.g. 225 before 22).
-  const sorted = [...DIAL_CODES].sort((a, b) => b.dial.length - a.dial.length);
-  for (const c of sorted) {
-    if (digits.startsWith(c.dial)) {
-      return { iso: c.iso, national: digits.slice(c.dial.length) };
-    }
+  if (current && digits.startsWith(current.dial)) {
+    return { iso: current.iso, national: digits.slice(current.dial.length) };
+  }
+  // Indicatif le plus long d'abord (ex. 225 avant 22).
+  for (const len of [3, 2, 1]) {
+    const iso = DIAL_CODE_COUNTRY[digits.slice(0, len)];
+    if (iso && BY_ISO.has(iso)) return { iso, national: digits.slice(len) };
   }
   return { iso: DEFAULT_ISO, national: digits };
 }
 
 function joinValue(iso: string, national: string): string {
-  const dial = DIAL_CODES.find((c) => c.iso === iso)?.dial || '225';
+  const dial = BY_ISO.get(iso)?.dial || '225';
   const cleaned = (national || '').replace(/\D/g, '');
   if (!cleaned) return '';
   return `+${dial}${cleaned}`;
@@ -113,7 +89,7 @@ export function IntlPhoneInput({ value, onChange, placeholder, invalid, id }: Pr
 
   // Sync interne si la valeur externe change (form reset, etc.)
   useEffect(() => {
-    const parsed = splitValue(value);
+    const parsed = splitValue(value, iso);
     setIso(parsed.iso);
     setNational(parsed.national);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,7 +105,8 @@ export function IntlPhoneInput({ value, onChange, placeholder, invalid, id }: Pr
     onChange(joinValue(iso, cleaned));
   };
 
-  const current = DIAL_CODES.find((c) => c.iso === iso) || DIAL_CODES[0];
+  const current = BY_ISO.get(iso) || BY_ISO.get(DEFAULT_ISO)!;
+  const label = (c: DialCode) => `${c.flag} ${c.name} (+${c.dial})`;
 
   return (
     <div
@@ -150,11 +127,16 @@ export function IntlPhoneInput({ value, onChange, placeholder, invalid, id }: Pr
           className="absolute inset-0 opacity-0 cursor-pointer"
           aria-label="Indicatif pays"
         >
-          {DIAL_CODES.map((c) => (
-            <option key={c.iso} value={c.iso}>
-              {c.flag} {c.name} (+{c.dial})
-            </option>
-          ))}
+          <optgroup label="Pays fréquents">
+            {FREQUENT.map((c) => (
+              <option key={`frequent-${c.iso}`} value={c.iso}>{label(c)}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Tous les pays (A à Z)">
+            {ALL_SORTED.map((c) => (
+              <option key={c.iso} value={c.iso}>{label(c)}</option>
+            ))}
+          </optgroup>
         </select>
       </div>
       <input
