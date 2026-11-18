@@ -39,7 +39,7 @@ from rest_framework.response import Response
 
 from .models import (
     AutomatedReportRecipient, AutomatedReportSchedule, DeliveryStatus,
-    GeneratedReport, ReportDeliveryLog, ReportType,
+    GeneratedReport, ReportDeliveryLog, ReportStatus, ReportType,
 )
 from .permissions import (
     CanDownloadReports, CanGenerateWeeklyReports, CanManageReportRecipients,
@@ -80,7 +80,7 @@ class WeeklyReportViewSet(
     def get_permissions(self):
         if self.action == "generate":
             return [CanGenerateWeeklyReports()]
-        if self.action == "send":
+        if self.action in ("send", "retry_failed"):
             return [CanSendWeeklyReports()]
         if self.action == "download":
             return [CanDownloadReports()]
@@ -136,19 +136,31 @@ class WeeklyReportViewSet(
     # -------------------------------------------------------------------- send
     @action(detail=True, methods=["post"], url_path="send")
     def send(self, request, pk=None):
-        """POST /weekly/{id}/send/ — déclencher un envoi manuel."""
-        from .tasks import send_weekly_report_email, send_weekly_report_sms
+        """POST /weekly/{id}/send/ — (re)met l'envoi en file, sans attendre.
+
+        Idempotent : seuls les destinataires actifs pas encore servis reçoivent
+        le rapport. L'envoi se fait dans le worker, pas pendant la requête.
+        """
+        from .tasks import _schedule_delivery
 
         report = self.get_object()
-        channels = request.data.get("channels", ["email", "sms"])
+        if report.status != ReportStatus.READY:
+            return Response(
+                {"detail": "Le rapport n'est pas prêt."}, status=status.HTTP_400_BAD_REQUEST,
+            )
+        _schedule_delivery(report.pk)
+        return Response({"ok": True, "report_id": report.pk}, status=status.HTTP_202_ACCEPTED)
 
-        results = {}
-        if "email" in channels:
-            results["email"] = send_weekly_report_email.apply(args=[report.pk]).result
-        if "sms" in channels:
-            results["sms"] = send_weekly_report_sms.apply(args=[report.pk]).result
+    @action(detail=True, methods=["post"], url_path="retry-failed")
+    def retry_failed(self, request, pk=None):
+        """POST /weekly/{id}/retry-failed/ — relance uniquement les envois échoués."""
+        from .tasks import request_retry_of_failures
 
-        return Response({"ok": True, "report_id": report.pk, **results})
+        report = self.get_object()
+        count = request_retry_of_failures(report)
+        return Response(
+            {"report_id": report.pk, "retrying": count}, status=status.HTTP_202_ACCEPTED,
+        )
 
     def get_object(self):
         """Override pour 404 plus explicite : 'Rapport #X introuvable'."""

@@ -69,8 +69,9 @@ def normalize_phone_number(phone: str) -> str:
         # cas "225XXXXXXXXXX" sans le +
         out = "+" + cleaned
     elif len(cleaned) == 10 and cleaned.startswith("0"):
-        # Convention CI : 0XXXXXXXXX (10 chiffres) → présomption +225
-        out = "+225" + cleaned[1:]
+        # Convention CI : 0XXXXXXXXX (10 chiffres) → présomption +225. Depuis
+        # la réforme de 2021, le 0 fait partie du numéro (+2250709620252).
+        out = "+225" + cleaned
     elif len(cleaned) == 10:
         # 10 chiffres sans 0 initial : présomption CI quand même
         out = "+225" + cleaned

@@ -148,8 +148,12 @@ interface WeeklyReport {
   has_pdf: boolean;
   has_excel: boolean;
   delivery_count: number;
-  /** Envois réellement aboutis / en échec / encore en cours. */
-  delivery_stats?: { sent: number; failed: number; pending: number };
+  /** Envois réellement aboutis / en échec / encore en cours (dernier envoi
+   *  de chaque destinataire et canal ; on_hold = attente de crédit SMS). */
+  delivery_stats?: { sent: number; failed: number; pending: number; on_hold?: number; total?: number };
+  /** Statut d'envoi, distinct de la génération : « Prêt » n'est pas « Envoyé ». */
+  delivery_state?: 'planned' | 'generating' | 'sending' | 'sent' | 'partial' | 'failed';
+  delivery_state_label?: string;
   summary_data?: Record<string, unknown>;
 }
 
@@ -164,6 +168,15 @@ const STATUS_STYLE: Record<string, { bg: string; icon: React.ReactNode }> = {
             icon: <XCircle className="h-3.5 w-3.5" /> },
   archived: { bg: 'bg-slate-100 text-slate-600 border-slate-300',
               icon: <FileText className="h-3.5 w-3.5" /> },
+  // Statuts d'envoi (delivery_state)
+  planned: { bg: 'bg-slate-100 text-slate-700 border-slate-300',
+             icon: <Clock3 className="h-3.5 w-3.5" /> },
+  sending: { bg: 'bg-sky-100 text-sky-800 border-sky-300',
+             icon: <Send className="h-3.5 w-3.5" /> },
+  sent: { bg: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+          icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  partial: { bg: 'bg-amber-100 text-amber-800 border-amber-300',
+             icon: <AlertTriangle className="h-3.5 w-3.5" /> },
 };
 
 
@@ -224,17 +237,25 @@ export default function RapportsPage() {
     }
   };
 
-  const sendNow = async (report: WeeklyReport) => {
+  // L'envoi est automatique après génération ; seuls les échecs se relancent
+  // (jamais un envoi réussi ni un envoi encore en cours).
+  const retryFailures = async (report: WeeklyReport) => {
+    const failed = report.delivery_stats?.failed ?? 0;
     if (!confirm(
-      `Envoyer maintenant le rapport ${report.report_code} à TOUS les destinataires actifs ?\n\n` +
-      `Cela déclenchera des envois SMS + Email réels (avec coût).`,
+      `Réessayer les ${failed} envoi(s) en échec du rapport ${report.report_code} ?\n\n` +
+      `Les envois réussis ou encore en cours ne sont pas relancés. ` +
+      `Les SMS restent soumis aux quotas et au crédit disponible.`,
     )) return;
     setSending(report.id);
     try {
-      const { data } = await api.post(`/reports/weekly/${report.id}/send/`, {});
-      toast.success(
-        `Envoi lancé. Email : ${data.email?.sent ?? 0} · SMS : ${data.sms?.sent ?? 0}`,
+      const { data } = await api.post<{ retrying: number }>(
+        `/reports/weekly/${report.id}/retry-failed/`, {},
       );
+      if (data.retrying > 0) {
+        toast.success(`${data.retrying} envoi(s) relancé(s) en arrière-plan.`);
+      } else {
+        toast('Aucun envoi en échec à relancer.');
+      }
       await loadWeekly();
     } catch (e) {
       toast.error(extractApiError(e));
@@ -395,7 +416,8 @@ export default function RapportsPage() {
                   </td></tr>
                 )}
                 {!loadingWeekly && weeklyList.map(r => {
-                  const style = STATUS_STYLE[r.status] || STATUS_STYLE.pending;
+                  const style = STATUS_STYLE[r.delivery_state ?? r.status] || STATUS_STYLE.pending;
+                  const stats = r.delivery_stats;
                   return (
                     <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
                       <td className="px-3 py-2.5 font-mono text-xs">{r.report_code}</td>
@@ -406,7 +428,7 @@ export default function RapportsPage() {
                       </td>
                       <td className="px-3 py-2.5">
                         <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border ${style.bg}`}>
-                          {style.icon} {r.status_label}
+                          {style.icon} {r.delivery_state_label ?? r.status_label}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-xs text-slate-500">
@@ -418,15 +440,18 @@ export default function RapportsPage() {
                         ) : null}
                       </td>
                       <td className="px-3 py-2.5 text-xs">
-                        <span className="font-bold">{r.delivery_count}</span>
-                        {r.delivery_stats && (
+                        <span className="font-bold">{stats?.total ?? r.delivery_count}</span>
+                        {stats && (
                           <span className="ml-1.5 whitespace-nowrap text-[11px]">
-                            <span className="text-emerald-700 dark:text-emerald-400">{r.delivery_stats.sent} envoyés</span>
-                            {r.delivery_stats.failed > 0 && (
-                              <span className="ml-1 font-semibold text-rose-700 dark:text-rose-400">· {r.delivery_stats.failed} échecs</span>
+                            <span className="text-emerald-700 dark:text-emerald-400">{stats.sent} envoyés</span>
+                            {stats.failed > 0 && (
+                              <span className="ml-1 font-semibold text-rose-700 dark:text-rose-400">· {stats.failed} échecs</span>
                             )}
-                            {r.delivery_stats.pending > 0 && (
-                              <span className="ml-1 text-amber-700 dark:text-amber-400">· {r.delivery_stats.pending} en cours</span>
+                            {stats.pending > 0 && (
+                              <span className="ml-1 text-amber-700 dark:text-amber-400">· {stats.pending} en cours</span>
+                            )}
+                            {(stats.on_hold ?? 0) > 0 && (
+                              <span className="ml-1 text-amber-700 dark:text-amber-400">(dont {stats.on_hold} en attente de crédit SMS)</span>
                             )}
                           </span>
                         )}
@@ -451,19 +476,19 @@ export default function RapportsPage() {
                               <FileSpreadsheet className="h-3 w-3 text-emerald-600" /> XLSX
                             </button>
                           )}
-                          {r.status === 'ready' && (
+                          {(stats?.failed ?? 0) > 0 && (
                             <button
-                              onClick={() => sendNow(r)}
+                              onClick={() => retryFailures(r)}
                               disabled={sending === r.id}
-                              title="Envoyer maintenant"
+                              title="Relancer uniquement les envois en échec"
                               className="inline-flex items-center gap-1 rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold hover:border-ciOrange disabled:opacity-50"
                             >
                               {sending === r.id ? (
                                 <RefreshCw className="h-3 w-3 animate-spin text-ciOrange" />
                               ) : (
-                                <Send className="h-3 w-3 text-ciOrange" />
+                                <RefreshCw className="h-3 w-3 text-ciOrange" />
                               )}
-                              Envoyer
+                              Réessayer les échecs
                             </button>
                           )}
                         </div>

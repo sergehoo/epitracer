@@ -181,7 +181,7 @@ class TestWeeklyReportDelivery:
         assert "not verified" in log.error_message
         assert result["sent"] == 0
         stats = GeneratedReportLightSerializer(report).data["delivery_stats"]
-        assert stats == {"sent": 0, "failed": 1, "pending": 0}
+        assert stats == {"sent": 0, "failed": 1, "pending": 0, "on_hold": 0, "total": 1}
 
     def test_delivered_report_email_uses_internal_sender(self, smtp, report):
         from apps.reports.models import DeliveryStatus, ReportDeliveryLog

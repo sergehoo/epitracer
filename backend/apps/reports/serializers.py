@@ -99,6 +99,9 @@ class GeneratedReportLightSerializer(serializers.ModelSerializer):
     delivery_count = serializers.SerializerMethodField()
     # Répartition réelle des envois (un envoi « en file » n'est pas un succès).
     delivery_stats = serializers.SerializerMethodField()
+    # Statut d'envoi distinct du statut de génération : « Prêt » ≠ « Envoyé ».
+    delivery_state = serializers.SerializerMethodField()
+    delivery_state_label = serializers.SerializerMethodField()
 
     class Meta:
         model = GeneratedReport
@@ -110,6 +113,7 @@ class GeneratedReportLightSerializer(serializers.ModelSerializer):
             "generated_at", "duration_ms",
             "has_pdf", "has_excel",
             "delivery_count", "delivery_stats",
+            "delivery_state", "delivery_state_label",
         ]
 
     def get_has_pdf(self, obj) -> bool:
@@ -122,21 +126,80 @@ class GeneratedReportLightSerializer(serializers.ModelSerializer):
         return obj.deliveries.count()
 
     def get_delivery_stats(self, obj) -> dict:
-        from django.db.models import Count, Q
+        return delivery_summary(obj)["stats"]
 
-        from .models import DeliveryStatus
+    def get_delivery_state(self, obj) -> str:
+        return delivery_summary(obj)["state"]
 
-        return obj.deliveries.aggregate(
-            sent=Count("id", filter=Q(
-                status__in=[DeliveryStatus.SENT, DeliveryStatus.DELIVERED],
-            )),
-            failed=Count("id", filter=Q(
-                status__in=[DeliveryStatus.FAILED, DeliveryStatus.PERMANENTLY_FAILED],
-            )),
-            pending=Count("id", filter=Q(
-                status__in=[DeliveryStatus.QUEUED, DeliveryStatus.RETRYING],
-            )),
-        )
+    def get_delivery_state_label(self, obj) -> str:
+        return DELIVERY_STATE_LABELS[delivery_summary(obj)["state"]]
+
+
+DELIVERY_STATE_LABELS = {
+    "planned": "Planifié",
+    "generating": "Génération",
+    "sending": "Envoi en cours",
+    "sent": "Envoyé",
+    "partial": "Partiel",
+    "failed": "Échec",
+}
+
+
+def _delivery_state(report_status: str, stats: dict) -> str:
+    from .models import ReportStatus
+
+    by_generation = {
+        ReportStatus.PENDING: "planned",
+        ReportStatus.GENERATING: "generating",
+        ReportStatus.FAILED: "failed",
+    }
+    if report_status in by_generation:
+        return by_generation[report_status]
+    if stats["total"] == 0:
+        return "planned"
+    if stats["pending"]:
+        return "sending"
+    if stats["failed"] == 0:
+        return "sent"
+    return "partial" if stats["sent"] else "failed"
+
+
+def delivery_summary(report) -> dict:
+    """Bilan d'envoi : dernier journal de chaque (destinataire, canal).
+
+    `on_hold` : SMS en attente fournisseur (crédit épuisé), repris à la reprise
+    du fournisseur — comptés « en cours », jamais relancés en double.
+    """
+    cached = getattr(report, "_delivery_summary", None)
+    if cached is not None:
+        return cached
+    from apps.notifications.models import Notification, NotificationStatus
+
+    from .models import DeliveryStatus
+    from .tasks import _latest_logs
+
+    stats = {"sent": 0, "failed": 0, "pending": 0, "on_hold": 0, "total": 0}
+    pending_notifs = []
+    for status, notif_id in _latest_logs(report.deliveries.all()).values_list(
+        "status", "notification_id",
+    ):
+        stats["total"] += 1
+        if status in (DeliveryStatus.SENT, DeliveryStatus.DELIVERED):
+            stats["sent"] += 1
+        elif status in (DeliveryStatus.FAILED, DeliveryStatus.PERMANENTLY_FAILED):
+            stats["failed"] += 1
+        else:
+            stats["pending"] += 1
+            if notif_id:
+                pending_notifs.append(notif_id)
+    if pending_notifs:
+        stats["on_hold"] = Notification.all_objects.filter(
+            pk__in=pending_notifs, status=NotificationStatus.ON_HOLD,
+        ).count()
+
+    state = _delivery_state(report.status, stats)
+    report._delivery_summary = {"stats": stats, "state": state}
+    return report._delivery_summary
 
 
 class GeneratedReportDetailSerializer(GeneratedReportLightSerializer):
