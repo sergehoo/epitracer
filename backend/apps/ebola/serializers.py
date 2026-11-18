@@ -229,12 +229,16 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
 
         Auparavant, une étape dont le pays manquait au référentiel était
         abandonnée sans erreur : la fiche partait sans provenance.
+        Un code reconnu (ISO-2 ou ISO-3, toute casse) est ramené au code ISO-2 du référentiel.
         """
-        unknown = sorted({
-            str(item.get("country_code") or "").upper()
-            for item in items
-            if resolve_country(item.get("country_code")) is None
-        })
+        unknown = set()
+        for item in items:
+            country = resolve_country(item.get("country_code"))
+            if country is None:
+                unknown.add(str(item.get("country_code") or "").upper())
+            else:
+                item["country_code"] = country.code
+        unknown = sorted(unknown)
         if unknown:
             raise serializers.ValidationError(
                 f"Pays inconnu dans l'historique des déplacements : {', '.join(unknown)}."

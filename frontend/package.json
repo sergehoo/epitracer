@@ -8,7 +8,7 @@
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test lib/authFlow.test.mjs lib/entryPoints.test.mjs"
+    "test": "node --test lib/authFlow.test.mjs lib/entryPoints.test.mjs lib/countrySearch.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

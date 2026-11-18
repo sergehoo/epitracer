@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Lightbulb, Plane, Plus, Trash2 } from 'lucide-react';
 import { COUNTRIES, DIAL_CODE_COUNTRY } from '@/lib/datasets';
 import { useRegistrationStore } from '@/lib/store';
+import { CountryCombobox } from '@/components/form/CountryCombobox';
 import { FieldGroup, FieldRow } from '@/components/form/Field';
 import type { HistoryItem } from '@/types/ebola';
 
@@ -112,14 +113,12 @@ export function Step3Historique({ onNext, onBack }: { onNext: () => void; onBack
                 // ---- TRANSIT : 3 champs uniquement (Pays, Ville, Durée) ----
                 <FieldRow>
                   <FieldGroup label="Pays" required>
-                    <select
-                      className="select"
+                    <CountryCombobox
                       value={item.country_code}
-                      onChange={(e) => update(i, { country_code: e.target.value })}
-                    >
-                      <option value="">Sélectionner —</option>
-                      {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
-                    </select>
+                      onChange={(code) => update(i, { country_code: code })}
+                      invalid={!item.country_code && Boolean(errors[i])}
+                      aria-label="Pays de transit"
+                    />
                   </FieldGroup>
                   <FieldGroup label="Ville" required>
                     <input
@@ -135,14 +134,12 @@ export function Step3Historique({ onNext, onBack }: { onNext: () => void; onBack
                 <>
                   <FieldRow>
                     <FieldGroup label={item.role === 'origin' ? 'Pays de provenance' : 'Pays'} required>
-                      <select
-                        className="select"
+                      <CountryCombobox
                         value={item.country_code}
-                        onChange={(e) => update(i, { country_code: e.target.value })}
-                      >
-                        <option value="">Sélectionner —</option>
-                        {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
-                      </select>
+                        onChange={(code) => update(i, { country_code: code })}
+                        invalid={!item.country_code && Boolean(errors[i])}
+                        aria-label={item.role === 'origin' ? 'Pays de provenance' : 'Pays de séjour récent'}
+                      />
                       {item.role === 'origin' && !item.country_code && phoneHint && (
                         <button
                           type="button"
