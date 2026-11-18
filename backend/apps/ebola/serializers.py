@@ -2,8 +2,10 @@ from datetime import date
 
 from rest_framework import serializers
 
+from apps.geo.models import EntryPoint
 from apps.geo.services import resolve_country
 from apps.travelers.serializers import TravelerSerializer
+from apps.travelers.transport import entry_point_error
 
 from .models import (
     EbolaDeclaration,
@@ -181,7 +183,9 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
     )
 
     def validate_voyage(self, voyage: dict) -> dict:
-        """Date de départ prévue (optionnelle) : format ISO et jamais avant l'arrivée."""
+        """Point d'entrée existant, ouvert et compatible avec le moyen de transport ;
+        date de départ prévue (optionnelle) au format ISO, jamais avant l'arrivée."""
+        self._validate_entry_point(voyage)
         raw = voyage.get("planned_departure_date")
         if not raw:
             return voyage
@@ -200,6 +204,25 @@ class PublicTravelerSubmissionSerializer(serializers.Serializer):
                 {"planned_departure_date": "Le départ prévu précède la date d'arrivée."}
             )
         return voyage
+
+    @staticmethod
+    def _validate_entry_point(voyage: dict) -> None:
+        """Un point d'entrée inconnu est refusé, jamais ignoré (même résolution que la vue)."""
+        code, pk = voyage.get("entry_point_code"), voyage.get("entry_point_id")
+        if not code and not pk:
+            return
+        lookup = {"code": code} if code else {"pk": pk}
+        try:
+            entry_point = EntryPoint.objects.filter(**lookup).first()
+        except (TypeError, ValueError):
+            entry_point = None
+        if entry_point is None:
+            raise serializers.ValidationError(
+                {"entry_point_code": f"Point d'entrée inconnu : « {code or pk} »."}
+            )
+        error = entry_point_error(voyage.get("transport_mode"), entry_point)
+        if error:
+            raise serializers.ValidationError({"entry_point_code": error})
 
     def validate_historique(self, items: list) -> list:
         """Pays de provenance obligatoire ; un pays inconnu est refusé, jamais ignoré.

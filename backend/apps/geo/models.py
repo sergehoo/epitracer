@@ -17,6 +17,7 @@ class EntryPointType(models.TextChoices):
     SEAPORT = "seaport", _("Port maritime")
     LAND = "land", _("Frontière terrestre")
     RIVER = "river", _("Point fluvial")
+    RAIL = "rail", _("Point ferroviaire")
     OTHER = "other", _("Autre")
 
 

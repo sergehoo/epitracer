@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .public_views import (
+    PublicEntryPointListView,
     PublicOfficialFormPdfView,
     PublicPassConsultView,
     PublicPassPdfView,
@@ -17,6 +18,8 @@ urlpatterns = router.urls + [
     # Endpoints PUBLICS (portail voyageurs)
     path("public/register/", PublicTravelerRegisterView.as_view(),
          name="ebola-public-register"),
+    path("public/entry-points/", PublicEntryPointListView.as_view(),
+         name="ebola-public-entry-points"),
     path("public/pass/<str:public_id>/", PublicPassConsultView.as_view(),
          name="ebola-public-pass"),
     path("public/pass/<str:public_id>/pdf/", PublicPassPdfView.as_view(),

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import CompanionLink, Traveler, TravelHistoryEntry
+from .transport import entry_point_error
 
 
 class TravelHistoryEntrySerializer(serializers.ModelSerializer):
@@ -70,7 +71,25 @@ class TravelerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"planned_departure_date": "Le départ prévu précède la date d'arrivée."}
             )
+        self._validate_entry_point(attrs)
         return attrs
+
+    def _validate_entry_point(self, attrs):
+        """Transport ↔ point d'entrée : contrôlé seulement si l'un des deux change,
+        pour que les fiches anciennes restent modifiables sur leurs autres champs."""
+        transport = attrs.get("transport_mode", getattr(self.instance, "transport_mode", ""))
+        entry_point = attrs.get("entry_point", getattr(self.instance, "entry_point", None))
+        entry_changed = "entry_point" in attrs and (
+            self.instance is None or entry_point != self.instance.entry_point
+        )
+        transport_changed = "transport_mode" in attrs and (
+            self.instance is None or transport != self.instance.transport_mode
+        )
+        if not (entry_changed or transport_changed):
+            return
+        error = entry_point_error(transport, entry_point, check_active=entry_changed)
+        if error:
+            raise serializers.ValidationError({"entry_point": error})
 
 
 class TravelerLiteSerializer(serializers.ModelSerializer):

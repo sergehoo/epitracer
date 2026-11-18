@@ -229,6 +229,13 @@ def _concurrently(*payloads_and_keys):
     return responses
 
 
+def _live_payload(**identite):
+    """Sans point d'entrée : la base réelle n'en contient pas (code inconnu = refusé)."""
+    payload = _payload(**identite)
+    del payload["voyage"]["entry_point_code"]
+    return payload
+
+
 def _purge(document_number: str):
     from apps.audit.models import AuditLog
     from apps.ebola.models import EbolaInvestigation
@@ -250,7 +257,7 @@ class TestConcurrentDoubleSubmission:
         self, live_db, pass_keys, slow_pass,
     ):
         doc = f"CONC{uuid.uuid4().hex[:8].upper()}"
-        payload, key = _payload(id_document_number=doc), str(uuid.uuid4())
+        payload, key = _live_payload(id_document_number=doc), str(uuid.uuid4())
         try:
             responses = _concurrently((payload, key), (payload, key))
 
@@ -265,7 +272,7 @@ class TestConcurrentDoubleSubmission:
         self, live_db, pass_keys, slow_pass,
     ):
         doc = f"CONC{uuid.uuid4().hex[:8].upper()}"
-        payload = _payload(id_document_number=doc)
+        payload = _live_payload(id_document_number=doc)
         try:
             responses = _concurrently((payload, str(uuid.uuid4())), (payload, None))
 

@@ -1,7 +1,31 @@
+from django import forms
 from django.contrib import admin
 from django.contrib.gis.admin import GISModelAdmin
 
 from .models import CompanionLink, Traveler, TravelHistoryEntry
+from .transport import entry_point_error
+
+
+class TravelerAdminForm(forms.ModelForm):
+    """Refuse un point d'entrée fermé ou incompatible avec le moyen de transport.
+    Contrôlé seulement si l'un des deux change (fiches anciennes toujours modifiables)."""
+
+    class Meta:
+        model = Traveler
+        # Champs effectivement affichés : ceux des fieldsets de TravelerAdmin.
+        fields = ["transport_mode", "entry_point"]
+
+    def clean(self):
+        cleaned = super().clean()
+        entry_changed = "entry_point" in self.changed_data
+        if entry_changed or "transport_mode" in self.changed_data:
+            error = entry_point_error(
+                cleaned.get("transport_mode"), cleaned.get("entry_point"),
+                check_active=entry_changed,
+            )
+            if error:
+                self.add_error("entry_point", error)
+        return cleaned
 
 
 class TravelHistoryInline(admin.TabularInline):
@@ -17,6 +41,7 @@ class CompanionInline(admin.TabularInline):
 
 @admin.register(Traveler)
 class TravelerAdmin(GISModelAdmin):
+    form = TravelerAdminForm
     list_display = (
         "public_id", "last_name", "first_name", "nationality",
         "arrival_date", "entry_point", "current_health_status",

@@ -1,22 +1,57 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
+import { api } from '@/lib/api';
 import { ENTRY_POINTS } from '@/lib/datasets';
+import {
+  compatibleEntryPoints, keptEntryPoint, noCompatibleEntryPointMessage, type EntryPointOption,
+} from '@/lib/entryPoints';
 import { voyageSchema, type VoyageInput } from '@/lib/schema';
 import { useRegistrationStore } from '@/lib/store';
 import { FieldGroup, FieldRow } from '@/components/form/Field';
 
+/** Points d'entrée ouverts (référentiel serveur) ; liste locale si l'API est injoignable. */
+function useOpenEntryPoints(): EntryPointOption[] | null {
+  const [points, setPoints] = useState<EntryPointOption[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api.get<EntryPointOption[]>('/ebola/public/entry-points/')
+      .then(({ data }) => { if (alive) setPoints(data); })
+      .catch(() => { if (alive) setPoints(ENTRY_POINTS); });
+    return () => { alive = false; };
+  }, []);
+  return points;
+}
+
 export function Step1Voyage({ onNext }: { onNext: () => void }) {
   const { voyage, set, goTo } = useRegistrationStore();
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<VoyageInput>({
+  const { register, handleSubmit, watch, getValues, setValue, formState: { errors } } = useForm<VoyageInput>({
     resolver: zodResolver(voyageSchema),
     defaultValues: voyage,
   });
-  const [arrival, departure] = watch(['arrival_date', 'planned_departure_date']);
+  const [arrival, departure, transport] = watch(['arrival_date', 'planned_departure_date', 'transport_mode']);
   const stayDays = arrival && departure && departure >= arrival
     ? Math.round((Date.parse(departure) - Date.parse(arrival)) / 86_400_000)
     : null;
+
+  const points = useOpenEntryPoints();
+  const entryOptions = useMemo(
+    () => compatibleEntryPoints(points ?? [], transport || ''),
+    [points, transport],
+  );
+  // Transport modifié (ou point fermé depuis le brouillon) : le point devenu
+  // incompatible est vidé ; un point toujours valable est réaffiché.
+  useEffect(() => {
+    if (points) setValue('entry_point_code', keptEntryPoint(getValues('entry_point_code'), entryOptions));
+  }, [points, entryOptions, getValues, setValue]);
+  const noCompatible = Boolean(points && transport && entryOptions.length === 0);
+  const entryPlaceholder = !points
+    ? 'Chargement des points d\'entrée…'
+    : !transport
+      ? 'Choisissez d\'abord le moyen de transport'
+      : noCompatible ? 'Aucun point d\'entrée compatible' : 'Sélectionner —';
 
   const submit = (data: VoyageInput) => {
     set({ voyage: data });
@@ -87,13 +122,31 @@ export function Step1Voyage({ onNext }: { onNext: () => void }) {
         >
           <input className="input" placeholder="ex : 14A" {...register('seat_number')} />
         </FieldGroup>
-        <FieldGroup label="Point d'entrée" required error={errors.entry_point_code?.message}>
-          <select className="select" {...register('entry_point_code')}>
-            <option value="">Sélectionner —</option>
-            {ENTRY_POINTS.map((ep) => (
+        <FieldGroup
+          label="Point d'entrée"
+          required
+          error={errors.entry_point_code?.message}
+          help={transport ? undefined : 'La liste dépend du moyen de transport.'}
+        >
+          <select
+            className={`select ${entryOptions.length ? '' : 'opacity-60'}`}
+            aria-describedby={noCompatible ? 'entry-point-none' : undefined}
+            {...register('entry_point_code')}
+          >
+            <option value="">{entryPlaceholder}</option>
+            {entryOptions.map((ep) => (
               <option key={ep.code} value={ep.code}>{ep.name}</option>
             ))}
           </select>
+          {noCompatible && (
+            <p
+              id="entry-point-none"
+              role="status"
+              className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900"
+            >
+              {noCompatibleEntryPointMessage(transport)}
+            </p>
+          )}
         </FieldGroup>
       </FieldRow>
 

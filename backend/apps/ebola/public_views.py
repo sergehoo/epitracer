@@ -8,6 +8,9 @@
 
 - GET /api/v1/ebola/public/pass/<public_id>/
     Consultation publique du statut du voyageur + lien PDF + QR token.
+
+- GET /api/v1/ebola/public/entry-points/
+    Points d'entrée ouverts (code, nom, catégorie) pour le formulaire voyageur.
 """
 from __future__ import annotations
 
@@ -561,6 +564,20 @@ def _public_instructions(level: str, followups: list[dict] | None = None) -> dic
             "en cas d'apparition de symptômes."
         )
     return base
+
+
+class PublicEntryPointListView(APIView):
+    """Points d'entrée ouverts, pour le formulaire voyageur (filtrés par transport côté client)."""
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(summary="Points d'entrée ouverts (formulaire voyageur)")
+    def get(self, request):
+        points = EntryPoint.objects.filter(is_active=True).order_by("name")
+        return Response([
+            {"code": ep.code, "name": ep.name, "type": ep.type, "city": ep.city}
+            for ep in points
+        ])
 
 
 class PublicPassConsultView(APIView):
