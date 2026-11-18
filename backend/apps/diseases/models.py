@@ -43,6 +43,7 @@ class PublicAlertLevel(models.TextChoices):
 
 
 # Champs de contenu public traduisibles via `public_translations`.
+# Symptômes : clé "symptoms" = {code du symptôme: libellé traduit}.
 PUBLIC_TRANSLATABLE_FIELDS = (
     "name", "description", "transmission_details", "prevention", "traveler_recommendations",
 )

@@ -26,7 +26,7 @@ export function NoticeCard({ notice, locale = 'fr' }: { notice: PublicNotice; lo
         <span className="text-[11px] font-black uppercase tracking-wide text-slate-500">
           {isAlert ? L.alert : L.reco}
         </span>
-        {isAlert && <AlertLevelBadge level={notice.alert_level} label={notice.alert_level_label} />}
+        {isAlert && <AlertLevelBadge level={notice.alert_level} label={notice.alert_level_label} locale={locale} />}
       </div>
       <h3 className="mt-3 font-display text-lg font-black text-ciDark">{notice.title}</h3>
       {notice.summary && <p className="mt-2 text-sm font-semibold text-slate-700">{notice.summary}</p>}

@@ -42,6 +42,8 @@ export interface PublicDiseaseDetail extends PublicDisease {
   traveler_recommendations: string[];
   symptoms: { label: string; is_red_flag: boolean }[];
   notices: PublicNotice[];
+  /** Contenus servis en français faute de traduction dans la langue demandée. */
+  untranslated_fields?: string[];
 }
 
 export interface ScreeningDisease {

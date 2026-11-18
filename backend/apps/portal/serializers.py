@@ -5,7 +5,12 @@ from __future__ import annotations
 from django.utils.translation import get_language
 from rest_framework import serializers
 
-from apps.diseases.models import Disease, PublicAlertLevel, TransmissionMode
+from apps.diseases.models import (
+    PUBLIC_TRANSLATABLE_FIELDS,
+    Disease,
+    PublicAlertLevel,
+    TransmissionMode,
+)
 from apps.geo.models import Country
 from apps.medical.screening import is_contact_exposure, risk_country_codes, screening_rules
 from apps.quarantine.services import followup_duration_days
@@ -15,6 +20,20 @@ from .services import localized, split_lines
 
 TRANSMISSION_LABELS = dict(TransmissionMode.choices)
 ALERT_LABELS = dict(PublicAlertLevel.choices)
+# Valeurs fixes en anglais (aucun catalogue gettext n'est livré ; `?lang=en` ne les traduisait pas).
+LABELS_EN = {
+    "alert": {
+        PublicAlertLevel.NORMAL: "Watch", PublicAlertLevel.MODERATE: "Vigilance",
+        PublicAlertLevel.HIGH: "Alert", PublicAlertLevel.CRITICAL: "Health emergency",
+    },
+    "transmission": {
+        TransmissionMode.AIRBORNE: "Airborne", TransmissionMode.DROPLET: "Droplets",
+        TransmissionMode.CONTACT: "Direct/indirect contact",
+        TransmissionMode.VECTOR: "Vector-borne",
+        TransmissionMode.SEXUAL: "Sexual", TransmissionMode.FECAL_ORAL: "Faecal-oral",
+        TransmissionMode.BLOOD: "Blood-borne", TransmissionMode.OTHER: "Other",
+    },
+}
 
 
 class _LocalizedMixin:
@@ -27,6 +46,12 @@ class _LocalizedMixin:
 
     def tr(self, obj, field: str):
         return localized(obj, field, self._lang(), self.translations_attr)
+
+    def fixed_label(self, kind: str, value: str, fr_labels: dict) -> str:
+        """Libellé d'une valeur fixe dans la langue demandée, français à défaut."""
+        if self._lang() == "en" and value in LABELS_EN[kind]:
+            return LABELS_EN[kind][value]
+        return str(fr_labels.get(value, value))
 
 
 # ------------------------------------------------------------------- public
@@ -67,10 +92,13 @@ class PublicDiseaseListSerializer(_LocalizedMixin, serializers.ModelSerializer):
         return self.tr(obj, "description")
 
     def get_alert_level_label(self, obj):
-        return str(ALERT_LABELS.get(obj.public_alert_level, obj.public_alert_level))
+        return self.fixed_label("alert", obj.public_alert_level, ALERT_LABELS)
 
     def get_transmission(self, obj):
-        return [str(TRANSMISSION_LABELS.get(m, m)) for m in obj.transmission_modes or []]
+        return [
+            self.fixed_label("transmission", m, TRANSMISSION_LABELS)
+            for m in obj.transmission_modes or []
+        ]
 
     def get_followup_days(self, obj):
         return followup_duration_days(obj)
@@ -112,13 +140,13 @@ class PublicNoticeSerializer(_LocalizedMixin, serializers.ModelSerializer):
         return self.tr(obj, "body")
 
     def get_alert_level_label(self, obj):
-        return str(ALERT_LABELS.get(obj.alert_level, obj.alert_level))
+        return self.fixed_label("alert", obj.alert_level, ALERT_LABELS)
 
     def get_disease(self, obj):
         d = obj.disease
         if d is None or not d.is_published:
             return None
-        return {"slug": d.slug, "name": d.name}
+        return {"slug": d.slug, "name": localized(d, "name", self._lang(), "public_translations")}
 
     def get_countries(self, obj):
         return [{"code": c.code, "name": c.name} for c in obj.countries.all()]
@@ -130,6 +158,7 @@ class PublicDiseaseDetailSerializer(PublicDiseaseListSerializer):
     traveler_recommendations = serializers.SerializerMethodField()
     symptoms = serializers.SerializerMethodField()
     notices = serializers.SerializerMethodField()
+    untranslated_fields = serializers.SerializerMethodField()
 
     class Meta(PublicDiseaseListSerializer.Meta):
         fields = PublicDiseaseListSerializer.Meta.fields + [
@@ -139,7 +168,12 @@ class PublicDiseaseDetailSerializer(PublicDiseaseListSerializer):
             "traveler_recommendations",
             "symptoms",
             "notices",
+            "untranslated_fields",
         ]
+
+    def _translation(self, obj) -> dict:
+        tr = (obj.public_translations or {}).get(self._lang(), {})
+        return tr if isinstance(tr, dict) else {}
 
     def get_transmission_details(self, obj):
         return self.tr(obj, "transmission_details")
@@ -151,10 +185,24 @@ class PublicDiseaseDetailSerializer(PublicDiseaseListSerializer):
         return split_lines(self.tr(obj, "traveler_recommendations"))
 
     def get_symptoms(self, obj):
+        # Traductions dans public_translations : {"en": {"symptoms": {"<code>": "Fever"}}}.
+        labels = self._translation(obj).get("symptoms") if self._lang() != "fr" else None
+        labels = labels if isinstance(labels, dict) else {}
         return [
-            {"label": s.label, "is_red_flag": s.is_red_flag}
+            {"label": labels.get(s.code) or s.label, "is_red_flag": s.is_red_flag}
             for s in sorted(obj.symptoms.all(), key=lambda s: (s.order, s.label))
         ]
+
+    def get_untranslated_fields(self, obj):
+        """Contenus affichés en français faute de traduction dans la langue demandée."""
+        if self._lang() == "fr":
+            return []
+        tr = self._translation(obj)
+        missing = [f for f in PUBLIC_TRANSLATABLE_FIELDS if getattr(obj, f) and not tr.get(f)]
+        symptom_labels = tr.get("symptoms") if isinstance(tr.get("symptoms"), dict) else {}
+        if any(not symptom_labels.get(s.code) for s in obj.symptoms.all()):
+            missing.append("symptoms")
+        return missing
 
     def get_notices(self, obj):
         notices = PublicNotice.objects.visible().filter(disease=obj).prefetch_related("countries")

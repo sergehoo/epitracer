@@ -6,10 +6,11 @@
  * Sans dépendance : dictionnaires statiques + contexte React. Le rendu serveur
  * est en français (SEO, langue par défaut) ; la langue choisie est mémorisée
  * (localStorage + cookie `epi_lang`) et appliquée au premier rendu client.
+ * Les fiches maladies (/maladies/[slug]) lisent ce cookie côté serveur.
  * Les formulaires et pages métier restent en français.
  */
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 export type Locale = 'fr' | 'en';
@@ -479,15 +480,30 @@ interface LocaleContextValue {
 
 const LocaleContext = createContext<LocaleContextValue>({ locale: 'fr', t: fr, setLocale: () => undefined });
 
+const COOKIE_RE = /(?:^|;\s*)epi_lang=(fr|en)/;
+const writeLangCookie = (l: Locale) => {
+  document.cookie = `epi_lang=${l}; path=/; max-age=31536000; samesite=lax`;
+};
+
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('fr');
+  const router = useRouter();
 
+  // Les fiches maladies sont rendues côté serveur dans la langue du cookie :
+  // préférence et cookie sont réalignés, puis la page est recalculée si besoin.
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved === 'en' || saved === 'fr') setLocaleState(saved);
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      const cookie = (document.cookie.match(COOKIE_RE)?.[1] ?? 'fr') as Locale;
+      const saved: Locale | null = stored === 'en' || stored === 'fr' ? stored : cookie === 'en' ? 'en' : null;
+      if (!saved) return;
+      setLocaleState(saved);
+      if (saved !== cookie) {
+        writeLangCookie(saved);
+        router.refresh();
+      }
     } catch { /* stockage indisponible : français par défaut */ }
-  }, []);
+  }, [router]);
 
   // Seule l'accueil est entièrement traduite : ailleurs le corps de page reste
   // en français (<html lang="fr">) ; en-tête et pied portent leur propre `lang`.
@@ -500,9 +516,10 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     setLocaleState(l);
     try {
       window.localStorage.setItem(STORAGE_KEY, l);
-      document.cookie = `epi_lang=${l}; path=/; max-age=31536000; samesite=lax`;
+      writeLangCookie(l);
     } catch { /* préférence non mémorisée */ }
-  }, []);
+    router.refresh(); // contenus rendus côté serveur (fiches maladies) dans la nouvelle langue
+  }, [router]);
 
   const value = useMemo(() => ({ locale, t: DICTS[locale], setLocale }), [locale, setLocale]);
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
